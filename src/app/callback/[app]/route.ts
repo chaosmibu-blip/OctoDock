@@ -30,31 +30,46 @@ async function exchangeCode(
 ) {
   const redirectUri = `${APP_URL}/callback/${appName}`;
 
+  if (config.authMethod === "basic") {
+    // Notion uses Basic Auth + JSON body
+    const clientId = getOAuthClientId(appName);
+    const clientSecret = getOAuthClientSecret(appName);
+
+    const response = await fetch(config.tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+      },
+      body: JSON.stringify({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(
+        `Token exchange failed for ${appName}: ${response.status} ${error}`,
+      );
+    }
+
+    return response.json();
+  }
+
+  // Google/Meta use form-urlencoded + POST body credentials
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
     redirect_uri: redirectUri,
+    client_id: getOAuthClientId(appName),
+    client_secret: getOAuthClientSecret(appName),
   });
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/x-www-form-urlencoded",
-  };
-
-  if (config.authMethod === "basic") {
-    // Notion uses Basic Auth
-    const clientId = getOAuthClientId(appName);
-    const clientSecret = getOAuthClientSecret(appName);
-    headers["Authorization"] =
-      `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
-  } else {
-    // Google/Meta use POST body
-    body.set("client_id", getOAuthClientId(appName));
-    body.set("client_secret", getOAuthClientSecret(appName));
-  }
 
   const response = await fetch(config.tokenUrl, {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
   });
 

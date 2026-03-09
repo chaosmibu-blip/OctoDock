@@ -94,20 +94,69 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ## 6. Notion OAuth Integration
 
-1. 前往 [Notion Integrations](https://www.notion.so/my-integrations)
-2. 點「New integration」
-3. 設定：
-   - Type: **Public**（OAuth 需要 Public integration）
-   - Name: `AgentDock`
-   - Redirect URI：
-     - `http://localhost:3000/callback/notion`（本地）
-     - `https://your-domain.com/callback/notion`（正式）
-   - Capabilities: 勾選 Read content、Update content、Insert content
-4. 在 Secrets 頁面取得 OAuth client ID 和 client secret
+### 6.1 建立 Public Integration
 
-填入 `NOTION_OAUTH_CLIENT_ID` 和 `NOTION_OAUTH_CLIENT_SECRET`。
+1. 登入 Notion，前往 [notion.so/my-integrations](https://www.notion.so/my-integrations)
+2. 點 **「+ New integration」**
+3. 填寫以下欄位（全部必填）：
 
-注意：Notion token 不會過期，不需要 refresh token。
+| 欄位 | 值 | 說明 |
+|------|-----|------|
+| **Integration name** | `AgentDock` | 用戶授權時會看到的名稱 |
+| **Icon** | 上傳 512x512 PNG | 專案內有 `public/icon-512.png` 可用 |
+| **Associated workspace** | 選你的工作區 | 這是你的開發/測試用工作區，其他用戶會透過 OAuth 連自己的工作區 |
+| **Company name** | `AgentDock` | |
+| **Website** | `https://agent-dock.replit.app` | 部署網址 |
+| **Tagline** | `One MCP URL for all your apps` | |
+| **Privacy Policy URL** | `https://agent-dock.replit.app` | MVP 先填首頁 |
+| **Terms of Use URL** | `https://agent-dock.replit.app` | MVP 先填首頁 |
+| **Email** | 你的 email | 開發者聯絡信箱 |
+| **Redirect URIs** | `https://agent-dock.replit.app/callback/notion` | OAuth 回調地址，必須包含協定（https） |
+| **Notion URL for optional template** | （留空） | |
+
+4. 點 **Create**
+
+### 6.2 取得 OAuth 憑證
+
+建立完成後，進入整合設定頁面：
+
+1. 找到 **OAuth client ID** — 複製
+2. 找到 **OAuth client secret** — ⚠️ **只會顯示一次**，立刻複製保存！
+
+### 6.3 設定 Capabilities
+
+進入整合的 **Capabilities** 設定，確認勾選：
+- ✅ Read content
+- ✅ Update content
+- ✅ Insert content
+- ✅ Read comments
+- ✅ Create comments
+- ✅ Read user information（包含 email）
+
+### 6.4 設定環境變數
+
+在 Replit Secrets（或 `.env`）加入：
+```
+NOTION_OAUTH_CLIENT_ID=你的_client_id
+NOTION_OAUTH_CLIENT_SECRET=你的_client_secret
+```
+
+### 6.5 測試連結
+
+1. 前往 AgentDock Dashboard
+2. 點 Notion 的 **「連結」**
+3. 跳轉到 Notion 授權頁面
+4. 選擇要分享的頁面（⚠️ 只有用戶選擇分享的頁面，API 才能存取）
+5. 點 **Allow access**
+6. 跳回 Dashboard，顯示「已連結」
+
+### 6.6 重要備註
+
+- **Associated workspace 只影響你自己**：其他用戶透過 OAuth 授權時，連的是他們自己的工作區
+- **用戶控制權限**：每次授權時，用戶選擇分享哪些頁面，未分享的 API 看不到
+- **Token 特性**：Public Integration 有 refresh_token，AgentDock 已實作自動刷新
+- **API 限制**：3 次/秒（每 15 分鐘 2,700 次），超過回 429
+- **AgentDock 的 Notion 工具數**：18 個（搜尋、頁面 CRUD、區塊 CRUD、資料庫、留言、用戶）
 
 ---
 
