@@ -19,7 +19,10 @@
       "Bash(pkill:*)",
       "Bash(env:*)",
       "Bash(psql:*)",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:developers.notion.com)",
+      "WebFetch(domain:norahsakal.com)",
+      "Bash(convert:*)"
     ]
   }
 }
