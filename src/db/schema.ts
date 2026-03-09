@@ -143,3 +143,21 @@ export const memory = pgTable(
     ),
   ],
 );
+
+// ============================================================
+// 4.5 bot_configs (Phase 3+)
+// ============================================================
+export const botConfigs = pgTable("bot_configs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  platform: text("platform").notNull(), // 'line' | 'telegram'
+  platformBotId: text("platform_bot_id").notNull(),
+  credentials: text("credentials").notNull(), // AES-256-GCM encrypted
+  systemPrompt: text("system_prompt"),
+  llmProvider: text("llm_provider").default("claude"),
+  llmApiKey: text("llm_api_key"), // encrypted, user-provided
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});

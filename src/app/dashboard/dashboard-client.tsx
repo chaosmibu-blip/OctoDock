@@ -35,6 +35,16 @@ const AVAILABLE_APPS = [
     displayName: "Instagram",
     description: "Publish photos, manage comments, and view insights",
   },
+  {
+    name: "line",
+    displayName: "LINE",
+    description: "Send messages, broadcast, and manage followers",
+  },
+  {
+    name: "telegram",
+    displayName: "Telegram",
+    description: "Send messages, photos, and manage bot webhooks",
+  },
 ];
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {

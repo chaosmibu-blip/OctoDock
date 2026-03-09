@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/db";
-import { connectedApps } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { connectedApps, operations } from "@/db/schema";
+import { eq, sql, desc, and } from "drizzle-orm";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware } from "./middleware/logger";
 import { queryMemory, storeMemory } from "@/services/memory-engine";
@@ -128,7 +128,7 @@ function registerSystemTools(server: McpServer, userId: string): void {
 
   server.tool(
     "agentdock_discover_tools",
-    "Search for additional tools that are not currently loaded. Use this when the user needs functionality beyond the currently available tools.",
+    "Search for additional tools that are not currently loaded. Use this when the user needs functionality beyond the currently available tools. Results are ranked by relevance and the user's historical usage patterns.",
     {
       query: z.string().describe("Describe what you want to do"),
     },
@@ -136,19 +136,40 @@ function registerSystemTools(server: McpServer, userId: string): void {
       const allAdapters = getAllAdapters();
       const query = (params.query as string).toLowerCase();
 
-      const matches = allAdapters.flatMap((adapter) =>
-        adapter.tools
-          .filter(
-            (t) =>
-              t.name.toLowerCase().includes(query) ||
-              t.description.toLowerCase().includes(query),
-          )
-          .map((t) => ({
-            app: adapter.name,
-            tool: t.name,
-            description: t.description,
-          })),
-      );
+      // Get user's tool usage frequency for ranking
+      const usageStats = await db
+        .select({
+          toolName: operations.toolName,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(operations)
+        .where(
+          and(
+            eq(operations.userId, userId),
+            eq(operations.success, true),
+          ),
+        )
+        .groupBy(operations.toolName)
+        .orderBy(desc(sql`count(*)`));
+
+      const usageMap = new Map(usageStats.map((s) => [s.toolName, s.count]));
+
+      const matches = allAdapters
+        .flatMap((adapter) =>
+          adapter.tools
+            .filter(
+              (t) =>
+                t.name.toLowerCase().includes(query) ||
+                t.description.toLowerCase().includes(query),
+            )
+            .map((t) => ({
+              app: adapter.name,
+              tool: t.name,
+              description: t.description,
+              usageCount: usageMap.get(t.name) ?? 0,
+            })),
+        )
+        .sort((a, b) => b.usageCount - a.usageCount);
 
       if (matches.length === 0) {
         return {
@@ -156,7 +177,7 @@ function registerSystemTools(server: McpServer, userId: string): void {
             {
               type: "text" as const,
               text: "No matching tools found. Available apps: " +
-                allAdapters.map((a) => a.name).join(", "),
+                allAdapters.map((a) => `${a.name} (${a.tools.length} tools)`).join(", "),
             },
           ],
         };

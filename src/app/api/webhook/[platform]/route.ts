@@ -1,0 +1,121 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db";
+import { botConfigs, operations } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
+import { decrypt } from "@/lib/crypto";
+
+// Phase 3: Receive webhook events from LINE / Telegram
+// Phase 4 will add auto-reply logic
+
+interface WebhookEvent {
+  platform: string;
+  botId: string;
+  userId: string;
+  message: string;
+  replyToken?: string; // LINE only
+  chatId?: string | number; // Telegram only
+  raw: unknown;
+}
+
+function parseLINEWebhook(body: Record<string, unknown>): WebhookEvent[] {
+  const events = (body.events as Array<Record<string, unknown>>) ?? [];
+  return events
+    .filter((e) => e.type === "message")
+    .map((e) => ({
+      platform: "line",
+      botId: (body.destination as string) ?? "",
+      userId: ((e.source as Record<string, string>)?.userId) ?? "",
+      message: ((e.message as Record<string, string>)?.text) ?? "",
+      replyToken: e.replyToken as string,
+      raw: e,
+    }));
+}
+
+function parseTelegramWebhook(body: Record<string, unknown>): WebhookEvent[] {
+  const message = body.message as Record<string, unknown> | undefined;
+  if (!message?.text) return [];
+
+  const from = message.from as Record<string, unknown> | undefined;
+  const chat = message.chat as Record<string, unknown> | undefined;
+
+  return [
+    {
+      platform: "telegram",
+      botId: "",
+      userId: String(from?.id ?? ""),
+      message: message.text as string,
+      chatId: chat?.id as number,
+      raw: body,
+    },
+  ];
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ platform: string }> },
+) {
+  const { platform } = await params;
+  const body = await req.json();
+
+  let events: WebhookEvent[];
+  try {
+    if (platform === "line") {
+      events = parseLINEWebhook(body);
+    } else if (platform === "telegram") {
+      events = parseTelegramWebhook(body);
+    } else {
+      return NextResponse.json({ error: "Unknown platform" }, { status: 404 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Invalid webhook payload" }, { status: 400 });
+  }
+
+  // Process each event asynchronously
+  for (const event of events) {
+    processWebhookEvent(event).catch((err) =>
+      console.error(`Webhook processing error (${platform}):`, err),
+    );
+  }
+
+  // Always return 200 quickly to acknowledge receipt
+  return NextResponse.json({ ok: true });
+}
+
+async function processWebhookEvent(event: WebhookEvent): Promise<void> {
+  // Find bot config for this platform
+  const configs = await db
+    .select()
+    .from(botConfigs)
+    .where(
+      and(
+        eq(botConfigs.platform, event.platform),
+        eq(botConfigs.isActive, true),
+      ),
+    );
+
+  if (configs.length === 0) {
+    console.log(`No active bot config for ${event.platform}`);
+    return;
+  }
+
+  // Log the incoming message as an operation
+  for (const config of configs) {
+    db.insert(operations)
+      .values({
+        userId: config.userId,
+        appName: event.platform,
+        toolName: `${event.platform}_webhook_receive`,
+        action: "webhook_receive",
+        params: {
+          from: event.userId,
+          message: event.message.slice(0, 200), // Don't store full content (spec section 14)
+        },
+        success: true,
+        durationMs: 0,
+      })
+      .catch((err) => console.error("Failed to log webhook event:", err));
+  }
+
+  // Phase 4: Auto-reply logic will be added here
+  // For now, just log the incoming message
+}
