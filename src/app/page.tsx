@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { auth } from "@/auth";
+import { HomeClient } from "./home-client";
 
 export default async function Home() {
   const session = await auth();
@@ -9,22 +9,5 @@ export default async function Home() {
     redirect("/dashboard");
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-col items-center gap-8 py-32 px-16">
-        <h1 className="text-4xl font-bold tracking-tight text-black dark:text-zinc-50">
-          AgentDock
-        </h1>
-        <p className="max-w-md text-center text-lg text-zinc-600 dark:text-zinc-400">
-          一個 MCP URL，讓任何 AI agent 都能用你所有的 App。
-        </p>
-        <Link
-          href="/api/auth/signin"
-          className="flex h-12 items-center justify-center rounded-full bg-black px-8 text-white transition-colors hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200"
-        >
-          使用 Google 登入
-        </Link>
-      </main>
-    </div>
-  );
+  return <HomeClient />;
 }

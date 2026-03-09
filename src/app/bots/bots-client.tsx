@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useI18n, LanguageSwitcher } from "@/lib/i18n";
 
 interface BotConfig {
   id: string;
@@ -20,26 +21,28 @@ interface BotsProps {
 
 export function BotsClient({ configs }: BotsProps) {
   const router = useRouter();
+  const { t } = useI18n();
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Bot 自動回覆設定</h1>
-          <Link
-            href="/dashboard"
-            className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
-          >
-            返回主控台
-          </Link>
+          <h1 className="text-2xl font-bold text-gray-900">{t("bots.title")}</h1>
+          <div className="flex gap-2 items-center">
+            <LanguageSwitcher />
+            <Link
+              href="/dashboard"
+              className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
+            >
+              {t("common.back")}
+            </Link>
+          </div>
         </div>
 
         {configs.length === 0 ? (
           <div className="bg-white rounded-lg border p-6 text-center text-gray-500">
-            <p>尚未連結任何 Bot。</p>
-            <p className="text-sm mt-2">
-              請先在主控台連結 LINE 或 Telegram Bot。
-            </p>
+            <p>{t("bots.empty")}</p>
+            <p className="text-sm mt-2">{t("bots.empty_hint")}</p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -70,6 +73,7 @@ function BotConfigCard({
   const [isActive, setIsActive] = useState(config.isActive);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const { t } = useI18n();
 
   const platformName = config.platform === "line" ? "LINE" : "Telegram";
 
@@ -84,7 +88,6 @@ function BotConfigCard({
         llmProvider,
         isActive,
       };
-      // Only send API key if user entered a new one
       if (llmApiKey) {
         body.llmApiKey = llmApiKey;
       }
@@ -96,20 +99,20 @@ function BotConfigCard({
       });
 
       if (res.ok) {
-        setMessage("已儲存");
+        setMessage(t("common.saved"));
         setLlmApiKey("");
         onUpdate();
       } else {
         const data = await res.json();
-        setMessage(data.error ?? "儲存失敗");
+        setMessage(data.error ?? t("common.save_failed"));
       }
     } catch {
-      setMessage("儲存失敗");
+      setMessage(t("common.save_failed"));
     } finally {
       setSaving(false);
       setTimeout(() => setMessage(""), 3000);
     }
-  }, [config.platform, systemPrompt, llmProvider, llmApiKey, isActive, onUpdate]);
+  }, [config.platform, systemPrompt, llmProvider, llmApiKey, isActive, onUpdate, t]);
 
   return (
     <div className="bg-white rounded-lg border p-6 space-y-4">
@@ -120,7 +123,7 @@ function BotConfigCard({
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <span className="text-sm text-gray-600">
-            {isActive ? "啟用中" : "已停用"}
+            {isActive ? t("bots.active") : t("bots.inactive")}
           </span>
           <input
             type="checkbox"
@@ -131,24 +134,22 @@ function BotConfigCard({
         </label>
       </div>
 
-      {/* Bot persona */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Bot 人設（System Prompt）
+          {t("bots.persona")}
         </label>
         <textarea
           value={systemPrompt}
           onChange={(e) => setSystemPrompt(e.target.value)}
           rows={4}
-          placeholder="你是一個友善的客服助手，用繁體中文回覆..."
+          placeholder={t("bots.persona_placeholder")}
           className="w-full border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-black"
         />
       </div>
 
-      {/* LLM provider */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          LLM 提供商
+          {t("bots.llm_provider")}
         </label>
         <select
           value={llmProvider}
@@ -160,37 +161,35 @@ function BotConfigCard({
         </select>
       </div>
 
-      {/* LLM API Key */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          LLM API Key
+          {t("bots.llm_api_key")}
         </label>
         <input
           type="password"
           value={llmApiKey}
           onChange={(e) => setLlmApiKey(e.target.value)}
           placeholder={
-            config.hasLlmApiKey ? "已設定（輸入新值可覆蓋）" : "輸入 API Key 以啟用自動回覆"
+            config.hasLlmApiKey ? t("bots.api_key_set") : t("bots.api_key_placeholder")
           }
           className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
         />
         <p className="text-xs text-gray-400 mt-1">
-          API Key 會加密儲存，費用由您的帳號承擔。
+          {t("bots.api_key_note")}
         </p>
       </div>
 
-      {/* Save */}
       <div className="flex items-center gap-3">
         <button
           onClick={save}
           disabled={saving}
           className="px-4 py-2 bg-black text-white text-sm rounded hover:bg-gray-800 transition-colors disabled:opacity-50"
         >
-          {saving ? "儲存中..." : "儲存設定"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
         {message && (
           <span
-            className={`text-sm ${message === "已儲存" ? "text-green-600" : "text-red-600"}`}
+            className={`text-sm ${message === t("common.saved") ? "text-green-600" : "text-red-600"}`}
           >
             {message}
           </span>

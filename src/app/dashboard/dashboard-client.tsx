@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useI18n, LanguageSwitcher } from "@/lib/i18n";
 
 interface ToolInfo {
   name: string;
@@ -19,37 +20,13 @@ interface DashboardProps {
   origin: string;
 }
 
-const AVAILABLE_APPS = [
-  {
-    name: "notion",
-    displayName: "Notion",
-    description: "搜尋、建立、更新頁面和資料庫",
-  },
-  {
-    name: "gmail",
-    displayName: "Gmail",
-    description: "搜尋、讀取、寄送和草擬郵件",
-  },
-  {
-    name: "threads",
-    displayName: "Threads",
-    description: "發布貼文、回覆和查看洞察",
-  },
-  {
-    name: "instagram",
-    displayName: "Instagram",
-    description: "發布照片、管理留言和查看洞察",
-  },
-  {
-    name: "line",
-    displayName: "LINE",
-    description: "發送訊息、廣播和管理追蹤者",
-  },
-  {
-    name: "telegram",
-    displayName: "Telegram",
-    description: "發送訊息、照片和管理 Bot Webhook",
-  },
+const APP_KEYS = [
+  { name: "notion", displayName: "Notion", descKey: "app.notion.desc" },
+  { name: "gmail", displayName: "Gmail", descKey: "app.gmail.desc" },
+  { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
+  { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
+  { name: "line", displayName: "LINE", descKey: "app.line.desc" },
+  { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {
@@ -58,6 +35,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
   const [toolsCache, setToolsCache] = useState<Record<string, ToolInfo[]>>({});
   const [loadingTools, setLoadingTools] = useState<string | null>(null);
   const router = useRouter();
+  const { t } = useI18n();
 
   const mcpUrl = `${origin}/mcp/${user.mcpApiKey}`;
 
@@ -106,19 +84,20 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
       <div className="max-w-3xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">AgentDock</h1>
-          <div className="flex gap-2">
+          <h1 className="text-2xl font-bold text-gray-900">{t("app.title")}</h1>
+          <div className="flex gap-2 items-center">
+            <LanguageSwitcher />
             <Link
               href="/bots"
               className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
             >
-              Bot 設定
+              {t("nav.bots")}
             </Link>
             <Link
               href="/preferences"
               className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
             >
-              記憶
+              {t("nav.memory")}
             </Link>
           </div>
         </div>
@@ -130,9 +109,9 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
 
         {/* MCP URL */}
         <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-lg font-semibold mb-2">MCP URL</h2>
+          <h2 className="text-lg font-semibold mb-2">{t("dashboard.mcp_url")}</h2>
           <p className="text-sm text-gray-500 mb-4">
-            複製此 URL，貼到你的 AI agent 的 MCP 設定中。
+            {t("dashboard.mcp_desc")}
           </p>
           <div className="flex gap-2">
             <code className="flex-1 bg-gray-100 rounded px-3 py-2 text-sm font-mono text-gray-700 overflow-x-auto">
@@ -142,21 +121,20 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
               onClick={copyMcpUrl}
               className="px-4 py-2 bg-black text-white text-sm rounded hover:bg-gray-800 transition-colors whitespace-nowrap"
             >
-              {copied ? "已複製！" : "複製"}
+              {copied ? t("common.copied") : t("common.copy")}
             </button>
           </div>
         </div>
 
         {/* Connected Apps */}
         <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-lg font-semibold mb-4">應用程式</h2>
+          <h2 className="text-lg font-semibold mb-4">{t("dashboard.apps")}</h2>
           <div className="space-y-4">
-            {AVAILABLE_APPS.map((app) => {
+            {APP_KEYS.map((app) => {
               const connected = isConnected(app.name);
               const connectedApp = connectedApps.find(
                 (a) => a.appName === app.name,
               );
-
               const isExpanded = expandedApp === app.name;
               const appTools = toolsCache[app.name];
               const isLoading = loadingTools === app.name;
@@ -171,18 +149,18 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                       <h3 className="font-medium text-gray-900">
                         {app.displayName}
                       </h3>
-                      <p className="text-sm text-gray-500">{app.description}</p>
+                      <p className="text-sm text-gray-500">{t(app.descKey)}</p>
                       <div className="flex items-center gap-3 mt-1">
                         {connected && connectedApp && (
                           <p className="text-xs text-green-600">
-                            已連結
+                            {t("dashboard.connected")}
                           </p>
                         )}
                         <button
                           onClick={() => toggleTools(app.name)}
                           className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
                         >
-                          {isExpanded ? "收起工具清單" : "查看工具清單"}
+                          {isExpanded ? t("dashboard.hide_tools") : t("dashboard.view_tools")}
                         </button>
                       </div>
                     </div>
@@ -191,25 +169,25 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                         onClick={() => disconnectApp(app.name)}
                         className="px-4 py-2 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50 transition-colors"
                       >
-                        中斷連結
+                        {t("dashboard.disconnect")}
                       </button>
                     ) : (
                       <button
                         onClick={() => connectApp(app.name)}
                         className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800 transition-colors"
                       >
-                        連結
+                        {t("dashboard.connect")}
                       </button>
                     )}
                   </div>
                   {isExpanded && (
                     <div className="mt-3 ml-1 bg-gray-50 rounded-lg p-4">
                       {isLoading ? (
-                        <p className="text-sm text-gray-400">載入中...</p>
+                        <p className="text-sm text-gray-400">{t("common.loading")}</p>
                       ) : appTools && appTools.length > 0 ? (
                         <>
                           <p className="text-xs text-gray-500 mb-3">
-                            共 {appTools.length} 個工具，AI agent 可透過 MCP 使用：
+                            {appTools.length} {t("dashboard.tool_count")}
                           </p>
                           <div className="space-y-2">
                             {appTools.map((tool: ToolInfo) => (
@@ -218,7 +196,9 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                                   {tool.name}
                                 </code>
                                 <p className="text-xs text-gray-500 mt-0.5 ml-1">
-                                  {tool.description}
+                                  {t(`tool.${tool.name}`) !== `tool.${tool.name}`
+                                    ? t(`tool.${tool.name}`)
+                                    : tool.description}
                                 </p>
                               </div>
                             ))}
@@ -226,7 +206,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                         </>
                       ) : (
                         <p className="text-sm text-gray-400">
-                          尚未建立工具（此 App 的 Adapter 尚未實作）
+                          {t("dashboard.no_tools")}
                         </p>
                       )}
                     </div>
