@@ -77,12 +77,20 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">AgentDock</h1>
-          <Link
-            href="/preferences"
-            className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
-          >
-            Memory
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/bots"
+              className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
+            >
+              Bot 設定
+            </Link>
+            <Link
+              href="/preferences"
+              className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
+            >
+              Memory
+            </Link>
+          </div>
         </div>
         <div>
           <p className="text-gray-500 mt-1">

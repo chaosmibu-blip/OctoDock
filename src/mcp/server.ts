@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/db";
-import { connectedApps, operations } from "@/db/schema";
+import { connectedApps, operations, conversations } from "@/db/schema";
 import { eq, sql, desc, and } from "drizzle-orm";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware } from "./middleware/logger";
@@ -185,6 +185,56 @@ function registerSystemTools(server: McpServer, userId: string): void {
 
       return {
         content: [{ type: "text" as const, text: JSON.stringify(matches, null, 2) }],
+      };
+    },
+  );
+
+  server.tool(
+    "agentdock_bot_conversations",
+    "View recent bot conversation history for a platform (LINE or Telegram). Shows messages between external users and the auto-reply bot.",
+    {
+      platform: z.enum(["line", "telegram"]).describe("Bot platform"),
+      platform_user_id: z
+        .string()
+        .optional()
+        .describe("Filter by specific external user ID"),
+      limit: z.number().optional().describe("Number of messages to return (default 20, max 100)"),
+    },
+    async (params) => {
+      const conditions = [
+        eq(conversations.userId, userId),
+        eq(conversations.platform, params.platform as string),
+      ];
+
+      if (params.platform_user_id) {
+        conditions.push(
+          eq(conversations.platformUserId, params.platform_user_id as string),
+        );
+      }
+
+      const results = await db
+        .select({
+          platform: conversations.platform,
+          platformUserId: conversations.platformUserId,
+          role: conversations.role,
+          content: conversations.content,
+          createdAt: conversations.createdAt,
+        })
+        .from(conversations)
+        .where(and(...conditions))
+        .orderBy(desc(conversations.createdAt))
+        .limit(Math.min((params.limit as number) ?? 20, 100));
+
+      results.reverse();
+
+      if (results.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: "No conversation history found." }],
+        };
+      }
+
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(results, null, 2) }],
       };
     },
   );

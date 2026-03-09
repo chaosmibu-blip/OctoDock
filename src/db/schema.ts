@@ -145,7 +145,33 @@ export const memory = pgTable(
 );
 
 // ============================================================
-// 4.5 bot_configs (Phase 3+)
+// 4.5 conversations (Phase 4)
+// ============================================================
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(), // 'line' | 'telegram'
+    platformUserId: text("platform_user_id").notNull(), // external user's ID on the platform
+    role: text("role").notNull(), // 'user' | 'assistant'
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_conversations_user_platform").on(
+      table.userId,
+      table.platform,
+      table.platformUserId,
+      table.createdAt,
+    ),
+  ],
+);
+
+// ============================================================
+// 4.6 bot_configs (Phase 3+)
 // ============================================================
 export const botConfigs = pgTable("bot_configs", {
   id: uuid("id").primaryKey().defaultRandom(),

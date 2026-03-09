@@ -3,9 +3,7 @@ import { db } from "@/db";
 import { botConfigs, operations } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { decrypt } from "@/lib/crypto";
-
-// Phase 3: Receive webhook events from LINE / Telegram
-// Phase 4 will add auto-reply logic
+import { handleAutoReply } from "@/services/auto-reply";
 
 interface WebhookEvent {
   platform: string;
@@ -114,8 +112,28 @@ async function processWebhookEvent(event: WebhookEvent): Promise<void> {
         durationMs: 0,
       })
       .catch((err) => console.error("Failed to log webhook event:", err));
-  }
 
-  // Phase 4: Auto-reply logic will be added here
-  // For now, just log the incoming message
+    // Phase 4: Auto-reply if bot has LLM API key configured
+    if (config.llmApiKey && config.isActive) {
+      try {
+        const botCredentials = decrypt(config.credentials);
+        const llmApiKey = decrypt(config.llmApiKey);
+
+        await handleAutoReply({
+          userId: config.userId,
+          platform: event.platform as "line" | "telegram",
+          platformUserId: event.userId,
+          message: event.message,
+          replyToken: event.replyToken,
+          chatId: event.chatId,
+          botCredentials,
+          systemPrompt: config.systemPrompt,
+          llmProvider: config.llmProvider ?? "claude",
+          llmApiKey,
+        });
+      } catch (err) {
+        console.error(`Auto-reply error (${event.platform}):`, err);
+      }
+    }
+  }
 }
