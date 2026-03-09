@@ -7,6 +7,7 @@ import { getAdapter, loadAdapters } from "@/mcp/registry";
 import { APP_URL } from "@/lib/constants";
 import type { OAuthConfig, ApiKeyConfig } from "@/adapters/types";
 import { encrypt } from "@/lib/crypto";
+import { getOAuthClientId } from "@/lib/oauth-env";
 
 let adaptersLoaded = false;
 
@@ -44,8 +45,7 @@ export async function GET(
   if (adapter.authConfig.type === "oauth2") {
     const config = adapter.authConfig as OAuthConfig;
     const state = generateState(session.user.id);
-    const clientId =
-      process.env[`${appName.toUpperCase()}_OAUTH_CLIENT_ID`]!;
+    const clientId = getOAuthClientId(appName);
     const redirectUri = `${APP_URL}/callback/${appName}`;
 
     const authUrl = new URL(config.authorizeUrl);

@@ -31,11 +31,20 @@ export async function getValidToken(
 
   // Check if token is expired and needs refresh
   if (app.tokenExpiresAt && app.tokenExpiresAt < new Date()) {
-    if (app.refreshToken) {
-      return await refreshAndUpdateToken(userId, appName, app.refreshToken);
+    // For Meta apps (threads/instagram), the access_token itself is the refresh token
+    const refreshSource = app.refreshToken ?? app.accessToken;
+    if (refreshSource) {
+      return await refreshAndUpdateToken(userId, appName, refreshSource);
     }
+    // Mark as expired in DB
+    await db
+      .update(connectedApps)
+      .set({ status: "expired", updatedAt: new Date() })
+      .where(
+        and(eq(connectedApps.userId, userId), eq(connectedApps.appName, appName)),
+      );
     throw new Error(
-      `${appName} token has expired and no refresh token available (${appName.toUpperCase()}_TOKEN_EXPIRED)`,
+      `${appName} token has expired. Please reconnect in Dashboard. (${appName.toUpperCase()}_TOKEN_EXPIRED)`,
     );
   }
 
@@ -55,24 +64,38 @@ async function refreshAndUpdateToken(
   }
 
   const refreshToken = decrypt(encryptedRefreshToken);
-  const tokenSet = await adapter.refreshToken(refreshToken);
 
-  await db
-    .update(connectedApps)
-    .set({
-      accessToken: encrypt(tokenSet.access_token),
-      refreshToken: tokenSet.refresh_token
-        ? encrypt(tokenSet.refresh_token)
-        : undefined,
-      tokenExpiresAt: tokenSet.expires_in
-        ? new Date(Date.now() + tokenSet.expires_in * 1000)
-        : undefined,
-      status: "active",
-      updatedAt: new Date(),
-    })
-    .where(
-      and(eq(connectedApps.userId, userId), eq(connectedApps.appName, appName)),
+  try {
+    const tokenSet = await adapter.refreshToken(refreshToken);
+
+    await db
+      .update(connectedApps)
+      .set({
+        accessToken: encrypt(tokenSet.access_token),
+        refreshToken: tokenSet.refresh_token
+          ? encrypt(tokenSet.refresh_token)
+          : undefined,
+        tokenExpiresAt: tokenSet.expires_in
+          ? new Date(Date.now() + tokenSet.expires_in * 1000)
+          : undefined,
+        status: "active",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(connectedApps.userId, userId), eq(connectedApps.appName, appName)),
+      );
+
+    return tokenSet.access_token;
+  } catch (error) {
+    // Mark as expired on refresh failure
+    await db
+      .update(connectedApps)
+      .set({ status: "expired", updatedAt: new Date() })
+      .where(
+        and(eq(connectedApps.userId, userId), eq(connectedApps.appName, appName)),
+      );
+    throw new Error(
+      `${appName} token refresh failed. Please reconnect in Dashboard. (${appName.toUpperCase()}_REFRESH_FAILED)`,
     );
-
-  return tokenSet.access_token;
+  }
 }

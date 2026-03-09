@@ -4,7 +4,8 @@ import { connectedApps } from "@/db/schema";
 import { getAdapter } from "@/mcp/registry";
 import { encrypt } from "@/lib/crypto";
 import { APP_URL } from "@/lib/constants";
-import type { OAuthConfig } from "@/adapters/types";
+import type { OAuthConfig, TokenSet } from "@/adapters/types";
+import { getOAuthClientId, getOAuthClientSecret } from "@/lib/oauth-env";
 
 // Verify and decode OAuth state parameter
 function verifyState(state: string | null): string | null {
@@ -41,21 +42,14 @@ async function exchangeCode(
 
   if (config.authMethod === "basic") {
     // Notion uses Basic Auth
-    const clientId = process.env[`${appName.toUpperCase()}_OAUTH_CLIENT_ID`]!;
-    const clientSecret =
-      process.env[`${appName.toUpperCase()}_OAUTH_CLIENT_SECRET`]!;
+    const clientId = getOAuthClientId(appName);
+    const clientSecret = getOAuthClientSecret(appName);
     headers["Authorization"] =
       `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
   } else {
     // Google/Meta use POST body
-    body.set(
-      "client_id",
-      process.env[`${appName.toUpperCase()}_OAUTH_CLIENT_ID`]!,
-    );
-    body.set(
-      "client_secret",
-      process.env[`${appName.toUpperCase()}_OAUTH_CLIENT_SECRET`]!,
-    );
+    body.set("client_id", getOAuthClientId(appName));
+    body.set("client_secret", getOAuthClientSecret(appName));
   }
 
   const response = await fetch(config.tokenUrl, {
@@ -98,11 +92,23 @@ export async function GET(
   }
 
   try {
-    const tokens = await exchangeCode(
+    let tokens = await exchangeCode(
       adapter.authConfig as OAuthConfig,
       code!,
       appName,
     );
+
+    // Meta apps: exchange short-lived token for long-lived token (60 days)
+    if (appName === "threads" || appName === "instagram") {
+      const exchangeFn = appName === "threads"
+        ? (await import("@/adapters/threads")).threadsExchangeLongLived
+        : (await import("@/adapters/instagram")).instagramExchangeLongLived;
+      const longLived: TokenSet = await exchangeFn(tokens.access_token);
+      tokens = {
+        access_token: longLived.access_token,
+        expires_in: longLived.expires_in,
+      };
+    }
 
     await db
       .insert(connectedApps)

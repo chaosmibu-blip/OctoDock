@@ -3,8 +3,9 @@ import { z } from "zod";
 import { db } from "@/db";
 import { connectedApps } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { getAdapter } from "./registry";
+import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware } from "./middleware/logger";
+import { queryMemory, storeMemory } from "@/services/memory-engine";
 
 type User = { id: string; email: string; name: string | null };
 
@@ -77,9 +78,21 @@ function registerSystemTools(server: McpServer, userId: string): void {
         .optional()
         .describe("Filter by memory category"),
     },
-    async () => {
+    async (params) => {
+      const results = await queryMemory(
+        userId,
+        params.query as string,
+        params.category as string | undefined,
+      );
+
+      if (results.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: "No matching memories found." }],
+        };
+      }
+
       return {
-        content: [{ type: "text" as const, text: "Not implemented yet" }],
+        content: [{ type: "text" as const, text: JSON.stringify(results, null, 2) }],
       };
     },
   );
@@ -98,9 +111,17 @@ function registerSystemTools(server: McpServer, userId: string): void {
         .optional()
         .describe("Associated app name, or omit for cross-app memory"),
     },
-    async () => {
+    async (params) => {
+      await storeMemory(
+        userId,
+        params.key as string,
+        params.value as string,
+        params.category as string,
+        params.app_name as string | undefined,
+      );
+
       return {
-        content: [{ type: "text" as const, text: "Not implemented yet" }],
+        content: [{ type: "text" as const, text: "Memory stored successfully." }],
       };
     },
   );
@@ -111,9 +132,38 @@ function registerSystemTools(server: McpServer, userId: string): void {
     {
       query: z.string().describe("Describe what you want to do"),
     },
-    async () => {
+    async (params) => {
+      const allAdapters = getAllAdapters();
+      const query = (params.query as string).toLowerCase();
+
+      const matches = allAdapters.flatMap((adapter) =>
+        adapter.tools
+          .filter(
+            (t) =>
+              t.name.toLowerCase().includes(query) ||
+              t.description.toLowerCase().includes(query),
+          )
+          .map((t) => ({
+            app: adapter.name,
+            tool: t.name,
+            description: t.description,
+          })),
+      );
+
+      if (matches.length === 0) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "No matching tools found. Available apps: " +
+                allAdapters.map((a) => a.name).join(", "),
+            },
+          ],
+        };
+      }
+
       return {
-        content: [{ type: "text" as const, text: "Not implemented yet" }],
+        content: [{ type: "text" as const, text: JSON.stringify(matches, null, 2) }],
       };
     },
   );

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface DashboardProps {
   user: { name: string; email: string; mcpApiKey: string };
@@ -23,6 +24,16 @@ const AVAILABLE_APPS = [
     name: "gmail",
     displayName: "Gmail",
     description: "Search, read, send, and draft emails",
+  },
+  {
+    name: "threads",
+    displayName: "Threads",
+    description: "Publish posts, reply, and view insights",
+  },
+  {
+    name: "instagram",
+    displayName: "Instagram",
+    description: "Publish photos, manage comments, and view insights",
   },
 ];
 
@@ -54,8 +65,16 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto space-y-8">
         {/* Header */}
-        <div>
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">AgentDock</h1>
+          <Link
+            href="/preferences"
+            className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
+          >
+            Memory
+          </Link>
+        </div>
+        <div>
           <p className="text-gray-500 mt-1">
             {user.name} ({user.email})
           </p>
