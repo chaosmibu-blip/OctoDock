@@ -4,6 +4,11 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+interface ToolInfo {
+  name: string;
+  description: string;
+}
+
 interface DashboardProps {
   user: { name: string; email: string; mcpApiKey: string };
   connectedApps: Array<{
@@ -49,6 +54,9 @@ const AVAILABLE_APPS = [
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {
   const [copied, setCopied] = useState(false);
+  const [expandedApp, setExpandedApp] = useState<string | null>(null);
+  const [toolsCache, setToolsCache] = useState<Record<string, ToolInfo[]>>({});
+  const [loadingTools, setLoadingTools] = useState<string | null>(null);
   const router = useRouter();
 
   const mcpUrl = `${origin}/mcp/${user.mcpApiKey}`;
@@ -58,6 +66,28 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [mcpUrl]);
+
+  const toggleTools = useCallback(async (appName: string) => {
+    if (expandedApp === appName) {
+      setExpandedApp(null);
+      return;
+    }
+    setExpandedApp(appName);
+    if (!toolsCache[appName]) {
+      setLoadingTools(appName);
+      try {
+        const res = await fetch(`/api/tools/${appName}`);
+        if (res.ok) {
+          const data = await res.json();
+          setToolsCache((prev) => ({ ...prev, [appName]: data.tools }));
+        }
+      } catch {
+        // ignore
+      } finally {
+        setLoadingTools(null);
+      }
+    }
+  }, [expandedApp, toolsCache]);
 
   const isConnected = (appName: string) =>
     connectedApps.some((a) => a.appName === appName && a.status === "active");
@@ -127,36 +157,79 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                 (a) => a.appName === app.name,
               );
 
+              const isExpanded = expandedApp === app.name;
+              const appTools = toolsCache[app.name];
+              const isLoading = loadingTools === app.name;
+
               return (
                 <div
                   key={app.name}
-                  className="flex items-center justify-between py-3 border-b last:border-b-0"
+                  className="py-3 border-b last:border-b-0"
                 >
-                  <div>
-                    <h3 className="font-medium text-gray-900">
-                      {app.displayName}
-                    </h3>
-                    <p className="text-sm text-gray-500">{app.description}</p>
-                    {connected && connectedApp && (
-                      <p className="text-xs text-green-600 mt-1">
-                        已連結
-                      </p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-900">
+                        {app.displayName}
+                      </h3>
+                      <p className="text-sm text-gray-500">{app.description}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        {connected && connectedApp && (
+                          <p className="text-xs text-green-600">
+                            已連結
+                          </p>
+                        )}
+                        <button
+                          onClick={() => toggleTools(app.name)}
+                          className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          {isExpanded ? "收起工具清單" : "查看工具清單"}
+                        </button>
+                      </div>
+                    </div>
+                    {connected ? (
+                      <button
+                        onClick={() => disconnectApp(app.name)}
+                        className="px-4 py-2 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50 transition-colors"
+                      >
+                        中斷連結
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => connectApp(app.name)}
+                        className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800 transition-colors"
+                      >
+                        連結
+                      </button>
                     )}
                   </div>
-                  {connected ? (
-                    <button
-                      onClick={() => disconnectApp(app.name)}
-                      className="px-4 py-2 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50 transition-colors"
-                    >
-                      中斷連結
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => connectApp(app.name)}
-                      className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800 transition-colors"
-                    >
-                      連結
-                    </button>
+                  {isExpanded && (
+                    <div className="mt-3 ml-1 bg-gray-50 rounded-lg p-4">
+                      {isLoading ? (
+                        <p className="text-sm text-gray-400">載入中...</p>
+                      ) : appTools && appTools.length > 0 ? (
+                        <>
+                          <p className="text-xs text-gray-500 mb-3">
+                            共 {appTools.length} 個工具，AI agent 可透過 MCP 使用：
+                          </p>
+                          <div className="space-y-2">
+                            {appTools.map((tool: ToolInfo) => (
+                              <div key={tool.name} className="text-sm">
+                                <code className="text-xs bg-white px-1.5 py-0.5 rounded border text-gray-800">
+                                  {tool.name}
+                                </code>
+                                <p className="text-xs text-gray-500 mt-0.5 ml-1">
+                                  {tool.description}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-400">
+                          尚未建立工具（此 App 的 Adapter 尚未實作）
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               );
