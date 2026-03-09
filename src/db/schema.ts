@@ -130,7 +130,7 @@ export const memory = pgTable(
     value: text("value").notNull(),
     confidence: real("confidence").default(0.5),
     sourceCount: integer("source_count").default(1),
-    // embedding vector(1536) — added via raw SQL migration when pgvector is enabled
+    // embedding vector(1536) — added via SQL migration: src/db/migrations/001_pgvector.sql
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
