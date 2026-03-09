@@ -15,7 +15,11 @@
       "Bash(grep:*)",
       "Bash(npx drizzle-kit:*)",
       "Bash(psql $DATABASE_URL:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(pkill:*)",
+      "Bash(env:*)",
+      "Bash(psql:*)",
+      "WebSearch"
     ]
   }
 }
