@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { generateMcpApiKey } from "@/lib/constants";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
   adapter: DrizzleAdapter(db, {
     usersTable: users,
     accountsTable: accounts,

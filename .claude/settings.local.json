@@ -12,7 +12,10 @@
       "Bash(npx next:*)",
       "Bash(NEXT_TURBOPACK=0 npx next:*)",
       "Bash(npm:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(psql $DATABASE_URL:*)",
+      "Bash(node:*)"
     ]
   }
 }
