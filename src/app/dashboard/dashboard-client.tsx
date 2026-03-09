@@ -18,32 +18,32 @@ const AVAILABLE_APPS = [
   {
     name: "notion",
     displayName: "Notion",
-    description: "Search, create, and update pages and databases",
+    description: "搜尋、建立、更新頁面和資料庫",
   },
   {
     name: "gmail",
     displayName: "Gmail",
-    description: "Search, read, send, and draft emails",
+    description: "搜尋、讀取、寄送和草擬郵件",
   },
   {
     name: "threads",
     displayName: "Threads",
-    description: "Publish posts, reply, and view insights",
+    description: "發布貼文、回覆和查看洞察",
   },
   {
     name: "instagram",
     displayName: "Instagram",
-    description: "Publish photos, manage comments, and view insights",
+    description: "發布照片、管理留言和查看洞察",
   },
   {
     name: "line",
     displayName: "LINE",
-    description: "Send messages, broadcast, and manage followers",
+    description: "發送訊息、廣播和管理追蹤者",
   },
   {
     name: "telegram",
     displayName: "Telegram",
-    description: "Send messages, photos, and manage bot webhooks",
+    description: "發送訊息、照片和管理 Bot Webhook",
   },
 ];
 
@@ -88,7 +88,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
               href="/preferences"
               className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
             >
-              Memory
+              記憶
             </Link>
           </div>
         </div>
@@ -102,7 +102,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
         <div className="bg-white rounded-lg border p-6">
           <h2 className="text-lg font-semibold mb-2">MCP URL</h2>
           <p className="text-sm text-gray-500 mb-4">
-            Copy this URL and paste it into your AI agent&apos;s MCP settings.
+            複製此 URL，貼到你的 AI agent 的 MCP 設定中。
           </p>
           <div className="flex gap-2">
             <code className="flex-1 bg-gray-100 rounded px-3 py-2 text-sm font-mono text-gray-700 overflow-x-auto">
@@ -112,14 +112,14 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
               onClick={copyMcpUrl}
               className="px-4 py-2 bg-black text-white text-sm rounded hover:bg-gray-800 transition-colors whitespace-nowrap"
             >
-              {copied ? "Copied!" : "Copy"}
+              {copied ? "已複製！" : "複製"}
             </button>
           </div>
         </div>
 
         {/* Connected Apps */}
         <div className="bg-white rounded-lg border p-6">
-          <h2 className="text-lg font-semibold mb-4">Apps</h2>
+          <h2 className="text-lg font-semibold mb-4">應用程式</h2>
           <div className="space-y-4">
             {AVAILABLE_APPS.map((app) => {
               const connected = isConnected(app.name);
@@ -139,7 +139,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                     <p className="text-sm text-gray-500">{app.description}</p>
                     {connected && connectedApp && (
                       <p className="text-xs text-green-600 mt-1">
-                        Connected
+                        已連結
                       </p>
                     )}
                   </div>
@@ -148,14 +148,14 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                       onClick={() => disconnectApp(app.name)}
                       className="px-4 py-2 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50 transition-colors"
                     >
-                      Disconnect
+                      中斷連結
                     </button>
                   ) : (
                     <button
                       onClick={() => connectApp(app.name)}
                       className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800 transition-colors"
                     >
-                      Connect
+                      連結
                     </button>
                   )}
                 </div>

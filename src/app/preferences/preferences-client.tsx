@@ -17,9 +17,9 @@ interface PreferencesProps {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  preference: "Preferences",
-  pattern: "Patterns",
-  context: "Context",
+  preference: "偏好",
+  pattern: "模式",
+  context: "脈絡",
 };
 
 export function PreferencesClient({ memories }: PreferencesProps) {
@@ -49,16 +49,16 @@ export function PreferencesClient({ memories }: PreferencesProps) {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Memory</h1>
+            <h1 className="text-2xl font-bold text-gray-900">記憶</h1>
             <p className="text-gray-500 mt-1">
-              Your cross-agent memory. These preferences and patterns persist across all AI agents.
+              你的跨 agent 記憶。這些偏好和模式會在所有 AI agent 之間共享。
             </p>
           </div>
           <Link
             href="/dashboard"
             className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
           >
-            Back to Dashboard
+            返回主控台
           </Link>
         </div>
 
@@ -74,7 +74,7 @@ export function PreferencesClient({ memories }: PreferencesProps) {
                   : "bg-gray-200 text-gray-700 hover:bg-gray-300"
               }`}
             >
-              {cat === "all" ? "All" : CATEGORY_LABELS[cat]}
+              {cat === "all" ? "全部" : CATEGORY_LABELS[cat]}
             </button>
           ))}
         </div>
@@ -83,7 +83,7 @@ export function PreferencesClient({ memories }: PreferencesProps) {
         <div className="bg-white rounded-lg border">
           {filtered.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
-              No memories yet. As you use AgentDock, your AI agents will learn your preferences.
+              尚無記憶。隨著你使用 AgentDock，AI agent 會逐漸學習你的偏好。
             </div>
           ) : (
             <div className="divide-y">
@@ -117,7 +117,7 @@ export function PreferencesClient({ memories }: PreferencesProps) {
                     onClick={() => deleteMemory(mem.key, mem.category)}
                     className="text-xs text-red-500 hover:text-red-700 whitespace-nowrap"
                   >
-                    Delete
+                    刪除
                   </button>
                 </div>
               ))}
