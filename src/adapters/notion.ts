@@ -4,7 +4,6 @@ import type {
   OAuthConfig,
   ToolDefinition,
   ToolResult,
-  TokenSet,
 } from "./types";
 
 const authConfig: OAuthConfig = {

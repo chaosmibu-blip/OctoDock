@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { users, connectedApps } from "@/db/schema";
@@ -26,6 +27,11 @@ export default async function DashboardPage() {
     .from(connectedApps)
     .where(eq(connectedApps.userId, session.user.id));
 
+  const headersList = await headers();
+  const host = headersList.get("host") ?? "localhost:3000";
+  const protocol = headersList.get("x-forwarded-proto") ?? "http";
+  const origin = `${protocol}://${host}`;
+
   return (
     <DashboardClient
       user={{
@@ -38,6 +44,7 @@ export default async function DashboardPage() {
         status: a.status ?? "active",
         connectedAt: a.connectedAt?.toISOString() ?? "",
       }))}
+      origin={origin}
     />
   );
 }

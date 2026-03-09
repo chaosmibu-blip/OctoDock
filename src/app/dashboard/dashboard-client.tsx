@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 
 interface DashboardProps {
   user: { name: string; email: string; mcpApiKey: string };
@@ -9,6 +10,7 @@ interface DashboardProps {
     status: string;
     connectedAt: string;
   }>;
+  origin: string;
 }
 
 const AVAILABLE_APPS = [
@@ -24,28 +26,29 @@ const AVAILABLE_APPS = [
   },
 ];
 
-export function DashboardClient({ user, connectedApps }: DashboardProps) {
+export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {
   const [copied, setCopied] = useState(false);
+  const router = useRouter();
 
-  const mcpUrl = `${window.location.origin}/mcp/${user.mcpApiKey}`;
+  const mcpUrl = `${origin}/mcp/${user.mcpApiKey}`;
 
-  const copyMcpUrl = () => {
+  const copyMcpUrl = useCallback(() => {
     navigator.clipboard.writeText(mcpUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
+  }, [mcpUrl]);
 
   const isConnected = (appName: string) =>
     connectedApps.some((a) => a.appName === appName && a.status === "active");
 
-  const connectApp = (appName: string) => {
-    window.location.href = `/api/connect/${appName}`;
-  };
+  const connectApp = useCallback((appName: string) => {
+    router.push(`/api/connect/${appName}`);
+  }, [router]);
 
-  const disconnectApp = async (appName: string) => {
+  const disconnectApp = useCallback(async (appName: string) => {
     await fetch(`/api/connect/${appName}`, { method: "DELETE" });
-    window.location.reload();
-  };
+    router.refresh();
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -62,7 +65,7 @@ export function DashboardClient({ user, connectedApps }: DashboardProps) {
         <div className="bg-white rounded-lg border p-6">
           <h2 className="text-lg font-semibold mb-2">MCP URL</h2>
           <p className="text-sm text-gray-500 mb-4">
-            Copy this URL and paste it into your AI agent's MCP settings.
+            Copy this URL and paste it into your AI agent&apos;s MCP settings.
           </p>
           <div className="flex gap-2">
             <code className="flex-1 bg-gray-100 rounded px-3 py-2 text-sm font-mono text-gray-700 overflow-x-auto">

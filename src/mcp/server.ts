@@ -8,11 +8,6 @@ import { executeWithMiddleware } from "./middleware/logger";
 
 type User = { id: string; email: string; name: string | null };
 
-function getAppFromTool(toolName: string): string {
-  const prefix = toolName.split("_")[0];
-  return prefix;
-}
-
 export async function createServerForUser(user: User): Promise<McpServer> {
   const server = new McpServer({ name: "agentdock", version: "1.0.0" });
 

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { auth } from "@/auth";
 
 export default async function Home() {
@@ -17,12 +18,12 @@ export default async function Home() {
         <p className="max-w-md text-center text-lg text-zinc-600 dark:text-zinc-400">
           One MCP URL to let any AI agent use all your apps.
         </p>
-        <a
+        <Link
           href="/api/auth/signin"
           className="flex h-12 items-center justify-center rounded-full bg-black px-8 text-white transition-colors hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200"
         >
           Sign in with Google
-        </a>
+        </Link>
       </main>
     </div>
   );
