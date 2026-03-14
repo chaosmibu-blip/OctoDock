@@ -65,6 +65,8 @@ cron-based 排程，三種類型：
 
 機械性的檢查（前端同步、DB migration）交給 `.claude/hooks/post-commit-check.sh` 自動提醒，不用靠記憶。
 
+碰到問題時先問：**「這是只有這個 App 會碰到的，還是所有 App 都會碰到的？」** 通用的改架構（types.ts / server.ts），不改個別 adapter。同一個問題在第二個 App 出現時就該升級到架構層（詳見 `.claude/skills/architecture-thinking.md`）。
+
 ## 開發原則
 
 0. **不重複造輪子**：寫程式碼或收到需求時，優先看現有程式碼有沒有可直接修改的。不要重複建立功能，也不要堆積廢棄程式碼。修改完要刪掉舊的（包含文件記錄），免得後續維護時錯亂
@@ -145,6 +147,7 @@ AI 可以用名稱（不用 ID）操作：
 - **前後端同步**：`.claude/skills/frontend-sync.md` — 後端變更時自動檢查前端是否需要同步
 - **Adapter 品質檢查**：`.claude/skills/adapter-quality-checklist.md` — 新增或修改 adapter 時的品質基準線
 - **新增 App 研究**：`.claude/skills/new-app-research.md` — 新增 App 時先研究 API 再寫程式碼
+- **架構思維**：`.claude/skills/architecture-thinking.md` — 架構總覽 + 碰到問題時判斷改架構還是改個別 App
 
 ### App 操作手冊（設定 + 維護 + AI 操作指南）
 - `.claude/skills/setup-notion.md` — Notion
