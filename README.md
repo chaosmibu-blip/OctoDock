@@ -124,4 +124,4 @@ See `.claude/skills/adapter-quality-checklist.md` for quality guidelines.
 
 ## License
 
-MIT
+[Business Source License 1.1](LICENSE) — 你可以自由使用、修改、自架，但不能拿去做競品託管服務。4 年後自動轉為 MIT。
