@@ -63,14 +63,61 @@ const actionMap: Record<string, string> = {
 
 // --- do+help 架構：getSkill ---
 // 回傳此 adapter 可用動作的摘要說明，供 agent 理解能力範圍
-function getSkill(): string {
+const ACTION_SKILLS: Record<string, string> = {
+  send_message: `## line.send_message
+Send a text message to a specific LINE user.
+### Parameters
+  user_id: LINE user ID of the recipient
+  message: Text message to send
+### Example
+octodock_do(app:"line", action:"send_message", params:{
+  user_id:"U1234567890abcdef",
+  message:"明天的會議改到下午 3 點"
+})`,
+
+  broadcast: `## line.broadcast
+Broadcast a message to ALL followers. Use with caution — counts toward monthly message quota.
+### Parameters
+  message: Text message to broadcast
+### Example
+octodock_do(app:"line", action:"broadcast", params:{message:"本週末活動取消，造成不便敬請見諒"})`,
+
+  get_profile: `## line.get_profile
+Get a LINE user's display name, picture, and status.
+### Parameters
+  user_id: LINE user ID
+### Example
+octodock_do(app:"line", action:"get_profile", params:{user_id:"U1234567890abcdef"})`,
+
+  get_followers: `## line.get_followers
+Get follower count and statistics.
+### Parameters
+  (none)
+### Example
+octodock_do(app:"line", action:"get_followers", params:{})`,
+
+  reply: `## line.reply
+Reply using a webhook reply token. Token is only valid for ~1 minute after receiving a message.
+### Parameters
+  reply_token: Reply token from webhook event
+  message: Text message to reply with
+### Example
+octodock_do(app:"line", action:"reply", params:{
+  reply_token:"nHuyWiB7yP5Zw52FIkcQob...",
+  message:"收到您的訊息，我們會盡快回覆"
+})`,
+};
+
+function getSkill(action?: string): string {
+  if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
+  if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   return `line actions:
   send_message(user_id, message) — send text message to user
   broadcast(message) — broadcast to all followers (use with caution)
   get_profile(user_id) — get user display name and picture
   get_followers() — get follower count statistics
   reply(reply_token, message) — reply using webhook reply token (valid 1 min)
-All messages are text format.`;
+Use octodock_help(app:"line", action:"ACTION") for detailed params + example.`;
 }
 
 // --- do+help 架構：formatResponse ---

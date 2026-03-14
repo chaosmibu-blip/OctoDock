@@ -42,15 +42,62 @@ const actionMap: Record<string, string> = {
   get_insights: "instagram_get_insights",
 };
 
-/** 回傳 Instagram adapter 的技能說明（供 agent 理解可用操作） */
-function getSkill(): string {
+const ACTION_SKILLS: Record<string, string> = {
+  publish: `## instagram.publish
+Publish a photo post. Requires a public image URL.
+### Parameters
+  image_url: Public URL of the image
+  caption (optional): Post caption
+### Example
+octodock_do(app:"instagram", action:"publish", params:{
+  image_url:"https://example.com/product.jpg",
+  caption:"新品上市！限時優惠中 🎉 #newproduct"
+})`,
+
+  get_posts: `## instagram.get_posts
+Get recent posts with engagement stats.
+### Parameters
+  limit (optional): Number of posts (default 10, max 25)
+### Example
+octodock_do(app:"instagram", action:"get_posts", params:{limit:5})`,
+
+  reply_comment: `## instagram.reply_comment
+Reply to a comment on a post.
+### Parameters
+  comment_id: Comment ID
+  message: Reply text
+### Example
+octodock_do(app:"instagram", action:"reply_comment", params:{
+  comment_id:"17890012345678",
+  message:"感謝您的支持！"
+})`,
+
+  get_comments: `## instagram.get_comments
+Get comments on a post.
+### Parameters
+  media_id: Post/media ID
+  limit (optional): Number of comments (default 20)
+### Example
+octodock_do(app:"instagram", action:"get_comments", params:{media_id:"17890012345678"})`,
+
+  get_insights: `## instagram.get_insights
+Get post metrics (impressions, reach, likes, comments, shares, saves).
+### Parameters
+  media_id: Post/media ID
+### Example
+octodock_do(app:"instagram", action:"get_insights", params:{media_id:"17890012345678"})`,
+};
+
+function getSkill(action?: string): string {
+  if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
+  if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   return `instagram actions:
-  publish(image_url, caption?) — publish photo post (requires public image URL)
+  publish(image_url, caption?) — publish photo post
   get_posts(limit?) — get recent posts with engagement stats
   reply_comment(comment_id, message) — reply to a comment
   get_comments(media_id, limit?) — get post comments
-  get_insights(media_id) — get post metrics (impressions, reach, likes, etc.)
-Requires Instagram Business account linked to Facebook Page.`;
+  get_insights(media_id) — get post metrics
+Requires Instagram Business account. Use octodock_help(app:"instagram", action:"ACTION") for detailed params + example.`;
 }
 
 /** 將 API 原始回應格式化為人類可讀的摘要文字 */

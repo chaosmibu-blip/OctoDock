@@ -99,21 +99,142 @@ const actionMap: Record<string, string> = {
  * 控制在 ~150 tokens，只列出最常用的 action 和參數
  * 進入對話歷史後，同一個 chat 不需要再問
  */
-function getSkill(): string {
+/** action 級別的詳細說明 + 使用範例 */
+const ACTION_SKILLS: Record<string, string> = {
+  search: `## notion.search
+Search pages and databases in workspace.
+### Parameters
+  query: Search text
+  filter (optional): "page" or "database"
+### Example
+octodock_do(app:"notion", action:"search", params:{query:"會議紀錄"})
+octodock_do(app:"notion", action:"search", params:{query:"待辦", filter:"database"})`,
+
+  create_page: `## notion.create_page
+Create a new page. Content in markdown format.
+### Parameters
+  title: Page title
+  content (optional): Markdown content (headings, lists, code blocks supported)
+  folder (optional): Parent page name or ID (auto-resolved via memory)
+  parent_type (optional): "page_id" or "database_id" (default: page_id)
+### Example
+octodock_do(app:"notion", action:"create_page", params:{
+  title:"會議紀錄 3/15",
+  folder:"會議",
+  content:"## 討論事項\\n- 產品進度\\n- 下週計畫\\n\\n## 決議\\n1. 完成 Phase 9\\n2. 準備 demo"
+})`,
+
+  get_page: `## notion.get_page
+Get page content (returns markdown).
+### Parameters
+  page_id: Page ID or name (auto-resolved)
+### Example
+octodock_do(app:"notion", action:"get_page", params:{page_id:"317a9617-..."})
+octodock_do(app:"notion", action:"get_page", params:{page:"會議紀錄 3/15"})`,
+
+  replace_content: `## notion.replace_content
+Replace entire page body content. Old content is deleted, new content written in markdown.
+### Parameters
+  page_id: Page ID
+  content: New content in markdown format
+### Example
+octodock_do(app:"notion", action:"replace_content", params:{
+  page_id:"317a9617-...",
+  content:"## 更新後的內容\\n- 新的項目\\n- 修改過的計畫"
+})`,
+
+  update_page: `## notion.update_page
+Update page properties (title, icon, cover). Does NOT change body content — use replace_content for that.
+### Parameters
+  page_id: Page ID
+  properties (optional): Notion API properties object
+  icon (optional): {emoji:"🐙"} or {external:{url:"..."}}
+  cover (optional): {external:{url:"..."}}
+### Example
+octodock_do(app:"notion", action:"update_page", params:{
+  page_id:"317a9617-...",
+  icon:{emoji:"🐙"}
+})`,
+
+  delete_page: `## notion.delete_page
+Archive a page (recoverable within 30 days).
+### Parameters
+  page_id: Page ID
+### Example
+octodock_do(app:"notion", action:"delete_page", params:{page_id:"317a9617-..."})`,
+
+  query_database: `## notion.query_database
+Query a Notion database with optional filters and sorts.
+### Parameters
+  database_id: Database ID or name (auto-resolved)
+  filter (optional): Notion filter object
+  sorts (optional): Array of sort objects
+  page_size (optional): Max results (default 20, max 100)
+### Example
+octodock_do(app:"notion", action:"query_database", params:{
+  database:"待辦清單",
+  filter:{property:"Status", select:{equals:"In Progress"}},
+  sorts:[{property:"Due Date", direction:"ascending"}]
+})`,
+
+  create_database_item: `## notion.create_database_item
+Add a new row to a database.
+### Parameters
+  database_id: Database ID or name
+  properties: Item properties in Notion API format
+  content (optional): Page content in markdown
+### Example
+octodock_do(app:"notion", action:"create_database_item", params:{
+  database:"待辦清單",
+  properties:{
+    Name:{title:[{text:{content:"完成 README"}}]},
+    Status:{select:{name:"Todo"}},
+    "Due Date":{date:{start:"2026-03-20"}}
+  }
+})`,
+
+  add_comment: `## notion.add_comment
+Add a comment to a page.
+### Parameters
+  page_id: Page ID
+  text: Comment text
+### Example
+octodock_do(app:"notion", action:"add_comment", params:{
+  page_id:"317a9617-...",
+  text:"已確認完成，可以關閉"
+})`,
+
+  get_users: `## notion.get_users
+List all workspace members.
+### Parameters
+  (none)
+### Example
+octodock_do(app:"notion", action:"get_users", params:{})`,
+};
+
+function getSkill(action?: string): string {
+  // action 級別：回傳該 action 的完整參數 + 範例
+  if (action && ACTION_SKILLS[action]) {
+    return ACTION_SKILLS[action];
+  }
+  // 有 action 但找不到：提示可用的 action
+  if (action) {
+    return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
+  }
+  // app 級別：精簡清單
   return `notion actions:
   search(query, filter?) — search pages/databases
   create_page(title, content?, folder?) — create page (content in markdown)
   get_page(page) — get page content (returns markdown)
-  replace_content(page_id, content) — replace entire page body (content in markdown)
+  replace_content(page_id, content) — replace entire page body (markdown)
   update_page(page_id, properties?, icon?, cover?) — update page properties only
   delete_page(page_id) — archive page
   query_database(database, filter?, sorts?) — query database
   create_database_item(database, properties, content?) — add row
-  append_blocks(block_id, children) — append blocks to page
   add_comment(page_id, text) — comment on page
   get_comments(block_id) — list comments
   get_users() — list workspace members
-Input and output both use markdown. Names auto-resolve to IDs via memory.`;
+Input/output use markdown. Names auto-resolve to IDs. Use octodock_help(app:"notion", action:"ACTION") for detailed params + example.`;
 }
 
 // ============================================================

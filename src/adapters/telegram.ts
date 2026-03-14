@@ -30,17 +30,58 @@ const actionMap: Record<string, string> = {
   set_webhook: "telegram_set_webhook",
 };
 
-/**
- * 回傳 Telegram Bot 可用操作的精簡說明
- * octodock_help 會呼叫此方法，讓 AI 知道有哪些操作可用
- * 進入對話歷史後，同一個 chat 不需要再問
- */
-function getSkill(): string {
+const ACTION_SKILLS: Record<string, string> = {
+  send_message: `## telegram.send_message
+Send a text message to a Telegram chat.
+### Parameters
+  chat_id: Chat ID (user, group, or channel)
+  text: Message text (supports Markdown)
+  parse_mode (optional): "Markdown", "MarkdownV2", or "HTML"
+### Example
+octodock_do(app:"telegram", action:"send_message", params:{
+  chat_id:"123456789",
+  text:"*重要通知*\\n明天會議改到 3 點",
+  parse_mode:"Markdown"
+})`,
+
+  send_photo: `## telegram.send_photo
+Send a photo to a Telegram chat.
+### Parameters
+  chat_id: Chat ID
+  photo: Public URL of the photo
+  caption (optional): Photo caption
+### Example
+octodock_do(app:"telegram", action:"send_photo", params:{
+  chat_id:"123456789",
+  photo:"https://example.com/chart.png",
+  caption:"本月業績報表"
+})`,
+
+  get_updates: `## telegram.get_updates
+Get recent incoming messages.
+### Parameters
+  limit (optional): Number of updates (default 10, max 100)
+  offset (optional): Offset for pagination
+### Example
+octodock_do(app:"telegram", action:"get_updates", params:{limit:5})`,
+
+  set_webhook: `## telegram.set_webhook
+Configure webhook URL for receiving messages.
+### Parameters
+  url: Webhook URL (must be HTTPS)
+### Example
+octodock_do(app:"telegram", action:"set_webhook", params:{url:"https://your-domain.com/api/webhook/telegram"})`,
+};
+
+function getSkill(action?: string): string {
+  if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
+  if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   return `telegram actions:
-  send_message(chat_id, text, parse_mode?) — send text message (supports Markdown)
+  send_message(chat_id, text, parse_mode?) — send text (supports Markdown)
   send_photo(chat_id, photo, caption?) — send photo from URL
   get_updates(limit?, offset?) — get recent incoming messages
-  set_webhook(url) — configure webhook URL (HTTPS required)`;
+  set_webhook(url) — configure webhook URL
+Use octodock_help(app:"telegram", action:"ACTION") for detailed params + example.`;
 }
 
 /**

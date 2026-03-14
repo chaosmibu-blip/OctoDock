@@ -291,23 +291,33 @@ function registerHelpTool(
 
       // ── 帶 app + action：回傳特定 action 的詳細參數和範例（B2 help 分層）──
       if (app && action) {
-        const adapter = getAdapter(app);
-        if (!adapter) {
+        const adapterForAction = getAdapter(app);
+        if (!adapterForAction) {
           return {
             content: [{ type: "text" as const, text: `App "${app}" not found.` }],
           };
         }
 
-        // 找到對應的工具定義
-        const toolName = adapter.actionMap?.[action];
+        // 優先用 adapter.getSkill(action) — 包含完整範例
+        if (adapterForAction.getSkill) {
+          const skillText = adapterForAction.getSkill(action);
+          if (skillText) {
+            return {
+              content: [{ type: "text" as const, text: skillText }],
+            };
+          }
+        }
+
+        // Fallback：從 inputSchema 自動提取
+        const toolName = adapterForAction.actionMap?.[action];
         const toolDef = toolName
-          ? adapter.tools.find((t) => t.name === toolName)
-          : adapter.tools.find((t) => t.name === action);
+          ? adapterForAction.tools.find((t) => t.name === toolName)
+          : adapterForAction.tools.find((t) => t.name === action);
 
         if (!toolDef) {
-          const available = adapter.actionMap
-            ? Object.keys(adapter.actionMap).join(", ")
-            : adapter.tools.map((t) => t.name).join(", ");
+          const available = adapterForAction.actionMap
+            ? Object.keys(adapterForAction.actionMap).join(", ")
+            : adapterForAction.tools.map((t) => t.name).join(", ");
           return {
             content: [{
               type: "text" as const,
@@ -316,7 +326,6 @@ function registerHelpTool(
           };
         }
 
-        // 組合詳細說明：描述 + 每個參數的 schema + 範例
         const params = Object.entries(toolDef.inputSchema)
           .map(([name, schema]) => {
             const desc = (schema as { description?: string }).description || "";

@@ -32,14 +32,54 @@ const actionMap: Record<string, string> = {
   get_profile: "threads_get_profile",
 };
 
-// do + help 架構：回傳精簡操作說明，讓 agent 快速理解可用功能
-function getSkill(): string {
+const ACTION_SKILLS: Record<string, string> = {
+  publish: `## threads.publish
+Publish a text post.
+### Parameters
+  text: Post content (max 500 characters)
+### Example
+octodock_do(app:"threads", action:"publish", params:{text:"剛完成了新功能的開發 🚀 #coding"})`,
+
+  get_posts: `## threads.get_posts
+Get recent posts.
+### Parameters
+  limit (optional): Number of posts (default 10, max 25)
+### Example
+octodock_do(app:"threads", action:"get_posts", params:{limit:5})`,
+
+  reply: `## threads.reply
+Reply to a post.
+### Parameters
+  post_id: ID of the post to reply to
+  text: Reply content
+### Example
+octodock_do(app:"threads", action:"reply", params:{post_id:"123456", text:"謝謝分享！"})`,
+
+  get_insights: `## threads.get_insights
+Get post engagement metrics (views, likes, replies, reposts, quotes).
+### Parameters
+  post_id: Post ID
+### Example
+octodock_do(app:"threads", action:"get_insights", params:{post_id:"123456"})`,
+
+  get_profile: `## threads.get_profile
+Get user profile info.
+### Parameters
+  (none)
+### Example
+octodock_do(app:"threads", action:"get_profile", params:{})`,
+};
+
+function getSkill(action?: string): string {
+  if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
+  if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   return `threads actions:
   publish(text) — publish text post (max 500 chars)
   get_posts(limit?) — get recent posts
   reply(post_id, text) — reply to a post
   get_insights(post_id) — get post engagement metrics
-  get_profile() — get user profile info`;
+  get_profile() — get user profile info
+Use octodock_help(app:"threads", action:"ACTION") for detailed params + example.`;
 }
 
 // G1/G3 通用框架：將 raw JSON 轉為 AI 友善的可讀格式

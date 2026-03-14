@@ -97,11 +97,11 @@ export interface AppAdapter {
   actionMap?: Record<string, string>;
 
   /**
-   * 回傳精簡的操作說明（Skill），控制在 100-200 tokens
-   * octodock_help(app) 被呼叫時回傳這段文字給 AI
-   * AI 看了就知道這個 App 有哪些 action 和參數可以用
+   * 回傳操作說明（Skill）
+   * - 不帶 action：回傳 App 級別的 action 清單（100-200 tokens）
+   * - 帶 action：回傳該 action 的完整參數說明 + 使用範例
    */
-  getSkill?(): string;
+  getSkill?(action?: string): string;
 
   // === 回傳格式轉換層（G1/G3 通用框架） ===
 

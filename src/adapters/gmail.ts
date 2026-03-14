@@ -113,14 +113,71 @@ const actionMap: Record<string, string> = {
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
-function getSkill(): string {
+const ACTION_SKILLS: Record<string, string> = {
+  search: `## gmail.search
+Search emails using Gmail search syntax.
+### Parameters
+  query: Gmail search query (same syntax as Gmail search bar, e.g. "from:boss@company.com is:unread")
+  max_results (optional): Max results (default 10, max 50)
+### Example
+octodock_do(app:"gmail", action:"search", params:{query:"is:unread from:client@company.com"})
+octodock_do(app:"gmail", action:"search", params:{query:"subject:invoice after:2026/03/01", max_results:5})`,
+
+  read: `## gmail.read
+Read full email content by ID.
+### Parameters
+  message_id: Gmail message ID (get from search results)
+### Example
+octodock_do(app:"gmail", action:"read", params:{message_id:"18e5a3b2c4d6f789"})`,
+
+  send: `## gmail.send
+Send a new email.
+### Parameters
+  to: Recipient email address
+  subject: Email subject
+  body: Email body in plain text
+### Example
+octodock_do(app:"gmail", action:"send", params:{
+  to:"colleague@company.com",
+  subject:"Meeting Notes 3/15",
+  body:"Hi,\\n\\nHere are the meeting notes...\\n\\nBest regards"
+})`,
+
+  reply: `## gmail.reply
+Reply to an existing email thread.
+### Parameters
+  message_id: Original message ID to reply to
+  body: Reply body in plain text
+### Example
+octodock_do(app:"gmail", action:"reply", params:{
+  message_id:"18e5a3b2c4d6f789",
+  body:"Thanks for the update. I'll review and get back to you."
+})`,
+
+  draft: `## gmail.draft
+Create a draft email (can be reviewed and sent later from Gmail).
+### Parameters
+  to: Recipient email address
+  subject: Email subject
+  body: Email body in plain text
+### Example
+octodock_do(app:"gmail", action:"draft", params:{
+  to:"partner@company.com",
+  subject:"Proposal Draft",
+  body:"Dear Partner,\\n\\nPlease find our proposal..."
+})`,
+};
+
+function getSkill(action?: string): string {
+  if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
+  if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   return `gmail actions:
   search(query, max_results?) — search emails (Gmail search syntax)
   read(message_id) — read full email content
   send(to, subject, body) — send new email
   reply(message_id, body) — reply to email thread
   draft(to, subject, body) — create draft email
-Input/output use plain text format.`;
+Use octodock_help(app:"gmail", action:"ACTION") for detailed params + example.`;
 }
 
 // ── do+help 架構：格式化回應（將原始資料轉為簡潔文字）────
