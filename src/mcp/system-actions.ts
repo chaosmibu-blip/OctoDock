@@ -7,6 +7,12 @@ import {
   listMemory,
   deleteMemory,
 } from "@/services/memory-engine";
+import {
+  createSchedule,
+  listSchedules,
+  toggleSchedule,
+  deleteSchedule,
+} from "@/services/scheduler";
 import type { DoResult } from "@/adapters/types";
 
 // ============================================================
@@ -27,6 +33,11 @@ export const systemActionMap: Record<string, string> = {
   sop_create: "system_sop_create",
   sop_update: "system_sop_update",
   sop_delete: "system_sop_delete",
+  // 排程引擎（Phase 5）
+  schedule_list: "system_schedule_list",
+  schedule_create: "system_schedule_create",
+  schedule_toggle: "system_schedule_toggle",
+  schedule_delete: "system_schedule_delete",
 };
 
 /**
@@ -43,7 +54,14 @@ export function getSystemSkill(): string {
   sop_create(name, content) — create a new SOP (content in markdown)
   sop_update(name, content) — update an existing SOP
   sop_delete(name) — delete a SOP
-SOPs are markdown workflow documents that persist across agents and sessions.`;
+  schedule_list() — list all scheduled tasks
+  schedule_create(name, cron, action_type, action_config, timezone?) — create schedule
+    action_type: "simple" (direct do call) | "sop" (run a SOP) | "ai" (natural language task)
+    action_config: {app, action, params} for simple | {sop_name} for sop | {prompt} for ai
+    cron: standard 5-field cron expression (min hour day month weekday)
+  schedule_toggle(schedule_id, is_active) — enable/disable schedule
+  schedule_delete(schedule_id) — delete schedule
+SOPs and schedules persist across agents and sessions.`;
 }
 
 /**
@@ -191,6 +209,61 @@ export async function executeSystemAction(
       const name = params.name as string;
       await deleteMemory(userId, name, "sop");
       return { ok: true, data: `SOP "${name}" deleted.` };
+    }
+
+    // ============================================================
+    // 排程引擎（Phase 5）
+    // 讓用戶設定定時任務，AgentDock 在時間到時自動執行
+    // ============================================================
+
+    // ── 排程列表 ──
+    case "schedule_list": {
+      const items = await listSchedules(userId);
+      if (items.length === 0) {
+        return { ok: true, data: "No schedules found. Create one with schedule_create." };
+      }
+      const list = items.map((s) => {
+        const status = s.isActive ? "✅" : "⏸️";
+        const config = s.actionConfig as Record<string, unknown>;
+        let desc = "";
+        if (s.actionType === "simple") desc = `do(${config.app}/${config.action})`;
+        else if (s.actionType === "sop") desc = `SOP: ${config.sop_name}`;
+        else if (s.actionType === "ai") desc = `AI: ${String(config.prompt).substring(0, 50)}`;
+        const lastRun = s.lastRunAt ? ` | last: ${new Date(s.lastRunAt).toLocaleString()}` : "";
+        const nextRun = s.nextRunAt ? ` | next: ${new Date(s.nextRunAt).toLocaleString()}` : "";
+        return `${status} **${s.name}** (${s.cronExpression}) — ${desc}\n  ID: ${s.id}${lastRun}${nextRun}`;
+      }).join("\n");
+      return { ok: true, data: `## Your Schedules\n\n${list}` };
+    }
+
+    // ── 建立排程 ──
+    case "schedule_create": {
+      const id = await createSchedule(
+        userId,
+        params.name as string,
+        params.cron as string,
+        params.action_type as string,
+        params.action_config as Record<string, unknown>,
+        params.timezone as string | undefined,
+      );
+      return { ok: true, data: `Schedule "${params.name}" created. ID: ${id}` };
+    }
+
+    // ── 啟用/停用排程 ──
+    case "schedule_toggle": {
+      await toggleSchedule(
+        userId,
+        params.schedule_id as string,
+        params.is_active as boolean,
+      );
+      const status = params.is_active ? "enabled" : "disabled";
+      return { ok: true, data: `Schedule ${status}.` };
+    }
+
+    // ── 刪除排程 ──
+    case "schedule_delete": {
+      await deleteSchedule(userId, params.schedule_id as string);
+      return { ok: true, data: "Schedule deleted." };
     }
 
     // ── 未知操作 ──
