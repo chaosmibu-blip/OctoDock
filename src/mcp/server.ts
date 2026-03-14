@@ -5,7 +5,7 @@ import { connectedApps } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware } from "./middleware/logger";
-import { learnIdentifier } from "@/services/memory-engine";
+import { learnIdentifier, resolveIdentifier } from "@/services/memory-engine";
 import {
   systemActionMap,
   getSystemSkill,
@@ -147,12 +147,22 @@ function registerDoTool(
         };
       }
 
+      // ── 參數格式轉換：簡化參數 → API 原始格式 ──
+      // 掃描 params 中的簡化欄位（folder、page、database 等），
+      // 查記憶解析成實際 ID，讓 AI 不用知道 Notion 的 parent_id 格式
+      const translatedParams = await translateSimplifiedParams(
+        userId,
+        app,
+        action,
+        params,
+      );
+
       // 透過 middleware 執行（取 token → 呼叫 API → 記錄日誌）
       const toolResult = await executeWithMiddleware(
         userId,
         app,
         toolName,
-        params,
+        translatedParams,
         (p, token) => adapter.execute(toolName, p, token),
       );
 
@@ -276,6 +286,98 @@ function registerHelpTool(
 }
 
 // ============================================================
+// 參數格式轉換層（Phase 1.3）
+// AI 傳簡化參數（名字、代稱），AgentDock 自動解析成 API 原始格式
+// 例如：{ folder: "會議" } → { parent_id: "317a9617...", parent_type: "page_id" }
+// 這是讓 AI 不用知道 Notion API 細節的關鍵
+// ============================================================
+
+/**
+ * Notion 的簡化參數名稱 → API 參數名稱的對應規則
+ * key: AI 傳入的簡化欄位名稱
+ * value: { apiField: API 需要的欄位名, entityType: 記憶中的實體類型 }
+ */
+const NOTION_PARAM_ALIASES: Record<string, { apiField: string; entityType: string }> = {
+  folder: { apiField: "parent_id", entityType: "page" },
+  parent: { apiField: "parent_id", entityType: "page" },
+  page: { apiField: "page_id", entityType: "page" },
+  database: { apiField: "database_id", entityType: "database" },
+  block: { apiField: "block_id", entityType: "block" },
+};
+
+/** UUID v4 格式正規表達式（含有無連字號兩種格式） */
+const UUID_REGEX = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+
+/**
+ * 將 AI 傳入的簡化參數轉換成 App API 需要的原始格式
+ *
+ * 處理邏輯：
+ * 1. 掃描 params 中的簡化欄位名（folder、page、database 等）
+ * 2. 如果值不是 UUID，嘗試從記憶中解析名稱 → ID
+ * 3. 將簡化欄位名轉成 API 欄位名（folder → parent_id）
+ * 4. 解析失敗時保留原始值（讓 API 回傳有意義的錯誤）
+ *
+ * @param userId 用戶 ID
+ * @param appName App 名稱
+ * @param action 操作名稱
+ * @param params AI 傳入的原始參數
+ * @returns 轉換後的參數（可直接傳給 adapter.execute）
+ */
+async function translateSimplifiedParams(
+  userId: string,
+  appName: string,
+  action: string,
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  // 目前只有 Notion 需要轉換（未來其他 App 再擴充）
+  if (appName !== "notion") return params;
+
+  const translated = { ...params };
+
+  for (const [alias, config] of Object.entries(NOTION_PARAM_ALIASES)) {
+    const value = translated[alias];
+
+    // 沒有這個欄位，跳過
+    if (value === undefined) continue;
+    // 不是字串，跳過
+    if (typeof value !== "string") continue;
+
+    // 如果已經是 UUID 格式，只做欄位名轉換（alias → apiField）
+    if (UUID_REGEX.test(value)) {
+      if (alias !== config.apiField) {
+        translated[config.apiField] = value;
+        delete translated[alias];
+      }
+      continue;
+    }
+
+    // 不是 UUID → 嘗試從記憶中解析名稱
+    const resolved = await resolveIdentifier(userId, value, appName);
+    if (resolved) {
+      // 解析成功：用 ID 替換名稱，並轉換欄位名
+      translated[config.apiField] = resolved.id;
+      if (alias !== config.apiField) {
+        delete translated[alias];
+      }
+    } else {
+      // 解析失敗：只做欄位名轉換，保留原始名稱值
+      // API 會回傳錯誤，agentdock_do 的 suggestions 會引導 AI
+      if (alias !== config.apiField) {
+        translated[config.apiField] = value;
+        delete translated[alias];
+      }
+    }
+  }
+
+  // 特殊處理：如果有 folder 且沒有 parent_type，自動補上
+  if (translated.parent_id && !translated.parent_type) {
+    translated.parent_type = "page_id";
+  }
+
+  return translated;
+}
+
+// ============================================================
 // 工具結果轉換
 // 將內部的 ToolResult（MCP 格式）轉成標準化的 DoResult
 // 精簡回傳內容，減少 AI 需要處理的 token 數量
@@ -317,8 +419,11 @@ function extractUrl(data: unknown, appName: string): string | undefined {
   const obj = data as Record<string, unknown>;
 
   // Notion：頁面有 url 欄位
-  if (appName === "notion" && typeof obj.url === "string") {
-    return obj.url;
+  if (appName === "notion") {
+    if (typeof obj.url === "string") return obj.url;
+    // get_page 回傳 { page, blocks } 結構
+    const page = obj.page as Record<string, unknown> | undefined;
+    if (page && typeof page.url === "string") return page.url;
   }
 
   return undefined;
@@ -329,12 +434,35 @@ function extractTitle(data: unknown): string | undefined {
   if (typeof data !== "object" || data === null) return undefined;
   const obj = data as Record<string, unknown>;
 
-  // Notion 頁面的標題藏在 properties.title.title[0].plain_text
+  // 直接在 data 上找 properties.title
+  const title = extractTitleFromProps(obj);
+  if (title) return title;
+
+  // get_page 回傳 { page, blocks } 結構：從 page 子物件找
+  const page = obj.page as Record<string, unknown> | undefined;
+  if (page) return extractTitleFromProps(page);
+
+  return undefined;
+}
+
+/** 從 Notion 物件的 properties 中提取標題文字 */
+function extractTitleFromProps(obj: Record<string, unknown>): string | undefined {
   const props = obj.properties as Record<string, unknown> | undefined;
-  if (props?.title) {
+  if (!props) return undefined;
+
+  // 標準的 title 屬性
+  if (props.title) {
     const titleProp = props.title as { title?: Array<{ plain_text: string }> };
     if (titleProp.title?.[0]?.plain_text) {
       return titleProp.title[0].plain_text;
+    }
+  }
+
+  // 資料庫項目常用 Name 欄位
+  if (props.Name) {
+    const nameProp = props.Name as { title?: Array<{ plain_text: string }> };
+    if (nameProp.title?.[0]?.plain_text) {
+      return nameProp.title[0].plain_text;
     }
   }
 
@@ -363,26 +491,62 @@ async function learnFromResult(
   if (!result.data || typeof result.data !== "object") return;
 
   const data = result.data as Record<string, unknown>;
+
+  // ── 單一資源操作：學習 title → id ──
   const id = data.id as string | undefined;
-  if (!id) return;
-
-  // 從建立/搜尋結果學習 page title → page_id
-  if (
-    (action === "create_page" || action === "get_page") &&
-    result.title
-  ) {
-    await learnIdentifier(userId, appName, result.title, id, "page");
+  if (id && result.title) {
+    const entityType = (data.object as string) === "database" ? "database" : "page";
+    await learnIdentifier(userId, appName, result.title, id, entityType);
   }
 
-  // 從建立頁面的 params 學習 parent → parent_id
-  if (action === "create_page" && params.parent_id && params.title) {
-    // 記住「這個標題的頁面放在哪個 parent 下」
-    await learnIdentifier(
-      userId,
-      appName,
-      params.title as string,
-      id,
-      "page",
-    );
+  // ── 搜尋 / 資料庫查詢：從結果列表中批次學習 ──
+  const results = data.results as Array<Record<string, unknown>> | undefined;
+  if (results && Array.isArray(results)) {
+    // 最多學習前 10 筆，避免大量寫入
+    const toLearn = results.slice(0, 10);
+    for (const item of toLearn) {
+      const itemId = item.id as string | undefined;
+      if (!itemId) continue;
+
+      const itemTitle = extractTitleFromItem(item);
+      if (!itemTitle) continue;
+
+      const entityType = (item.object as string) === "database" ? "database" : "page";
+      // 非同步學習，不阻塞主流程
+      learnIdentifier(userId, appName, itemTitle, itemId, entityType).catch(() => {});
+    }
   }
+}
+
+/**
+ * 從 Notion API 的搜尋結果項目中提取標題
+ * Notion 的標題可能在不同位置，取決於物件類型
+ */
+function extractTitleFromItem(item: Record<string, unknown>): string | undefined {
+  const props = item.properties as Record<string, unknown> | undefined;
+  if (!props) return undefined;
+
+  // 嘗試從 title 屬性取得（頁面）
+  if (props.title) {
+    const titleProp = props.title as { title?: Array<{ plain_text: string }> };
+    if (titleProp.title?.[0]?.plain_text) {
+      return titleProp.title[0].plain_text;
+    }
+  }
+
+  // 嘗試從 Name 屬性取得（資料庫項目常用 Name 欄位）
+  if (props.Name) {
+    const nameProp = props.Name as { title?: Array<{ plain_text: string }> };
+    if (nameProp.title?.[0]?.plain_text) {
+      return nameProp.title[0].plain_text;
+    }
+  }
+
+  // 嘗試從資料庫的 title 陣列取得
+  const titleArr = item.title as Array<{ plain_text: string }> | undefined;
+  if (titleArr?.[0]?.plain_text) {
+    return titleArr[0].plain_text;
+  }
+
+  return undefined;
 }

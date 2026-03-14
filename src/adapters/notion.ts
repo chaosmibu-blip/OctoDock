@@ -101,18 +101,18 @@ const actionMap: Record<string, string> = {
 function getSkill(): string {
   return `notion actions:
   search(query, filter?) — search pages/databases in workspace
-  create_page(title, content?, parent_id?, parent_type?) — create new page (markdown supported)
-  get_page(page_id) — get page content and properties
+  create_page(title, content?, folder?) — create page. folder can be a name (auto-resolved) or ID
+  get_page(page) — get page content. page can be a name or ID
   update_page(page_id, properties?, icon?, cover?) — update page properties
   delete_page(page_id) — archive page (recoverable within 30 days)
-  query_database(database_id, filter?, sorts?, page_size?) — query database items
-  create_database_item(database_id, properties, content?) — add row to database
+  query_database(database, filter?, sorts?) — query database by name or ID
+  create_database_item(database, properties, content?) — add row to database
   create_database(parent_page_id, title, properties) — create new database
   append_blocks(block_id, children) — append content blocks to page
   add_comment(page_id, text) — comment on a page
   get_comments(block_id) — list comments
   get_users() — list workspace members
-Params use Notion API format. Use search first to find page/database IDs.`;
+You can use names instead of IDs for folder/page/database — AgentDock resolves them via memory. Use search to find items if resolution fails.`;
 }
 
 // ============================================================
