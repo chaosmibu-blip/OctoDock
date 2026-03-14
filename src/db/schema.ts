@@ -207,7 +207,35 @@ export const schedules = pgTable(
 );
 
 // ============================================================
-// 4.7 bot_configs (Phase 3+)
+// 4.7 subscriptions（Phase 6：訂閱管理）
+// 記錄用戶的付費方案、付款來源、到期時間
+// 支援三種付款渠道：Paddle（網站）、IAP（iOS）、ECPay（台灣企業）
+// ============================================================
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    plan: text("plan").notNull().default("free"), // 'free' | 'pro' | 'team'
+    status: text("status").notNull().default("active"), // 'active' | 'past_due' | 'cancelled' | 'expired'
+    provider: text("provider"), // 'paddle' | 'iap' | 'ecpay' | null(free)
+    providerSubscriptionId: text("provider_subscription_id"), // 付款平台的訂閱 ID
+    providerCustomerId: text("provider_customer_id"), // 付款平台的客戶 ID
+    currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("subscriptions_user_idx").on(table.userId),
+  ],
+);
+
+// ============================================================
+// 4.8 bot_configs (Phase 3+)
 // ============================================================
 export const botConfigs = pgTable("bot_configs", {
   id: uuid("id").primaryKey().defaultRandom(),
