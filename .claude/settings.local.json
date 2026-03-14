@@ -27,7 +27,8 @@
       "Bash(curl:*)",
       "Bash(timeout:*)",
       "Bash(echo:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(git push:*)"
     ]
   }
 }
