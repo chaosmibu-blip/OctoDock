@@ -1,40 +1,83 @@
-import { readdirSync } from "fs";
+import { readdirSync, existsSync } from "fs";
 import { join } from "path";
 import { type AppAdapter, isAppAdapter } from "@/adapters/types";
 
 // ============================================================
-// Adapter Registry（自動掃描註冊器）
-// 啟動時自動掃描 src/adapters/ 資料夾，載入所有 App Adapter
-// 加一個新 App = 在 adapters/ 加一個檔案，核心系統不用改
+// Adapter Registry（自動掃描 + 明確註冊）
+// 雙重機制確保所有 Adapter 都能被載入：
+// 1. 自動掃描 src/adapters/ 資料夾
+// 2. 明確 import 清單（fallback，確保 production build 能載入）
 // ============================================================
 
 /** 已載入的 Adapter 存放處，key 為 App 名稱 */
 const adapters = new Map<string, AppAdapter>();
 
 /**
- * 掃描 src/adapters/ 資料夾，載入所有 Adapter
- * 跳過 types.ts（那是型別定義，不是 Adapter）
- * 每個 .ts 檔案裡找有沒有 export 符合 AppAdapter 介面的物件
+ * 明確 import 所有 Adapter（確保 Next.js production build 能載入）
+ * 新增 App 時在這裡加一行 import
  */
-export async function loadAdapters(): Promise<void> {
-  const adapterDir = join(process.cwd(), "src", "adapters");
-  const files = readdirSync(adapterDir).filter(
-    (f) => f !== "types.ts" && f.endsWith(".ts"),
-  );
+async function importAllAdapters(): Promise<void> {
+  const modules = await Promise.allSettled([
+    import("@/adapters/notion"),
+    import("@/adapters/gmail"),
+    import("@/adapters/line"),
+    import("@/adapters/telegram"),
+    import("@/adapters/threads"),
+    import("@/adapters/instagram"),
+    import("@/adapters/google-calendar"),
+    import("@/adapters/google-drive"),
+    import("@/adapters/google-sheets"),
+    import("@/adapters/google-tasks"),
+    import("@/adapters/google-docs"),
+    import("@/adapters/youtube"),
+  ]);
 
-  for (const file of files) {
-    try {
-      // 動態 import adapter 模組
-      const mod = await import(`@/adapters/${file.replace(".ts", "")}`);
-      // 在模組的所有 export 中找到 AppAdapter
+  for (const result of modules) {
+    if (result.status === "fulfilled") {
+      const mod = result.value;
       const adapter = Object.values(mod).find(isAppAdapter);
-      if (adapter) {
+      if (adapter && !adapters.has(adapter.name)) {
         adapters.set(adapter.name, adapter);
       }
-    } catch (error) {
-      // 錯誤隔離：一個 Adapter 載入失敗不影響其他
-      console.error(`Failed to load adapter ${file}:`, error);
+    } else {
+      // 載入失敗不影響其他 Adapter（錯誤隔離）
+      console.error("Failed to load adapter:", result.reason);
     }
+  }
+}
+
+/**
+ * 載入所有 Adapter
+ * 先用明確 import（確保 production 能用），再嘗試自動掃描（捕捉新增的）
+ */
+export async function loadAdapters(): Promise<void> {
+  // 1. 明確 import（production 保底）
+  await importAllAdapters();
+
+  // 2. 嘗試自動掃描（開發環境可以自動發現新增的 adapter）
+  try {
+    const adapterDir = join(process.cwd(), "src", "adapters");
+    if (existsSync(adapterDir)) {
+      const files = readdirSync(adapterDir).filter(
+        (f) => f !== "types.ts" && f.endsWith(".ts"),
+      );
+
+      for (const file of files) {
+        const name = file.replace(".ts", "");
+        // 跳過已經透過明確 import 載入的
+        try {
+          const mod = await import(`@/adapters/${name}`);
+          const adapter = Object.values(mod).find(isAppAdapter);
+          if (adapter && !adapters.has(adapter.name)) {
+            adapters.set(adapter.name, adapter);
+          }
+        } catch {
+          // 動態 import 在 production 可能失敗，已有明確 import 保底
+        }
+      }
+    }
+  } catch {
+    // 自動掃描失敗不影響主流程
   }
 
   console.log(
