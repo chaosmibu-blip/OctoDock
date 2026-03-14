@@ -53,6 +53,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.youtube.desc": "搜尋影片、查看播放清單和留言",
     "app.threads.desc": "發布貼文、回覆和查看洞察",
     "app.instagram.desc": "發布照片、管理留言和查看洞察",
+    "app.github.desc": "管理 repo、issue、PR 和查看程式碼",
     "app.line.desc": "發送訊息、廣播和管理追蹤者",
     "app.telegram.desc": "發送訊息、照片和管理 Bot Webhook",
 
@@ -146,6 +147,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.youtube.desc": "Search videos, view playlists and comments",
     "app.threads.desc": "Publish posts, reply, and view insights",
     "app.instagram.desc": "Publish photos, manage comments, and view insights",
+    "app.github.desc": "Manage repos, issues, PRs, and view code",
     "app.line.desc": "Send messages, broadcast, and manage followers",
     "app.telegram.desc": "Send messages, photos, and manage Bot webhooks",
 

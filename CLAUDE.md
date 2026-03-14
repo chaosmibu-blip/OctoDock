@@ -145,7 +145,21 @@ AI 可以用名稱（不用 ID）操作：
 - **前後端同步**：`.claude/skills/frontend-sync.md` — 後端變更時自動檢查前端是否需要同步
 - **Adapter 品質檢查**：`.claude/skills/adapter-quality-checklist.md` — 新增或修改 adapter 時的品質基準線
 - **新增 App 研究**：`.claude/skills/new-app-research.md` — 新增 App 時先研究 API 再寫程式碼
-- **Notion 設定指南**：`.claude/skills/setup-notion.md` — Notion integration 建立和 OAuth 設定流程
+
+### App 操作手冊（設定 + 維護 + AI 操作指南）
+- `.claude/skills/setup-notion.md` — Notion
+- `.claude/skills/setup-gmail.md` — Gmail
+- `.claude/skills/setup-google-calendar.md` — Google Calendar
+- `.claude/skills/setup-google-drive.md` — Google Drive
+- `.claude/skills/setup-google-sheets.md` — Google Sheets
+- `.claude/skills/setup-google-tasks.md` — Google Tasks
+- `.claude/skills/setup-google-docs.md` — Google Docs
+- `.claude/skills/setup-youtube.md` — YouTube
+- `.claude/skills/setup-github.md` — GitHub
+- `.claude/skills/setup-line.md` — LINE
+- `.claude/skills/setup-telegram.md` — Telegram
+- `.claude/skills/setup-threads.md` — Threads
+- `.claude/skills/setup-instagram.md` — Instagram
 
 ### Agents
 - **開發指南**：`.claude/agents/octodock-dev.md`

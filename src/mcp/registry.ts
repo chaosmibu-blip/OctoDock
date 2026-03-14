@@ -30,6 +30,7 @@ async function importAllAdapters(): Promise<void> {
     import("@/adapters/google-tasks"),
     import("@/adapters/google-docs"),
     import("@/adapters/youtube"),
+    import("@/adapters/github"),
   ]);
 
   for (const result of modules) {

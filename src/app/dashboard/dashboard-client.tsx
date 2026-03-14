@@ -36,6 +36,8 @@ const APP_KEYS = [
   { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
   { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
   { name: "youtube", displayName: "YouTube", descKey: "app.youtube.desc" },
+  // 開發
+  { name: "github", displayName: "GitHub", descKey: "app.github.desc" },
   // 通訊
   { name: "line", displayName: "LINE", descKey: "app.line.desc" },
   { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc" },

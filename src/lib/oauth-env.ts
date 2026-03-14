@@ -11,6 +11,7 @@ const ENV_PREFIX_MAP: Record<string, string> = {
   google_tasks: "GTASKS",
   google_docs: "GDOCS",
   youtube: "YOUTUBE",
+  github: "GITHUB_APP",
 };
 
 export function getOAuthClientId(appName: string): string {
