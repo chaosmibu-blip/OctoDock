@@ -73,6 +73,7 @@ const actionMap: Record<string, string> = {
   create_page: "notion_create_page",
   update_page: "notion_update_page",
   replace_content: "notion_replace_content", // G2: 全文替換頁面內容
+  append_content: "notion_append_content", // 尾部追加 Markdown 內容
   delete_page: "notion_delete_page",
   get_page_property: "notion_get_page_property",
   // 區塊操作
@@ -204,6 +205,17 @@ octodock_do(app:"notion", action:"add_comment", params:{
   text:"已確認完成，可以關閉"
 })`,
 
+  append_content: `## notion.append_content
+Append content to the end of a page (does NOT replace existing content).
+### Parameters
+  page_id: Page ID
+  content: Markdown content to append
+### Example
+octodock_do(app:"notion", action:"append_content", params:{
+  page_id:"317a9617-...",
+  content:"## 新增章節\\n- 追加的內容\\n- 不會覆蓋原有內容"
+})`,
+
   get_users: `## notion.get_users
 List all workspace members.
 ### Parameters
@@ -221,12 +233,13 @@ function getSkill(action?: string): string {
   if (action) {
     return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   }
-  // app 級別：全部 19 個 action
-  return `notion actions (19):
+  // app 級別：全部 20 個 action
+  return `notion actions (20):
   search(query, filter?) — search pages/databases
   create_page(title, content?, folder?) — create page (markdown)
   get_page(page) — get page content (returns markdown)
   replace_content(page_id, content) — replace page body (markdown)
+  append_content(page_id, content) — append to end of page (markdown, no overwrite)
   update_page(page_id, properties?, icon?, cover?) — update properties
   delete_page(page_id) — archive page
   get_page_property(page_id, property_id) — get specific property value
@@ -322,6 +335,15 @@ const tools: ToolDefinition[] = [
     inputSchema: {
       page_id: z.string().describe("Notion page ID"),
       content: z.string().describe("New page content in Markdown format"),
+    },
+  },
+  {
+    name: "notion_append_content",
+    description:
+      "Append content to the end of a Notion page without replacing existing content. Content in Markdown format.",
+    inputSchema: {
+      page_id: z.string().describe("Notion page ID"),
+      content: z.string().describe("Markdown content to append"),
     },
   },
   {
@@ -804,19 +826,75 @@ function formatResponse(action: string, rawData: unknown): string {
       return `Found ${results.length} items:\n\n${summarizeSearchResults(results)}`;
     }
 
-    // ── 建立/更新操作：精簡為 ok + url ──
+    // ── 建立/更新/刪除操作：精簡為 ok + url ──
     case "create_page":
     case "create_database_item":
     case "create_database":
     case "update_page":
     case "replace_content":
-    case "delete_page": {
+    case "append_content":
+    case "update_database":
+    case "delete_page":
+    case "delete_block": {
       const url = data.url as string | undefined;
       const id = data.id as string | undefined;
       return url ? `Done. ${url}` : `Done. ID: ${id}`;
     }
 
-    // ── 其他 action 不特別轉換 ──
+    // ── 區塊內容：轉 Markdown ──
+    case "get_block": {
+      // 單一 block 轉 Markdown
+      return blocksToMarkdown([data]);
+    }
+
+    case "get_block_children": {
+      // 子 blocks 轉 Markdown
+      const blocks = data.results as Array<Record<string, unknown>> | undefined;
+      if (!blocks || blocks.length === 0) return "(empty page)";
+      return blocksToMarkdown(blocks);
+    }
+
+    case "update_block": {
+      return "Done. Block updated.";
+    }
+
+    // ── 用戶列表 ──
+    case "get_users": {
+      const users = data.results as Array<Record<string, unknown>> | undefined;
+      if (!users || users.length === 0) return "No users found.";
+      return users.map((u) => {
+        const name = u.name as string || "?";
+        const type = u.type as string || "?";
+        const email = (u.person as Record<string, unknown>)?.email as string || "";
+        return `- **${name}** (${type})${email ? ` ${email}` : ""}`;
+      }).join("\n");
+    }
+
+    // ── 評論 ──
+    case "get_comments":
+    case "add_comment": {
+      const comments = data.results as Array<Record<string, unknown>> | undefined;
+      if (comments && Array.isArray(comments)) {
+        if (comments.length === 0) return "No comments.";
+        return comments.map((c) => {
+          const rt = (c.rich_text as Array<{ plain_text: string }>) || [];
+          const text = rt.map((t) => t.plain_text).join("");
+          const by = (c.created_by as Record<string, unknown>)?.name as string || "?";
+          return `- **${by}**: ${text}`;
+        }).join("\n");
+      }
+      // add_comment 回傳單一 comment
+      const rt = (data.rich_text as Array<{ plain_text: string }>) || [];
+      const text = rt.map((t) => t.plain_text).join("");
+      return `Done. Comment: "${text}"`;
+    }
+
+    // ── 頁面屬性 ──
+    case "get_page_property": {
+      return JSON.stringify(rawData, null, 2);
+    }
+
+    // ── 其他 action ──
     default:
       return JSON.stringify(rawData, null, 2);
   }
@@ -946,6 +1024,26 @@ async function execute(
       const updatedPage = await notionFetch(`/pages/${pageId}`, token);
       return {
         content: [{ type: "text", text: JSON.stringify(updatedPage, null, 2) }],
+      };
+    }
+
+    // ── 尾部追加內容（不覆蓋） ──
+    case "notion_append_content": {
+      const pageId = params.page_id as string;
+      const content = params.content as string;
+
+      // 將 Markdown 轉成 Notion blocks 並追加到頁面尾部
+      const blocks = markdownToBlocks(content);
+      if (blocks.length > 0) {
+        await notionFetch(`/blocks/${pageId}/children`, token, {
+          method: "PATCH",
+          body: JSON.stringify({ children: blocks }),
+        });
+      }
+
+      const page = await notionFetch(`/pages/${pageId}`, token);
+      return {
+        content: [{ type: "text", text: JSON.stringify(page, null, 2) }],
       };
     }
 
