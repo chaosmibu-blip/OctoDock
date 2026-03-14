@@ -5,7 +5,7 @@ import { connectedApps } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware } from "./middleware/logger";
-import { learnIdentifier, resolveIdentifier } from "@/services/memory-engine";
+import { learnIdentifier, resolveIdentifier, listMemory } from "@/services/memory-engine";
 import {
   systemActionMap,
   getSystemSkill,
@@ -247,6 +247,18 @@ function registerHelpTool(
         if (disconnected.length > 0) {
           text += `\n\n## Available (not connected)\n\n${disconnected.join(", ")}`;
         }
+
+        // ── Phase 4: 列出可用 SOP ──
+        try {
+          const sops = await listMemory(userId, "sop");
+          if (sops.length > 0) {
+            const sopList = sops.map((s) => `- **${s.key}**`).join("\n");
+            text += `\n\n## SOPs\n\n${sopList}\n\nUse \`agentdock_do(app: "system", action: "sop_get", params: {name: "..."})\` to view a SOP.`;
+          }
+        } catch {
+          // SOP 查詢失敗不影響主流程
+        }
+
         text += `\n\nUse \`agentdock_help(app: "app_name")\` to see actions for a specific app.`;
 
         return {

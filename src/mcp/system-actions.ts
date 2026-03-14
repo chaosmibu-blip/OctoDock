@@ -1,7 +1,12 @@
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { queryMemory, storeMemory } from "@/services/memory-engine";
+import {
+  queryMemory,
+  storeMemory,
+  listMemory,
+  deleteMemory,
+} from "@/services/memory-engine";
 import type { DoResult } from "@/adapters/types";
 
 // ============================================================
@@ -16,6 +21,12 @@ export const systemActionMap: Record<string, string> = {
   memory_query: "system_memory_query",
   memory_store: "system_memory_store",
   bot_conversations: "system_bot_conversations",
+  // SOP 系統（Phase 4）
+  sop_list: "system_sop_list",
+  sop_get: "system_sop_get",
+  sop_create: "system_sop_create",
+  sop_update: "system_sop_update",
+  sop_delete: "system_sop_delete",
 };
 
 /**
@@ -26,7 +37,13 @@ export function getSystemSkill(): string {
   return `system actions:
   memory_query(query, category?) — search user memory (preference/pattern/context/sop)
   memory_store(key, value, category, app_name?) — store a memory entry
-  bot_conversations(platform, platform_user_id?, limit?) — view bot chat history (line/telegram)`;
+  bot_conversations(platform, platform_user_id?, limit?) — view bot chat history (line/telegram)
+  sop_list() — list all saved SOPs
+  sop_get(name) — get a specific SOP by name
+  sop_create(name, content) — create a new SOP (content in markdown)
+  sop_update(name, content) — update an existing SOP
+  sop_delete(name) — delete a SOP
+SOPs are markdown workflow documents that persist across agents and sessions.`;
 }
 
 /**
@@ -108,6 +125,72 @@ export async function executeSystemAction(
       }
 
       return { ok: true, data: results };
+    }
+
+    // ============================================================
+    // SOP 系統（Phase 4）
+    // SOP = Markdown 流程文件，存在 memory 表 category='sop'
+    // 取代 n8n/Zapier 的拖拉流程圖，用中文寫流程文件
+    // AI 透過 help 或 do 取得 SOP 內容，然後一步一步執行
+    // ============================================================
+
+    // ── SOP 列表：列出所有已儲存的 SOP ──
+    case "sop_list": {
+      const sops = await listMemory(userId, "sop");
+      if (sops.length === 0) {
+        return { ok: true, data: "No SOPs found. Create one with sop_create(name, content)." };
+      }
+      const list = sops.map((s) => {
+        const preview = s.value.substring(0, 80).replace(/\n/g, " ");
+        return `- **${s.key}**: ${preview}${s.value.length > 80 ? "..." : ""}`;
+      }).join("\n");
+      return { ok: true, data: `## Your SOPs\n\n${list}` };
+    }
+
+    // ── SOP 取得：取得特定 SOP 的完整內容 ──
+    case "sop_get": {
+      const name = params.name as string;
+      const results = await queryMemory(userId, name, "sop");
+      const sop = results.find((r) => r.key === name);
+      if (!sop) {
+        return {
+          ok: false,
+          error: `SOP "${name}" not found`,
+          suggestions: (await listMemory(userId, "sop")).map((s) => s.key),
+        };
+      }
+      return { ok: true, data: `# SOP: ${sop.key}\n\n${sop.value}`, title: sop.key };
+    }
+
+    // ── SOP 建立：建立新的 SOP（Markdown 格式） ──
+    case "sop_create": {
+      const name = params.name as string;
+      const content = params.content as string;
+      // 檢查是否已存在
+      const existing = await queryMemory(userId, name, "sop");
+      if (existing.find((r) => r.key === name)) {
+        return {
+          ok: false,
+          error: `SOP "${name}" already exists. Use sop_update to modify it.`,
+        };
+      }
+      await storeMemory(userId, name, content, "sop");
+      return { ok: true, data: `SOP "${name}" created.`, title: name };
+    }
+
+    // ── SOP 更新：更新現有 SOP 的內容 ──
+    case "sop_update": {
+      const name = params.name as string;
+      const content = params.content as string;
+      await storeMemory(userId, name, content, "sop");
+      return { ok: true, data: `SOP "${name}" updated.`, title: name };
+    }
+
+    // ── SOP 刪除 ──
+    case "sop_delete": {
+      const name = params.name as string;
+      await deleteMemory(userId, name, "sop");
+      return { ok: true, data: `SOP "${name}" deleted.` };
     }
 
     // ── 未知操作 ──
