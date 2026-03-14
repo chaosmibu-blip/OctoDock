@@ -69,6 +69,7 @@ cron-based 排程，三種類型：
 
 0. **不重複造輪子**：寫程式碼或收到需求時，優先看現有程式碼有沒有可直接修改的。不要重複建立功能，也不要堆積廢棄程式碼。修改完要刪掉舊的（包含文件記錄），免得後續維護時錯亂
 0.1. **不擅自省略**：不要擅自判斷某個功能「不需要做」或「可以省略」。即使功能跟現有的重疊（例如 Google Docs 跟 Notion），只要用戶的使用習慣不同就要做。有疑問就問，不要自己決定跳過
+0.2. **前後端同步**：任何後端的變更（新增 App adapter、改工具名稱、改架構）都要同步更新前端（Dashboard APP_KEYS、i18n 翻譯、OAuth env 映射）。不要只改後端就以為完成了
 1. **治本優先**：修正問題根源，不在程式碼中打補丁
 2. **Token 絕不明文**：日誌、回應、錯誤訊息中絕不包含明文 token
 4. **錯誤隔離**：一個 App 掛掉不影響其他 App
@@ -141,6 +142,7 @@ AI 可以用名稱（不用 ID）操作：
 ### Skills（語意觸發，不是固定關鍵字）
 - **自我改進檢查**：`.claude/skills/self-improve.md` — 每次改完程式碼自動檢查 CLAUDE.md 和 skills 是否需要更新
 - **規劃文件**：`.claude/skills/planning-doc.md` — 3 個以上檔案改動時必須先寫規劃文件
+- **前後端同步**：`.claude/skills/frontend-sync.md` — 後端變更時自動檢查前端是否需要同步
 - **Adapter 品質檢查**：`.claude/skills/adapter-quality-checklist.md` — 新增或修改 adapter 時的品質基準線
 - **新增 App 研究**：`.claude/skills/new-app-research.md` — 新增 App 時先研究 API 再寫程式碼
 
