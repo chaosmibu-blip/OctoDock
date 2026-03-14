@@ -6,17 +6,28 @@ import type {
   ToolResult,
 } from "./types";
 
+// ============================================================
+// Notion OAuth 設定
+// Notion 使用 Basic Auth 交換 token（與 Google/Meta 的 POST body 不同）
+// Notion token 不會過期，不需要 refresh 機制
+// ============================================================
+
 const authConfig: OAuthConfig = {
   type: "oauth2",
   authorizeUrl: "https://api.notion.com/v1/oauth/authorize",
   tokenUrl: "https://api.notion.com/v1/oauth/token",
-  scopes: [], // Notion doesn't use scopes in the traditional sense
-  authMethod: "basic", // Notion uses Basic Auth for token exchange
+  scopes: [], // Notion 的權限由 integration 設定決定，不走傳統 scope
+  authMethod: "basic", // Notion 要求用 Basic Auth（base64(clientId:clientSecret)）
 };
 
-const NOTION_API = "https://api.notion.com/v1";
-const NOTION_VERSION = "2022-06-28";
+// ============================================================
+// Notion API 基礎設定
+// ============================================================
 
+const NOTION_API = "https://api.notion.com/v1";
+const NOTION_VERSION = "2022-06-28"; // Notion API 版本，固定不動
+
+/** 組合 Notion API 請求所需的 headers */
 function notionHeaders(token: string) {
   return {
     Authorization: `Bearer ${token}`,
@@ -25,6 +36,11 @@ function notionHeaders(token: string) {
   };
 }
 
+/**
+ * 統一的 Notion API 請求函式
+ * 處理 headers 組合、錯誤捕捉、JSON 解析
+ * 所有 Notion 操作都透過這個函式發出 HTTP 請求
+ */
 async function notionFetch(
   path: string,
   token: string,
@@ -44,11 +60,69 @@ async function notionFetch(
 }
 
 // ============================================================
-// Tool Definitions (18 tools — full Notion API coverage)
+// 簡化 Action → 內部工具名稱對應表
+// agentdock_do 收到 action 後查這張表，找到要呼叫的內部工具
+// 例如：AI 呼叫 do(app:"notion", action:"search") → 內部執行 notion_search
+// ============================================================
+
+const actionMap: Record<string, string> = {
+  // 搜尋
+  search: "notion_search",
+  // 頁面操作
+  get_page: "notion_get_page",
+  create_page: "notion_create_page",
+  update_page: "notion_update_page",
+  delete_page: "notion_delete_page",
+  get_page_property: "notion_get_page_property",
+  // 區塊操作
+  get_block: "notion_get_block",
+  get_block_children: "notion_get_block_children",
+  append_blocks: "notion_append_blocks",
+  update_block: "notion_update_block",
+  delete_block: "notion_delete_block",
+  // 資料庫操作
+  query_database: "notion_query_database",
+  create_database_item: "notion_create_database_item",
+  create_database: "notion_create_database",
+  update_database: "notion_update_database",
+  // 評論
+  add_comment: "notion_create_comment",
+  get_comments: "notion_get_comments",
+  // 用戶
+  get_users: "notion_get_users",
+};
+
+/**
+ * 回傳 Notion 的 Skill 文字（精簡操作說明）
+ * AI 第一次用 Notion 時，透過 agentdock_help(app:"notion") 取得這段文字
+ * 控制在 ~150 tokens，只列出最常用的 action 和參數
+ * 進入對話歷史後，同一個 chat 不需要再問
+ */
+function getSkill(): string {
+  return `notion actions:
+  search(query, filter?) — search pages/databases in workspace
+  create_page(title, content?, parent_id?, parent_type?) — create new page (markdown supported)
+  get_page(page_id) — get page content and properties
+  update_page(page_id, properties?, icon?, cover?) — update page properties
+  delete_page(page_id) — archive page (recoverable within 30 days)
+  query_database(database_id, filter?, sorts?, page_size?) — query database items
+  create_database_item(database_id, properties, content?) — add row to database
+  create_database(parent_page_id, title, properties) — create new database
+  append_blocks(block_id, children) — append content blocks to page
+  add_comment(page_id, text) — comment on a page
+  get_comments(block_id) — list comments
+  get_users() — list workspace members
+Params use Notion API format. Use search first to find page/database IDs.`;
+}
+
+// ============================================================
+// 內部工具定義（18 個工具）
+// 這些定義保留用於內部路由，不再直接暴露給 MCP
+// agentdock_do 透過 actionMap 找到工具名稱後，交給 execute() 執行
 // ============================================================
 
 const tools: ToolDefinition[] = [
-  // ── Search ──
+  // ── 搜尋 ──
   {
     name: "notion_search",
     description:
@@ -62,7 +136,7 @@ const tools: ToolDefinition[] = [
     },
   },
 
-  // ── Pages ──
+  // ── 頁面操作 ──
   {
     name: "notion_get_page",
     description:
@@ -129,7 +203,7 @@ const tools: ToolDefinition[] = [
     },
   },
 
-  // ── Blocks ──
+  // ── 區塊操作 ──
   {
     name: "notion_get_block",
     description:
@@ -178,7 +252,7 @@ const tools: ToolDefinition[] = [
     },
   },
 
-  // ── Databases ──
+  // ── 資料庫操作 ──
   {
     name: "notion_query_database",
     description:
@@ -241,7 +315,7 @@ const tools: ToolDefinition[] = [
     },
   },
 
-  // ── Comments ──
+  // ── 評論 ──
   {
     name: "notion_create_comment",
     description:
@@ -261,7 +335,7 @@ const tools: ToolDefinition[] = [
     },
   },
 
-  // ── Users ──
+  // ── 用戶 ──
   {
     name: "notion_get_users",
     description:
@@ -270,12 +344,18 @@ const tools: ToolDefinition[] = [
   },
 ];
 
-// Convert markdown text to Notion blocks (simplified)
+// ============================================================
+// Markdown → Notion Blocks 轉換器
+// 讓 AI 可以用 Markdown 格式寫內容，AgentDock 自動轉成 Notion API 格式
+// 支援：標題（H1-H3）、項目符號、編號列表、待辦事項、分隔線
+// ============================================================
+
+/** 將 Markdown 文字轉換為 Notion block 陣列 */
 function markdownToBlocks(
   markdown: string,
 ): Array<Record<string, unknown>> {
   return markdown.split("\n").map((line) => {
-    // Headings
+    // H3 標題
     if (line.startsWith("### ")) {
       return {
         object: "block",
@@ -285,6 +365,7 @@ function markdownToBlocks(
         },
       };
     }
+    // H2 標題
     if (line.startsWith("## ")) {
       return {
         object: "block",
@@ -294,6 +375,7 @@ function markdownToBlocks(
         },
       };
     }
+    // H1 標題
     if (line.startsWith("# ")) {
       return {
         object: "block",
@@ -303,7 +385,7 @@ function markdownToBlocks(
         },
       };
     }
-    // Bullet list
+    // 項目符號列表
     if (line.startsWith("- ") || line.startsWith("* ")) {
       return {
         object: "block",
@@ -313,7 +395,7 @@ function markdownToBlocks(
         },
       };
     }
-    // Numbered list
+    // 編號列表
     const numberedMatch = line.match(/^\d+\.\s/);
     if (numberedMatch) {
       return {
@@ -324,7 +406,7 @@ function markdownToBlocks(
         },
       };
     }
-    // Todo
+    // 待辦事項（勾選 / 未勾選）
     if (line.startsWith("- [ ] ") || line.startsWith("- [x] ")) {
       const checked = line.startsWith("- [x] ");
       return {
@@ -336,7 +418,7 @@ function markdownToBlocks(
         },
       };
     }
-    // Code block marker (simplified — single line)
+    // 程式碼區塊標記（簡化處理：跳過 ``` 行）
     if (line.startsWith("```")) {
       return {
         object: "block",
@@ -344,11 +426,11 @@ function markdownToBlocks(
         paragraph: { rich_text: [] },
       };
     }
-    // Divider
+    // 分隔線
     if (line === "---" || line === "***") {
       return { object: "block", type: "divider", divider: {} };
     }
-    // Default: paragraph
+    // 預設：一般段落
     return {
       object: "block",
       type: "paragraph",
@@ -357,7 +439,7 @@ function markdownToBlocks(
       },
     };
   }).filter((b) => {
-    // Remove empty paragraphs from code block markers
+    // 過濾掉程式碼區塊標記產生的空段落
     if (b.type === "paragraph") {
       const rt = (b.paragraph as { rich_text: Array<{ text: { content: string } }> }).rich_text;
       return rt.length > 0;
@@ -367,7 +449,9 @@ function markdownToBlocks(
 }
 
 // ============================================================
-// Execute
+// 工具執行路由
+// 根據工具名稱分派到對應的 Notion API 呼叫
+// 這是 Adapter 的核心邏輯，agentdock_do 最終會呼叫這裡
 // ============================================================
 
 async function execute(
@@ -376,7 +460,7 @@ async function execute(
   token: string,
 ): Promise<ToolResult> {
   switch (toolName) {
-    // ── Search ──
+    // ── 搜尋 ──
     case "notion_search": {
       const body: Record<string, unknown> = { query: params.query };
       if (params.filter) {
@@ -391,7 +475,7 @@ async function execute(
       };
     }
 
-    // ── Pages ──
+    // ── 取得頁面（同時拉頁面屬性和內容區塊） ──
     case "notion_get_page": {
       const [page, blocks] = await Promise.all([
         notionFetch(`/pages/${params.page_id}`, token),
@@ -404,6 +488,7 @@ async function execute(
       };
     }
 
+    // ── 建立頁面 ──
     case "notion_create_page": {
       const parentType = (params.parent_type as string) ?? "page_id";
       const body: Record<string, unknown> = {
@@ -416,10 +501,12 @@ async function execute(
         },
       };
 
+      // 設定父頁面或父資料庫
       if (params.parent_id) {
         body.parent = { [parentType]: params.parent_id };
       }
 
+      // 如果有內容，轉換 Markdown 為 Notion blocks
       if (params.content) {
         body.children = markdownToBlocks(params.content as string);
       }
@@ -433,6 +520,7 @@ async function execute(
       };
     }
 
+    // ── 更新頁面屬性 ──
     case "notion_update_page": {
       const body: Record<string, unknown> = {};
       if (params.properties) body.properties = params.properties;
@@ -448,6 +536,7 @@ async function execute(
       };
     }
 
+    // ── 刪除（封存）頁面 ──
     case "notion_delete_page": {
       const result = await notionFetch(`/pages/${params.page_id}`, token, {
         method: "PATCH",
@@ -458,6 +547,7 @@ async function execute(
       };
     }
 
+    // ── 取得頁面特定屬性（用於分頁屬性如 rollup、relation） ──
     case "notion_get_page_property": {
       const result = await notionFetch(
         `/pages/${params.page_id}/properties/${params.property_id}`,
@@ -468,7 +558,7 @@ async function execute(
       };
     }
 
-    // ── Blocks ──
+    // ── 取得單一區塊 ──
     case "notion_get_block": {
       const result = await notionFetch(`/blocks/${params.block_id}`, token);
       return {
@@ -476,6 +566,7 @@ async function execute(
       };
     }
 
+    // ── 取得區塊的子區塊（頁面內容結構） ──
     case "notion_get_block_children": {
       const pageSize = (params.page_size as number) ?? 100;
       const result = await notionFetch(
@@ -487,6 +578,7 @@ async function execute(
       };
     }
 
+    // ── 追加區塊到頁面 ──
     case "notion_append_blocks": {
       const result = await notionFetch(
         `/blocks/${params.block_id}/children`,
@@ -503,6 +595,7 @@ async function execute(
       };
     }
 
+    // ── 更新區塊內容 ──
     case "notion_update_block": {
       const result = await notionFetch(`/blocks/${params.block_id}`, token, {
         method: "PATCH",
@@ -513,6 +606,7 @@ async function execute(
       };
     }
 
+    // ── 刪除區塊 ──
     case "notion_delete_block": {
       const result = await notionFetch(`/blocks/${params.block_id}`, token, {
         method: "DELETE",
@@ -522,7 +616,7 @@ async function execute(
       };
     }
 
-    // ── Databases ──
+    // ── 查詢資料庫 ──
     case "notion_query_database": {
       const body: Record<string, unknown> = {
         page_size: (params.page_size as number) ?? 20,
@@ -540,6 +634,7 @@ async function execute(
       };
     }
 
+    // ── 新增資料庫項目（在資料庫裡建立新的一行） ──
     case "notion_create_database_item": {
       const body: Record<string, unknown> = {
         parent: { database_id: params.database_id },
@@ -557,6 +652,7 @@ async function execute(
       };
     }
 
+    // ── 建立資料庫（在某個頁面下建立新的資料庫） ──
     case "notion_create_database": {
       const result = await notionFetch("/databases", token, {
         method: "POST",
@@ -573,6 +669,7 @@ async function execute(
       };
     }
 
+    // ── 更新資料庫設定（標題、描述、欄位定義） ──
     case "notion_update_database": {
       const body: Record<string, unknown> = {};
       if (params.title) {
@@ -597,7 +694,7 @@ async function execute(
       };
     }
 
-    // ── Comments ──
+    // ── 新增評論 ──
     case "notion_create_comment": {
       const body: Record<string, unknown> = {
         rich_text: [
@@ -616,6 +713,7 @@ async function execute(
       };
     }
 
+    // ── 取得評論列表 ──
     case "notion_get_comments": {
       const result = await notionFetch(
         `/comments?block_id=${params.block_id}`,
@@ -626,7 +724,7 @@ async function execute(
       };
     }
 
-    // ── Users ──
+    // ── 列出工作區成員 ──
     case "notion_get_users": {
       const result = await notionFetch("/users", token);
       return {
@@ -634,6 +732,7 @@ async function execute(
       };
     }
 
+    // ── 未知工具 ──
     default:
       return {
         content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
@@ -642,6 +741,11 @@ async function execute(
   }
 }
 
+// ============================================================
+// 匯出 Notion Adapter
+// Adapter Registry 會自動掃描這個檔案並註冊
+// ============================================================
+
 export const notionAdapter: AppAdapter = {
   name: "notion",
   displayName: { zh: "Notion", en: "Notion" },
@@ -649,6 +753,8 @@ export const notionAdapter: AppAdapter = {
   authType: "oauth2",
   authConfig,
   tools,
+  actionMap, // do + help 架構：簡化 action → 內部工具對應
+  getSkill, // do + help 架構：回傳精簡操作說明
   execute,
-  // Notion tokens don't expire — no refreshToken needed
+  // Notion token 不會過期 — 不需要 refreshToken
 };

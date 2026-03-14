@@ -5,8 +5,21 @@ import { createServerForUser } from "@/mcp/server";
 import { loadAdapters } from "@/mcp/registry";
 import { checkRateLimit } from "@/lib/rate-limit";
 
+// ============================================================
+// MCP HTTP 路由
+// 這是 AgentDock 的核心入口：/mcp/{apiKey}
+// AI agent（Claude/ChatGPT）透過這個 URL 連接 MCP server
+// 每個用戶有一個唯一的 apiKey（ak_xxx），用來識別身份
+//
+// 架構：Stateless（無狀態）
+// 每個 HTTP 請求獨立處理，不維護 session
+// 回應格式：Server-Sent Events（SSE）
+// ============================================================
+
+/** Adapter 只需要載入一次（程序生命週期內快取） */
 let adaptersLoaded = false;
 
+/** 確保 Adapter Registry 已載入所有 App Adapter */
 async function ensureAdaptersLoaded() {
   if (!adaptersLoaded) {
     await loadAdapters();
@@ -14,13 +27,17 @@ async function ensureAdaptersLoaded() {
   }
 }
 
+/**
+ * MCP 請求統一處理函式
+ * 流程：驗證 API key → 速率限制 → 建立 MCP server → 處理請求 → 回傳 SSE
+ */
 async function handleMcpRequest(
   req: NextRequest,
   { params }: { params: Promise<{ apiKey: string }> },
 ): Promise<Response> {
   const { apiKey } = await params;
 
-  // Authenticate user by API key
+  // 1. 用 API key 驗證用戶身份
   const user = await authenticateByApiKey(apiKey);
   if (!user) {
     return NextResponse.json(
@@ -29,7 +46,7 @@ async function handleMcpRequest(
     );
   }
 
-  // Rate limiting
+  // 2. 速率限制檢查
   const rateCheck = checkRateLimit(user.id);
   if (!rateCheck.allowed) {
     return NextResponse.json(
@@ -38,28 +55,31 @@ async function handleMcpRequest(
     );
   }
 
+  // 3. 確保 Adapter 已載入
   await ensureAdaptersLoaded();
 
-  // Create per-user MCP server
+  // 4. 為此用戶建立 MCP server（只含 agentdock_do + agentdock_help）
   const server = await createServerForUser(user);
 
-  // Stateless transport — each request is independent
+  // 5. 建立 Stateless transport（每個請求獨立，不維護 session）
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
 
   await server.connect(transport);
 
+  // 6. 處理 MCP 請求
   const response = await transport.handleRequest(req);
 
-  // For SSE streams, we must not close transport until the stream is fully sent.
-  // Wrap the body so cleanup happens after the stream ends.
+  // 7. SSE 串流處理：包裝 ReadableStream 確保 cleanup 在串流結束後才執行
+  //    不能在 finally 裡直接 close，否則 SSE body 會被截斷（空回應 bug）
   if (response.body) {
     const originalBody = response.body;
     const wrappedStream = new ReadableStream({
       async start(controller) {
         const reader = originalBody.getReader();
         try {
+          // 逐塊轉發 SSE 資料
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -69,6 +89,7 @@ async function handleMcpRequest(
         } catch (err) {
           controller.error(err);
         } finally {
+          // 串流結束後才關閉 transport 和 server
           await transport.close();
           await server.close();
         }
@@ -81,12 +102,18 @@ async function handleMcpRequest(
     });
   }
 
-  // Non-streaming response — safe to close immediately
+  // 非串流回應（例如錯誤回應）→ 可以立即 cleanup
   await transport.close();
   await server.close();
   return response;
 }
 
+// ============================================================
+// Next.js App Router HTTP method handlers
+// MCP 協議使用 POST，GET 和 DELETE 也開放供 MCP SDK 使用
+// ============================================================
+
+/** 處理 MCP POST 請求（主要的工具呼叫入口） */
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ apiKey: string }> },
@@ -94,6 +121,7 @@ export async function POST(
   return handleMcpRequest(req, context);
 }
 
+/** 處理 MCP GET 請求（SSE 連線等） */
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ apiKey: string }> },
@@ -101,6 +129,7 @@ export async function GET(
   return handleMcpRequest(req, context);
 }
 
+/** 處理 MCP DELETE 請求（session 清理等） */
 export async function DELETE(
   req: NextRequest,
   context: { params: Promise<{ apiKey: string }> },
