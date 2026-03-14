@@ -35,6 +35,8 @@ export const systemActionMap: Record<string, string> = {
   sop_delete: "system_sop_delete",
   // 輕量筆記（B4）
   note: "system_note",
+  // 記憶導入（onboarding：AI 把對用戶的認知傳給 OctoDock）
+  import_memory: "system_import_memory",
   // 排程引擎（Phase 5）
   schedule_list: "system_schedule_list",
   schedule_create: "system_schedule_create",
@@ -57,6 +59,7 @@ export function getSystemSkill(): string {
   sop_update(name, content) — update an existing SOP
   sop_delete(name) — delete a SOP
   note(text) — quick note for cross-agent memory
+  import_memory(memories) — batch import memories from AI (for onboarding)
   schedule_list() — list all scheduled tasks
   schedule_create(name, cron, action_type, action_config, timezone?) — create schedule
     action_type: "simple" (direct do call) | "sop" (run a SOP) | "ai" (natural language task)
@@ -212,6 +215,33 @@ export async function executeSystemAction(
       const name = params.name as string;
       await deleteMemory(userId, name, "sop");
       return { ok: true, data: `SOP "${name}" deleted.` };
+    }
+
+    // ── 記憶導入（onboarding）：AI 把對用戶的認知批次傳給 OctoDock ──
+    case "import_memory": {
+      const memories = params.memories as Array<{
+        key: string;
+        value: string;
+        category: string;
+        app_name?: string;
+      }>;
+
+      if (!memories || !Array.isArray(memories) || memories.length === 0) {
+        return { ok: false, error: "memories array is required. Each item needs: key, value, category (preference/pattern/context)" };
+      }
+
+      // 批次存入，每筆用 storeMemory 的 upsert 機制
+      let imported = 0;
+      for (const m of memories) {
+        if (!m.key || !m.value || !m.category) continue;
+        await storeMemory(userId, m.key, m.value, m.category, m.app_name);
+        imported++;
+      }
+
+      return {
+        ok: true,
+        data: `Successfully imported ${imported} memories. OctoDock will now remember these across all AI platforms.`,
+      };
     }
 
     // ── 輕量筆記（B4）：快速留筆記給未來的自己或其他 agent ──
