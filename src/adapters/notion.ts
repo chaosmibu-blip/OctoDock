@@ -221,20 +221,28 @@ function getSkill(action?: string): string {
   if (action) {
     return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   }
-  // app 級別：精簡清單
-  return `notion actions:
+  // app 級別：全部 19 個 action
+  return `notion actions (19):
   search(query, filter?) — search pages/databases
-  create_page(title, content?, folder?) — create page (content in markdown)
+  create_page(title, content?, folder?) — create page (markdown)
   get_page(page) — get page content (returns markdown)
-  replace_content(page_id, content) — replace entire page body (markdown)
-  update_page(page_id, properties?, icon?, cover?) — update page properties only
+  replace_content(page_id, content) — replace page body (markdown)
+  update_page(page_id, properties?, icon?, cover?) — update properties
   delete_page(page_id) — archive page
+  get_page_property(page_id, property_id) — get specific property value
+  get_block(block_id) — get single block
+  get_block_children(block_id, page_size?) — get child blocks of page/block
+  append_blocks(block_id, children) — append blocks to page
+  update_block(block_id, block_data) — update block content
+  delete_block(block_id) — delete block
   query_database(database, filter?, sorts?) — query database
   create_database_item(database, properties, content?) — add row
+  create_database(parent_page_id, title, properties) — create new database
+  update_database(database_id, title?, properties?) — update database schema
   add_comment(page_id, text) — comment on page
   get_comments(block_id) — list comments
   get_users() — list workspace members
-Input/output use markdown. Names auto-resolve to IDs. Use octodock_help(app:"notion", action:"ACTION") for detailed params + example.`;
+Input/output use markdown. Names auto-resolve to IDs. Use octodock_help(app:"notion", action:"ACTION") for details.`;
 }
 
 // ============================================================
