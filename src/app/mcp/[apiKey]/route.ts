@@ -50,12 +50,41 @@ async function handleMcpRequest(
 
   await server.connect(transport);
 
-  try {
-    return await transport.handleRequest(req);
-  } finally {
-    await transport.close();
-    await server.close();
+  const response = await transport.handleRequest(req);
+
+  // For SSE streams, we must not close transport until the stream is fully sent.
+  // Wrap the body so cleanup happens after the stream ends.
+  if (response.body) {
+    const originalBody = response.body;
+    const wrappedStream = new ReadableStream({
+      async start(controller) {
+        const reader = originalBody.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            controller.enqueue(value);
+          }
+          controller.close();
+        } catch (err) {
+          controller.error(err);
+        } finally {
+          await transport.close();
+          await server.close();
+        }
+      },
+    });
+
+    return new Response(wrappedStream, {
+      status: response.status,
+      headers: response.headers,
+    });
   }
+
+  // Non-streaming response — safe to close immediately
+  await transport.close();
+  await server.close();
+  return response;
 }
 
 export async function POST(
