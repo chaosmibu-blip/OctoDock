@@ -5,7 +5,7 @@ import { getEmbedding, toVectorString } from "./embedding";
 
 // ============================================================
 // 記憶引擎（Memory Engine）
-// AgentDock 的核心元件之一：管理用戶的跨 agent 共享記憶
+// OctoDock 的核心元件之一：管理用戶的跨 agent 共享記憶
 // 儲存用 DB（PostgreSQL + pgvector），呈現用 MD，寫入收自然語言
 // ============================================================
 
@@ -268,7 +268,7 @@ export async function listMemory(
 
 // ============================================================
 // 名稱 → ID 解析（do + help 架構核心）
-// agentdock_do 收到簡化參數（名字、代稱）時，查記憶表對應到實際 ID
+// octodock_do 收到簡化參數（名字、代稱）時，查記憶表對應到實際 ID
 // 例如：「會議」→ page_id: "317a9617..."
 // ============================================================
 
@@ -340,7 +340,7 @@ export async function resolveIdentifier(
 
 /**
  * 學習新的名稱 → ID 對應（越用越懂你的機制）
- * 每次 agentdock_do 成功執行後，自動記錄操作中出現的 ID 對應
+ * 每次 octodock_do 成功執行後，自動記錄操作中出現的 ID 對應
  * 下次 AI 用名字操作時，就能自動解析
  *
  * @param userId 用戶 ID

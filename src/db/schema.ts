@@ -172,7 +172,7 @@ export const conversations = pgTable(
 
 // ============================================================
 // 4.6 schedules（Phase 5：排程引擎）
-// 用戶設定的排程任務，時間到時由 AgentDock 內部執行
+// 用戶設定的排程任務，時間到時由 OctoDock 內部執行
 // 簡單排程用規則引擎（零成本），需要理解的用內部 Haiku
 // ============================================================
 export const schedules = pgTable(
@@ -186,7 +186,7 @@ export const schedules = pgTable(
     cronExpression: text("cron_expression").notNull(), // cron 格式，例如 "0 17 * * 5"
     timezone: text("timezone").default("Asia/Taipei"), // 用戶時區
     actionType: text("action_type").notNull(), // 'simple' | 'sop' | 'ai'
-    // simple: 直接執行 agentdock_do 指令（規則引擎，零成本）
+    // simple: 直接執行 octodock_do 指令（規則引擎，零成本）
     // sop: 執行指定的 SOP（內部 AI 讀 SOP 並一步步執行）
     // ai: 用自然語言描述任務（內部 AI 理解並執行）
     actionConfig: jsonb("action_config").notNull(),

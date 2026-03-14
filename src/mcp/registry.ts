@@ -47,7 +47,7 @@ export function getAdapter(appName: string): AppAdapter | undefined {
   return adapters.get(appName);
 }
 
-/** 取得所有已載入的 Adapter（用於 agentdock_help 列出可用 App） */
+/** 取得所有已載入的 Adapter（用於 octodock_help 列出可用 App） */
 export function getAllAdapters(): AppAdapter[] {
   return [...adapters.values()];
 }

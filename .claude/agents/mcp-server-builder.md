@@ -13,7 +13,7 @@ SDK 提供三種 transport：
 - **SSE (Server-Sent Events)** — HTTP 長連線，舊版遠端方案
 - **Streamable HTTP** — 最新標準，單一 URL 端點，推薦用於遠端部署
 
-AgentDock 使用 Streamable HTTP，因為用戶只需貼一個 URL。
+OctoDock 使用 Streamable HTTP，因為用戶只需貼一個 URL。
 
 ## 核心概念
 
@@ -22,7 +22,7 @@ MCP Server 對外暴露三種東西：
 - **Resources** — agent 可以讀取的資料
 - **Prompts** — 預定義的 prompt 模板
 
-AgentDock 只用 Tools。
+OctoDock 只用 Tools。
 
 ## 建立 Server（Streamable HTTP）
 
@@ -33,7 +33,7 @@ import { z } from "zod";
 
 // 1. 建立 server 實例
 const server = new McpServer({
-  name: "agentdock",
+  name: "octodock",
   version: "1.0.0",
 });
 
@@ -68,13 +68,13 @@ server.tool(
 ### 命名
 - 格式：`{app}_{action}`，全小寫底線分隔
 - 範例：`notion_create_page`, `gmail_send`, `threads_publish`
-- 系統工具用 `agentdock_` 前綴
+- 系統工具用 `octodock_` 前綴
 
 ### 描述（description）
 - 一律英文（模型理解最佳）
 - 第一句講「做什麼」
 - 如果有前置步驟，在描述中說明（如「Use notion_search first if unsure about parent_id」）
-- 提及 agentdock_memory_query 讓 agent 知道可以查記憶
+- 提及 octodock_memory_query 讓 agent 知道可以查記憶
 
 ### 輸入 Schema
 - 用 zod 定義，SDK 會自動轉成 JSON Schema
@@ -99,7 +99,7 @@ return {
 
 // 失敗
 return {
-  content: [{ type: "text", text: "Notion is not connected. Please connect Notion at https://agentdock.app/dashboard (NOTION_NOT_CONNECTED)" }],
+  content: [{ type: "text", text: "Notion is not connected. Please connect Notion at https://octodock.app/dashboard (NOTION_NOT_CONNECTED)" }],
   isError: true,
 };
 ```
@@ -143,7 +143,7 @@ export async function GET(request: Request, { params }: { params: { apiKey: stri
 
 ## 動態工具註冊
 
-AgentDock 的關鍵特性：不是所有用戶看到同樣的工具。如果用戶只連結了 Notion，就只顯示 Notion 工具。
+OctoDock 的關鍵特性：不是所有用戶看到同樣的工具。如果用戶只連結了 Notion，就只顯示 Notion 工具。
 
 使用 Adapter Registry 模式，核心系統不需要知道有哪些 App 存在：
 
@@ -163,7 +163,7 @@ export async function loadAdapters() {
 
 // src/mcp/server.ts — 根據用戶的已連結 App 動態註冊工具
 function createServerForUser(user: User): McpServer {
-  const server = new McpServer({ name: "agentdock", version: "1.0.0" });
+  const server = new McpServer({ name: "octodock", version: "1.0.0" });
   
   const connectedApps = await getConnectedApps(user.id);
   
@@ -247,7 +247,7 @@ npx @modelcontextprotocol/inspector
 
 ### 用 curl 測試 Streamable HTTP
 ```bash
-curl -X POST https://agentdock.app/mcp/ak_xxx \
+curl -X POST https://octodock.app/mcp/ak_xxx \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",

@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700" fill="none">
+  <!-- 背景 -->
+  <rect width="800" height="700" rx="40" fill="#0f172a"/>
+
+  <!-- 光暈效果 -->
+  <circle cx="400" cy="280" r="200" fill="url(#glow)" opacity="0.3"/>
+  <defs>
+    <radialGradient id="glow">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 章魚身體 -->
+  <ellipse cx="400" cy="250" rx="120" ry="100" fill="#6366f1"/>
+  <!-- 章魚頭頂高光 -->
+  <ellipse cx="380" cy="210" rx="60" ry="40" fill="#818cf8" opacity="0.5"/>
+
+  <!-- 左眼 -->
+  <ellipse cx="365" cy="260" rx="22" ry="26" fill="white"/>
+  <circle cx="370" cy="258" r="12" fill="#0f172a"/>
+  <circle cx="374" cy="254" r="4" fill="white"/>
+
+  <!-- 右眼 -->
+  <ellipse cx="435" cy="260" rx="22" ry="26" fill="white"/>
+  <circle cx="440" cy="258" r="12" fill="#0f172a"/>
+  <circle cx="444" cy="254" r="4" fill="white"/>
+
+  <!-- 微笑 -->
+  <path d="M375 290 Q400 310 425 290" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+  <!-- 觸手 1 — 左上（Notion） -->
+  <path d="M310 310 Q240 340 180 310 Q140 290 120 250" stroke="#6366f1" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <circle cx="120" cy="250" r="28" fill="#1e1e1e" stroke="#6366f1" stroke-width="3"/>
+  <text x="120" y="256" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">N</text>
+
+  <!-- 觸手 2 — 左（Gmail） -->
+  <path d="M300 340 Q230 400 160 400 Q120 400 80 380" stroke="#818cf8" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <circle cx="80" cy="380" r="28" fill="#ea4335" stroke="#818cf8" stroke-width="3"/>
+  <text x="80" y="386" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">G</text>
+
+  <!-- 觸手 3 — 左下（LINE） -->
+  <path d="M320 360 Q260 450 200 490 Q170 510 140 510" stroke="#6366f1" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <circle cx="140" cy="510" r="28" fill="#06c755" stroke="#6366f1" stroke-width="3"/>
+  <text x="140" y="516" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">L</text>
+
+  <!-- 觸手 4 — 下左 -->
+  <path d="M370 350 Q350 450 320 540 Q310 570 300 590" stroke="#818cf8" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <circle cx="300" cy="590" r="6" fill="#a5b4fc"/>
+
+  <!-- 觸手 5 — 下右 -->
+  <path d="M430 350 Q450 450 480 540 Q490 570 500 590" stroke="#818cf8" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <circle cx="500" cy="590" r="6" fill="#a5b4fc"/>
+
+  <!-- 觸手 6 — 右下（Telegram） -->
+  <path d="M480 360 Q540 450 600 490 Q630 510 660 510" stroke="#6366f1" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <circle cx="660" cy="510" r="28" fill="#229ed9" stroke="#6366f1" stroke-width="3"/>
+  <text x="660" y="516" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">T</text>
+
+  <!-- 觸手 7 — 右（Threads） -->
+  <path d="M500 340 Q570 400 640 400 Q680 400 720 380" stroke="#818cf8" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <circle cx="720" cy="380" r="28" fill="#1e1e1e" stroke="#818cf8" stroke-width="3"/>
+  <text x="720" y="386" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">@</text>
+
+  <!-- 觸手 8 — 右上（Instagram） -->
+  <path d="M490 310 Q560 340 620 310 Q660 290 680 250" stroke="#6366f1" stroke-width="14" stroke-linecap="round" fill="none"/>
+  <circle cx="680" cy="250" r="28" fill="url(#ig-gradient)" stroke="#6366f1" stroke-width="3"/>
+  <defs>
+    <linearGradient id="ig-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fd1d1d"/>
+      <stop offset="50%" stop-color="#c13584"/>
+      <stop offset="100%" stop-color="#5851db"/>
+    </linearGradient>
+  </defs>
+  <text x="680" y="256" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="system-ui">IG</text>
+
+  <!-- 標題文字 -->
+  <text x="400" y="660" text-anchor="middle" fill="white" font-size="36" font-weight="bold" font-family="system-ui" letter-spacing="4">
+    AgentDock
+  </text>
+  <text x="400" y="690" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="system-ui">
+    One MCP URL. All your apps. Remembers everything.
+  </text>
+</svg>

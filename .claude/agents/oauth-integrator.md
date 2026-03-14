@@ -1,20 +1,20 @@
 # App 認證串接開發指南
 
-本指南涵蓋 AgentDock 支援的三種認證方式：OAuth 2.0、API Key、Bot Token。不論哪種方式，token 都用 AES-256-GCM 加密儲存，核心的加密/解密/管理邏輯完全共用。
+本指南涵蓋 OctoDock 支援的三種認證方式：OAuth 2.0、API Key、Bot Token。不論哪種方式，token 都用 AES-256-GCM 加密儲存，核心的加密/解密/管理邏輯完全共用。
 
 ## 三種認證方式
 
 ### OAuth 2.0（Notion、Gmail、Meta 系列）
-用戶點「連結」→ 跳轉到 App 的授權頁面 → 同意 → 跳回 AgentDock → 自動拿到 token。
+用戶點「連結」→ 跳轉到 App 的授權頁面 → 同意 → 跳回 OctoDock → 自動拿到 token。
 用戶完全不需要看到任何技術細節。
 
 ### API Key（LINE Messaging API）
-用戶需要到 LINE Developers Console 建立 channel，手動複製 Channel Access Token 貼到 AgentDock。
-AgentDock 在 Dashboard 上提供圖文步驟教學。Token 加密後存入 connected_apps。
+用戶需要到 LINE Developers Console 建立 channel，手動複製 Channel Access Token 貼到 OctoDock。
+OctoDock 在 Dashboard 上提供圖文步驟教學。Token 加密後存入 connected_apps。
 
 ### Bot Token（Telegram Bot）
-用戶跟 @BotFather 對話拿到 Bot Token，貼到 AgentDock。
-AgentDock 自動呼叫 Telegram API 設定 Webhook URL。Token 一樣加密儲存。
+用戶跟 @BotFather 對話拿到 Bot Token，貼到 OctoDock。
+OctoDock 自動呼叫 Telegram API 設定 Webhook URL。Token 一樣加密儲存。
 
 ```typescript
 // 定義在 AppAdapter 介面中
@@ -27,11 +27,11 @@ type AuthConfig =
 ## OAuth 2.0 標準流程
 
 ```
-1. AgentDock 前端 → 產生授權 URL → 重新導向用戶到 App 的授權頁
+1. OctoDock 前端 → 產生授權 URL → 重新導向用戶到 App 的授權頁
 2. 用戶在 App 的頁面上點「允許」
-3. App 把用戶導回 AgentDock 的 callback URL，帶著 authorization code
-4. AgentDock 後端用 code 向 App 換取 access_token + refresh_token
-5. AgentDock 加密儲存 token
+3. App 把用戶導回 OctoDock 的 callback URL，帶著 authorization code
+4. OctoDock 後端用 code 向 App 換取 access_token + refresh_token
+5. OctoDock 加密儲存 token
 ```
 
 ## Token 加密（AES-256-GCM）
@@ -196,7 +196,7 @@ export async function GET(
   });
   
   // 5. 導回 Dashboard
-  return Response.redirect("https://agentdock.app/dashboard?connected=" + params.app);
+  return Response.redirect("https://octodock.app/dashboard?connected=" + params.app);
 }
 ```
 
@@ -223,7 +223,7 @@ export async function GET(
 1. 前往 https://www.notion.so/my-integrations
 2. 點「New integration」
 3. 類型選「Public」（因為要讓多個用戶授權）
-4. 填入 redirect URI：`https://agentdock.app/callback/notion`
+4. 填入 redirect URI：`https://octodock.app/callback/notion`
 5. 拿到 OAuth client ID 和 OAuth client secret
 
 ## Provider 設定
@@ -236,7 +236,7 @@ const notionProvider: OAuthProvider = {
   clientId: process.env.NOTION_OAUTH_CLIENT_ID!,
   clientSecret: process.env.NOTION_OAUTH_CLIENT_SECRET!,
   scopes: [], // Notion 不用指定 scopes，權限由 integration 設定決定
-  redirectUri: "https://agentdock.app/callback/notion",
+  redirectUri: "https://octodock.app/callback/notion",
 };
 ```
 
@@ -280,14 +280,14 @@ Content-Type: application/json
 ## 申請開發者帳號
 
 1. 前往 https://console.cloud.google.com
-2. 建立專案「AgentDock」
+2. 建立專案「OctoDock」
 3. 啟用 API：Gmail API, Google Drive API, Google Calendar API
 4. 設定 OAuth consent screen：
    - User type: External
-   - App name: AgentDock
+   - App name: OctoDock
    - Scopes: 見下方
 5. 建立 OAuth 2.0 Client ID（Web application）
-   - Redirect URI: `https://agentdock.app/callback/gmail`
+   - Redirect URI: `https://octodock.app/callback/gmail`
 6. 拿到 client ID 和 client secret
 
 ## 重要：Google 的審核機制
@@ -310,7 +310,7 @@ const googleProvider: OAuthProvider = {
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.compose",
   ],
-  redirectUri: "https://agentdock.app/callback/gmail",
+  redirectUri: "https://octodock.app/callback/gmail",
 };
 ```
 
@@ -369,7 +369,7 @@ Authorization: Bearer {access_token}
 1. 前往 https://developers.facebook.com
 2. 建立 App，類型選「Business」
 3. 在 App 設定中新增產品：Threads API + Instagram Graph API
-4. 設定 OAuth redirect URI：`https://agentdock.app/callback/meta`
+4. 設定 OAuth redirect URI：`https://octodock.app/callback/meta`
 5. 拿到 App ID（= client_id）和 App Secret（= client_secret）
 
 ## Meta 審核機制
@@ -402,7 +402,7 @@ const metaProvider: OAuthProvider = {
     // Instagram（如果要同時串接）
     // 需要走 Instagram Graph API 的 OAuth，authorize URL 不同
   ],
-  redirectUri: "https://agentdock.app/callback/meta",
+  redirectUri: "https://octodock.app/callback/meta",
 };
 ```
 

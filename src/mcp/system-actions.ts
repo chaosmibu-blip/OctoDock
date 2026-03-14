@@ -17,7 +17,7 @@ import type { DoResult } from "@/adapters/types";
 
 // ============================================================
 // 系統操作處理器（System Actions）
-// 處理 agentdock_do(app: "system", ...) 的請求
+// 處理 octodock_do(app: "system", ...) 的請求
 // 包含記憶查詢/儲存、Bot 對話記錄等不屬於特定 App 的操作
 // 作為虛擬的「system」App，讓 AI 用統一的 do 介面操作
 // ============================================================
@@ -42,7 +42,7 @@ export const systemActionMap: Record<string, string> = {
 
 /**
  * 回傳 system 的 Skill 文字
- * AI 呼叫 agentdock_help(app: "system") 時回傳
+ * AI 呼叫 octodock_help(app: "system") 時回傳
  */
 export function getSystemSkill(): string {
   return `system actions:
@@ -213,7 +213,7 @@ export async function executeSystemAction(
 
     // ============================================================
     // 排程引擎（Phase 5）
-    // 讓用戶設定定時任務，AgentDock 在時間到時自動執行
+    // 讓用戶設定定時任務，OctoDock 在時間到時自動執行
     // ============================================================
 
     // ── 排程列表 ──

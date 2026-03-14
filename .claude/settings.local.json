@@ -28,7 +28,10 @@
       "Bash(timeout:*)",
       "Bash(echo:*)",
       "Bash(kill:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(find /home/runner/workspace -type d -name *截圖*)",
+      "Read(//home/runner/**)",
+      "Bash(find / -type d -name *截圖*)"
     ]
   }
 }

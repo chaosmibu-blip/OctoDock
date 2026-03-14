@@ -26,7 +26,7 @@ description: 開發或審查 App Adapter 時自動檢查的品質基準線
    - LINE → 純文字對話記錄
 3. server.ts 會自動呼叫，不需要改核心系統
 
-**自檢**：呼叫 `agentdock_do(app, action:"get_xxx")` 後，回傳是 JSON 還是人類可讀格式？
+**自檢**：呼叫 `octodock_do(app, action:"get_xxx")` 後，回傳是 JSON 還是人類可讀格式？
 
 ## G2：CRUD 完整閉環 — 有「內容」就要有完整的建/讀/改/刪
 

@@ -15,9 +15,9 @@ import type { DoResult } from "@/adapters/types";
 
 // ============================================================
 // MCP Server 核心
-// AgentDock 的 MCP server 只暴露 2 個工具：
-//   agentdock_do   — 所有操作（不分讀寫、不分 App）
-//   agentdock_help — 取得操作說明（Skill）
+// OctoDock 的 MCP server 只暴露 2 個工具：
+//   octodock_do   — 所有操作（不分讀寫、不分 App）
+//   octodock_help — 取得操作說明（Skill）
 //
 // 這樣 AI 的 context window 只佔 ~300 tokens（vs 原本 50-80K）
 // 不管連了幾個 App，AI 端永遠只看到 2 個工具
@@ -28,10 +28,10 @@ type User = { id: string; email: string; name: string | null };
 /**
  * 為特定用戶建立 MCP server 實例
  * 每個 MCP 請求都會建立一個新的 server（stateless 架構）
- * server 只註冊 agentdock_do 和 agentdock_help 兩個工具
+ * server 只註冊 octodock_do 和 octodock_help 兩個工具
  */
 export async function createServerForUser(user: User): Promise<McpServer> {
-  const server = new McpServer({ name: "agentdock", version: "1.0.0" });
+  const server = new McpServer({ name: "octodock", version: "1.0.0" });
 
   // 查詢用戶已連結且有效的 App 列表
   const apps = await db
@@ -43,20 +43,20 @@ export async function createServerForUser(user: User): Promise<McpServer> {
     .filter((a) => a.status === "active")
     .map((a) => a.appName);
 
-  // ── 註冊 agentdock_do ──
+  // ── 註冊 octodock_do ──
   registerDoTool(server, user.id, connectedAppNames);
 
-  // ── 註冊 agentdock_help ──
+  // ── 註冊 octodock_help ──
   registerHelpTool(server, user.id, connectedAppNames);
 
   return server;
 }
 
 // ============================================================
-// agentdock_do — 所有操作的統一入口
+// octodock_do — 所有操作的統一入口
 // AI 不需要知道每個 App 有哪些工具，只要說：
 //   do(app: "notion", action: "create_page", params: { title: "..." })
-// AgentDock 內部會：
+// OctoDock 內部會：
 //   1. 找到對應的 Adapter
 //   2. 透過 actionMap 對應到內部工具名稱
 //   3. 呼叫 executeWithMiddleware 執行
@@ -69,8 +69,8 @@ function registerDoTool(
   connectedAppNames: string[],
 ): void {
   server.tool(
-    "agentdock_do",
-    "Execute an action on a connected app. Use agentdock_help first to see available apps and actions.",
+    "octodock_do",
+    "Execute an action on a connected app. Use octodock_help first to see available apps and actions.",
     {
       app: z.string().describe("App name (e.g. 'notion', 'gmail', 'system')"),
       action: z.string().describe("Action to perform (e.g. 'create_page', 'search')"),
@@ -196,7 +196,7 @@ function registerDoTool(
 }
 
 // ============================================================
-// agentdock_help — 操作說明（Skill）入口
+// octodock_help — 操作說明（Skill）入口
 // 不帶 app 參數：列出所有已連結的 App
 // 帶 app 參數：回傳該 App 的 Skill（精簡操作說明）
 // Skill 進入對話歷史後，同一個 chat 不用再問
@@ -208,7 +208,7 @@ function registerHelpTool(
   connectedAppNames: string[],
 ): void {
   server.tool(
-    "agentdock_help",
+    "octodock_help",
     "Get help about available apps and actions. Without app parameter: list all connected apps. With app parameter: show available actions for that app.",
     {
       app: z
@@ -253,13 +253,13 @@ function registerHelpTool(
           const sops = await listMemory(userId, "sop");
           if (sops.length > 0) {
             const sopList = sops.map((s) => `- **${s.key}**`).join("\n");
-            text += `\n\n## SOPs\n\n${sopList}\n\nUse \`agentdock_do(app: "system", action: "sop_get", params: {name: "..."})\` to view a SOP.`;
+            text += `\n\n## SOPs\n\n${sopList}\n\nUse \`octodock_do(app: "system", action: "sop_get", params: {name: "..."})\` to view a SOP.`;
           }
         } catch {
           // SOP 查詢失敗不影響主流程
         }
 
-        text += `\n\nUse \`agentdock_help(app: "app_name")\` to see actions for a specific app.`;
+        text += `\n\nUse \`octodock_help(app: "app_name")\` to see actions for a specific app.`;
 
         return {
           content: [{ type: "text" as const, text }],
@@ -311,7 +311,7 @@ function registerHelpTool(
 
 // ============================================================
 // 參數格式轉換層（Phase 1.3）
-// AI 傳簡化參數（名字、代稱），AgentDock 自動解析成 API 原始格式
+// AI 傳簡化參數（名字、代稱），OctoDock 自動解析成 API 原始格式
 // 例如：{ folder: "會議" } → { parent_id: "317a9617...", parent_type: "page_id" }
 // 這是讓 AI 不用知道 Notion API 細節的關鍵
 // ============================================================
@@ -385,7 +385,7 @@ async function translateSimplifiedParams(
       }
     } else {
       // 解析失敗：只做欄位名轉換，保留原始名稱值
-      // API 會回傳錯誤，agentdock_do 的 suggestions 會引導 AI
+      // API 會回傳錯誤，octodock_do 的 suggestions 會引導 AI
       if (alias !== config.apiField) {
         translated[config.apiField] = value;
         delete translated[alias];
@@ -496,7 +496,7 @@ function extractTitleFromProps(obj: Record<string, unknown>): string | undefined
 // ============================================================
 // 自動學習機制（越用越懂你）
 // 從成功的操作結果中提取 名稱 → ID 對應，存入記憶
-// 下次 AI 用名稱操作時，AgentDock 就能自動解析
+// 下次 AI 用名稱操作時，OctoDock 就能自動解析
 // ============================================================
 
 /**

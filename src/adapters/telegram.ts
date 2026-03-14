@@ -9,8 +9,8 @@ import type {
 const authConfig: BotTokenConfig = {
   type: "bot_token",
   instructions: {
-    zh: "1. 在 Telegram 搜尋 @BotFather\n2. 發送 /newbot 建立新 Bot\n3. 按照指示設定 Bot 名稱和 username\n4. BotFather 會回傳一個 Bot Token\n5. 複製 token 貼到下方\n\nAgentDock 會自動設定 Webhook。",
-    en: "1. Search @BotFather on Telegram\n2. Send /newbot to create a new Bot\n3. Follow instructions to set name and username\n4. BotFather will send you a Bot Token\n5. Copy and paste the token below\n\nAgentDock will automatically set up the webhook.",
+    zh: "1. 在 Telegram 搜尋 @BotFather\n2. 發送 /newbot 建立新 Bot\n3. 按照指示設定 Bot 名稱和 username\n4. BotFather 會回傳一個 Bot Token\n5. 複製 token 貼到下方\n\nOctoDock 會自動設定 Webhook。",
+    en: "1. Search @BotFather on Telegram\n2. Send /newbot to create a new Bot\n3. Follow instructions to set name and username\n4. BotFather will send you a Bot Token\n5. Copy and paste the token below\n\nOctoDock will automatically set up the webhook.",
   },
   setupWebhook: true,
 };
@@ -19,7 +19,7 @@ const TG_API = "https://api.telegram.org";
 
 // ============================================================
 // do + help 架構：actionMap / getSkill / formatResponse
-// agentdock_do 透過 actionMap 找到工具名稱後，交給 execute() 執行
+// octodock_do 透過 actionMap 找到工具名稱後，交給 execute() 執行
 // ============================================================
 
 /** 簡化 action 名稱 → 內部工具名稱對應表 */
@@ -32,7 +32,7 @@ const actionMap: Record<string, string> = {
 
 /**
  * 回傳 Telegram Bot 可用操作的精簡說明
- * agentdock_help 會呼叫此方法，讓 AI 知道有哪些操作可用
+ * octodock_help 會呼叫此方法，讓 AI 知道有哪些操作可用
  * 進入對話歷史後，同一個 chat 不需要再問
  */
 function getSkill(): string {
@@ -145,7 +145,7 @@ const tools: ToolDefinition[] = [
   {
     name: "telegram_set_webhook",
     description:
-      "Set or update the webhook URL for the Telegram bot. AgentDock will receive incoming messages at this URL.",
+      "Set or update the webhook URL for the Telegram bot. OctoDock will receive incoming messages at this URL.",
     inputSchema: {
       url: z.string().describe("Webhook URL (must be HTTPS)"),
     },

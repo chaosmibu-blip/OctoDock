@@ -61,7 +61,7 @@ async function notionFetch(
 
 // ============================================================
 // 簡化 Action → 內部工具名稱對應表
-// agentdock_do 收到 action 後查這張表，找到要呼叫的內部工具
+// octodock_do 收到 action 後查這張表，找到要呼叫的內部工具
 // 例如：AI 呼叫 do(app:"notion", action:"search") → 內部執行 notion_search
 // ============================================================
 
@@ -95,7 +95,7 @@ const actionMap: Record<string, string> = {
 
 /**
  * 回傳 Notion 的 Skill 文字（精簡操作說明）
- * AI 第一次用 Notion 時，透過 agentdock_help(app:"notion") 取得這段文字
+ * AI 第一次用 Notion 時，透過 octodock_help(app:"notion") 取得這段文字
  * 控制在 ~150 tokens，只列出最常用的 action 和參數
  * 進入對話歷史後，同一個 chat 不需要再問
  */
@@ -119,7 +119,7 @@ Input and output both use markdown. Names auto-resolve to IDs via memory.`;
 // ============================================================
 // 內部工具定義（18 個工具）
 // 這些定義保留用於內部路由，不再直接暴露給 MCP
-// agentdock_do 透過 actionMap 找到工具名稱後，交給 execute() 執行
+// octodock_do 透過 actionMap 找到工具名稱後，交給 execute() 執行
 // ============================================================
 
 const tools: ToolDefinition[] = [
@@ -356,7 +356,7 @@ const tools: ToolDefinition[] = [
 
 // ============================================================
 // Markdown → Notion Blocks 轉換器
-// 讓 AI 可以用 Markdown 格式寫內容，AgentDock 自動轉成 Notion API 格式
+// 讓 AI 可以用 Markdown 格式寫內容，OctoDock 自動轉成 Notion API 格式
 // 支援：標題（H1-H3）、項目符號、編號列表、待辦事項、分隔線
 // ============================================================
 
@@ -696,7 +696,7 @@ function formatResponse(action: string, rawData: unknown): string {
 // ============================================================
 // 工具執行路由
 // 根據工具名稱分派到對應的 Notion API 呼叫
-// 這是 Adapter 的核心邏輯，agentdock_do 最終會呼叫這裡
+// 這是 Adapter 的核心邏輯，octodock_do 最終會呼叫這裡
 // ============================================================
 
 async function execute(

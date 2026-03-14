@@ -3,7 +3,7 @@
 // 用於排程引擎和模糊意圖處理
 //
 // 用戶在線時：用戶的 AI（Claude/ChatGPT）做決策
-// 用戶不在線時：AgentDock 內部 AI 代為執行
+// 用戶不在線時：OctoDock 內部 AI 代為執行
 //
 // 模型選擇：Claude Haiku（最便宜，~$0.001-0.005/次）
 // 需要環境變數：ANTHROPIC_API_KEY
@@ -35,8 +35,8 @@ export async function executeWithAi(
   }
 
   // 組合系統提示詞
-  const systemPrompt = `You are AgentDock's internal AI assistant. Your job is to execute scheduled tasks on behalf of the user.
-You have access to the user's connected apps and memory through AgentDock.
+  const systemPrompt = `You are OctoDock's internal AI assistant. Your job is to execute scheduled tasks on behalf of the user.
+You have access to the user's connected apps and memory through OctoDock.
 Be concise and action-oriented. Execute the task described, don't just plan it.
 ${context ? `\nContext:\n${context}` : ""}`;
 

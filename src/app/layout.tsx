@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgentDock",
+  title: "OctoDock",
   description: "One MCP URL for all your apps",
 };
 

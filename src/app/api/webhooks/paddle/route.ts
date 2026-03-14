@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 
 // ============================================================
 // Paddle Webhook 處理器
-// Paddle 是 AgentDock 網站端的收款平台（費率 5% + $0.50）
+// Paddle 是 OctoDock 網站端的收款平台（費率 5% + $0.50）
 // 不需要海外公司，Paddle 是 Merchant of Record，處理全球稅務
 //
 // Paddle 在以下事件時發送 webhook：
@@ -62,7 +62,7 @@ interface PaddleEvent {
       ends_at: string;
     };
     custom_data?: {
-      user_id?: string; // AgentDock user ID，在 checkout 時帶入
+      user_id?: string; // OctoDock user ID，在 checkout 時帶入
     };
     cancelled_at?: string;
   };
@@ -197,7 +197,7 @@ function verifyPaddleSignature(
 }
 
 /**
- * 將 Paddle product ID 對應到 AgentDock 方案名稱
+ * 將 Paddle product ID 對應到 OctoDock 方案名稱
  * 需要在 Paddle 後台建立 product 時記下 ID
  */
 function mapPaddleProductToPlan(productId: string | undefined): string {

@@ -58,7 +58,7 @@ export interface TokenSet {
 }
 
 // ============================================================
-// agentdock_do 標準回傳格式
+// octodock_do 標準回傳格式
 // 所有 App 操作統一回傳這個結構，讓 AI 容易理解
 // ============================================================
 
@@ -92,13 +92,13 @@ export interface AppAdapter {
   /**
    * 簡化 action 名稱 → 內部工具名稱的對應表
    * 例如：{ "create_page": "notion_create_page", "search": "notion_search" }
-   * agentdock_do 收到 action 後查這張表找到要執行的內部工具
+   * octodock_do 收到 action 後查這張表找到要執行的內部工具
    */
   actionMap?: Record<string, string>;
 
   /**
    * 回傳精簡的操作說明（Skill），控制在 100-200 tokens
-   * agentdock_help(app) 被呼叫時回傳這段文字給 AI
+   * octodock_help(app) 被呼叫時回傳這段文字給 AI
    * AI 看了就知道這個 App 有哪些 action 和參數可以用
    */
   getSkill?(): string;
@@ -125,7 +125,7 @@ export interface AppAdapter {
 
   /**
    * 執行內部工具（原始 API 呼叫）
-   * agentdock_do 在完成參數轉換後，最終會呼叫這個方法
+   * octodock_do 在完成參數轉換後，最終會呼叫這個方法
    */
   execute(
     toolName: string,

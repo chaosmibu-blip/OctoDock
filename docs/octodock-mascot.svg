@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" fill="none">
+  <defs>
+    <!-- 品牌漸層 -->
+    <linearGradient id="body-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="body-highlight" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </linearGradient>
+    <!-- 觸手漸層（從身體色到末端發光色） -->
+    <linearGradient id="tentacle-1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="tentacle-2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="tentacle-3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="tentacle-4" x1="100%" y1="0%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <linearGradient id="tentacle-5" x1="100%" y1="0%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="tentacle-6" x1="100%" y1="0%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+    <!-- 發光效果 -->
+    <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#06b6d4" flood-opacity="0.6"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#10b981" flood-opacity="0.6"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-amber" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#f59e0b" flood-opacity="0.6"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-pink" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#ec4899" flood-opacity="0.6"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-indigo" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#6366f1" flood-opacity="0.6"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-teal" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#14b8a6" flood-opacity="0.6"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- 身體陰影 -->
+    <filter id="body-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#1e1b4b" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- ====== 背景 ====== -->
+  <rect width="800" height="800" fill="#0c0a1d"/>
+  <!-- 背景微光粒子 -->
+  <circle cx="120" cy="100" r="2" fill="#6366f1" opacity="0.3"/>
+  <circle cx="680" cy="150" r="1.5" fill="#a78bfa" opacity="0.4"/>
+  <circle cx="200" cy="650" r="2" fill="#818cf8" opacity="0.2"/>
+  <circle cx="650" cy="600" r="1.5" fill="#c4b5fd" opacity="0.3"/>
+  <circle cx="100" cy="400" r="1" fill="#6366f1" opacity="0.3"/>
+  <circle cx="700" cy="350" r="2" fill="#a78bfa" opacity="0.2"/>
+  <circle cx="350" cy="700" r="1.5" fill="#818cf8" opacity="0.3"/>
+  <circle cx="500" cy="80" r="1" fill="#c4b5fd" opacity="0.4"/>
+
+  <!-- ====== 觸手（8 隻，身體後面先畫） ====== -->
+
+  <!-- 觸手 1 — 左上：向外延伸，末端發光 -->
+  <path d="M330 340 C280 310, 210 280, 150 260 C120 250, 90 260, 75 240"
+        stroke="url(#tentacle-1)" stroke-width="18" stroke-linecap="round" fill="none" opacity="0.9"/>
+  <path d="M330 340 C280 310, 210 280, 150 260 C120 250, 90 260, 75 240"
+        stroke="url(#tentacle-1)" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <!-- 吸盤 -->
+  <circle cx="220" cy="285" r="5" fill="#a78bfa" opacity="0.5"/>
+  <circle cx="180" cy="270" r="4" fill="#a78bfa" opacity="0.4"/>
+  <circle cx="140" cy="260" r="3.5" fill="#a78bfa" opacity="0.3"/>
+  <!-- 連接點發光 -->
+  <circle cx="75" cy="240" r="10" fill="#06b6d4" filter="url(#glow-cyan)"/>
+  <circle cx="75" cy="240" r="5" fill="white"/>
+
+  <!-- 觸手 2 — 左：水平伸展 -->
+  <path d="M310 380 C250 400, 180 430, 120 440 C90 445, 60 430, 45 420"
+        stroke="url(#tentacle-2)" stroke-width="16" stroke-linecap="round" fill="none" opacity="0.9"/>
+  <circle cx="190" cy="425" r="4.5" fill="#a78bfa" opacity="0.4"/>
+  <circle cx="150" cy="435" r="4" fill="#a78bfa" opacity="0.35"/>
+  <circle cx="110" cy="440" r="3.5" fill="#a78bfa" opacity="0.3"/>
+  <circle cx="45" cy="420" r="10" fill="#10b981" filter="url(#glow-green)"/>
+  <circle cx="45" cy="420" r="5" fill="white"/>
+
+  <!-- 觸手 3 — 左下：優雅彎曲向下 -->
+  <path d="M340 410 C300 470, 250 530, 220 570 C200 600, 175 620, 160 640"
+        stroke="url(#tentacle-3)" stroke-width="15" stroke-linecap="round" fill="none" opacity="0.9"/>
+  <circle cx="270" cy="510" r="4" fill="#a78bfa" opacity="0.4"/>
+  <circle cx="240" cy="550" r="3.5" fill="#a78bfa" opacity="0.35"/>
+  <circle cx="210" cy="585" r="3" fill="#a78bfa" opacity="0.3"/>
+  <circle cx="160" cy="640" r="10" fill="#f59e0b" filter="url(#glow-amber)"/>
+  <circle cx="160" cy="640" r="5" fill="white"/>
+
+  <!-- 觸手 4 — 中左下：自然下垂 -->
+  <path d="M380 420 C370 490, 350 560, 330 610 C320 640, 310 660, 300 680"
+        stroke="#7c3aed" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.7"/>
+  <circle cx="360" cy="530" r="3.5" fill="#a78bfa" opacity="0.3"/>
+  <circle cx="345" cy="580" r="3" fill="#a78bfa" opacity="0.25"/>
+  <circle cx="300" cy="680" r="7" fill="#a78bfa" opacity="0.5"/>
+
+  <!-- 觸手 5 — 中右下：自然下垂 -->
+  <path d="M420 420 C430 490, 450 560, 470 610 C480 640, 490 660, 500 680"
+        stroke="#7c3aed" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.7"/>
+  <circle cx="440" cy="530" r="3.5" fill="#a78bfa" opacity="0.3"/>
+  <circle cx="455" cy="580" r="3" fill="#a78bfa" opacity="0.25"/>
+  <circle cx="500" cy="680" r="7" fill="#a78bfa" opacity="0.5"/>
+
+  <!-- 觸手 6 — 右下：優雅彎曲向下 -->
+  <path d="M460 410 C500 470, 550 530, 580 570 C600 600, 625 620, 640 640"
+        stroke="url(#tentacle-4)" stroke-width="15" stroke-linecap="round" fill="none" opacity="0.9"/>
+  <circle cx="530" cy="510" r="4" fill="#a78bfa" opacity="0.4"/>
+  <circle cx="560" cy="550" r="3.5" fill="#a78bfa" opacity="0.35"/>
+  <circle cx="590" cy="585" r="3" fill="#a78bfa" opacity="0.3"/>
+  <circle cx="640" cy="640" r="10" fill="#ec4899" filter="url(#glow-pink)"/>
+  <circle cx="640" cy="640" r="5" fill="white"/>
+
+  <!-- 觸手 7 — 右：水平伸展 -->
+  <path d="M490 380 C550 400, 620 430, 680 440 C710 445, 740 430, 755 420"
+        stroke="url(#tentacle-5)" stroke-width="16" stroke-linecap="round" fill="none" opacity="0.9"/>
+  <circle cx="610" cy="425" r="4.5" fill="#a78bfa" opacity="0.4"/>
+  <circle cx="650" cy="435" r="4" fill="#a78bfa" opacity="0.35"/>
+  <circle cx="690" cy="440" r="3.5" fill="#a78bfa" opacity="0.3"/>
+  <circle cx="755" cy="420" r="10" fill="#6366f1" filter="url(#glow-indigo)"/>
+  <circle cx="755" cy="420" r="5" fill="white"/>
+
+  <!-- 觸手 8 — 右上 -->
+  <path d="M470 340 C520 310, 590 280, 650 260 C680 250, 710 260, 725 240"
+        stroke="url(#tentacle-6)" stroke-width="18" stroke-linecap="round" fill="none" opacity="0.9"/>
+  <circle cx="580" cy="285" r="5" fill="#a78bfa" opacity="0.5"/>
+  <circle cx="620" cy="270" r="4" fill="#a78bfa" opacity="0.4"/>
+  <circle cx="660" cy="260" r="3.5" fill="#a78bfa" opacity="0.3"/>
+  <circle cx="725" cy="240" r="10" fill="#14b8a6" filter="url(#glow-teal)"/>
+  <circle cx="725" cy="240" r="5" fill="white"/>
+
+  <!-- ====== 章魚身體 ====== -->
+  <!-- 身體主體（圓潤的橢圓） -->
+  <ellipse cx="400" cy="320" rx="130" ry="115" fill="url(#body-grad)" filter="url(#body-shadow)"/>
+  <!-- 身體高光（頭頂光澤感） -->
+  <ellipse cx="380" cy="275" rx="70" ry="45" fill="url(#body-highlight)"/>
+  <!-- 額外高光點 -->
+  <ellipse cx="360" cy="260" rx="20" ry="12" fill="white" opacity="0.15"/>
+
+  <!-- ====== 臉部 ====== -->
+  <!-- 左眼 -->
+  <ellipse cx="365" cy="320" rx="26" ry="30" fill="white"/>
+  <ellipse cx="365" cy="320" rx="23" ry="27" fill="#f8fafc"/>
+  <circle cx="372" cy="316" r="14" fill="#1e1b4b"/>
+  <circle cx="377" cy="311" r="5" fill="white"/>
+  <circle cx="367" cy="322" r="3" fill="white" opacity="0.5"/>
+
+  <!-- 右眼 -->
+  <ellipse cx="435" cy="320" rx="26" ry="30" fill="white"/>
+  <ellipse cx="435" cy="320" rx="23" ry="27" fill="#f8fafc"/>
+  <circle cx="442" cy="316" r="14" fill="#1e1b4b"/>
+  <circle cx="447" cy="311" r="5" fill="white"/>
+  <circle cx="437" cy="322" r="3" fill="white" opacity="0.5"/>
+
+  <!-- 開心的微笑 -->
+  <path d="M372 355 Q400 380 428 355" stroke="#1e1b4b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <!-- 臉頰紅暈 -->
+  <ellipse cx="340" cy="350" rx="15" ry="10" fill="#f472b6" opacity="0.25"/>
+  <ellipse cx="460" cy="350" rx="15" ry="10" fill="#f472b6" opacity="0.25"/>
+
+  <!-- ====== 文字 ====== -->
+  <text x="400" y="745" text-anchor="middle" fill="white" font-size="42" font-weight="800" font-family="system-ui, -apple-system, sans-serif" letter-spacing="3">
+    OctoDock
+  </text>
+  <text x="400" y="775" text-anchor="middle" fill="#a78bfa" font-size="15" font-family="system-ui, -apple-system, sans-serif" letter-spacing="1" font-weight="300">
+    One URL. All Apps. Remembers You.
+  </text>
+</svg>

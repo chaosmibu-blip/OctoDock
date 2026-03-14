@@ -7,7 +7,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 
 // ============================================================
 // MCP HTTP 路由
-// 這是 AgentDock 的核心入口：/mcp/{apiKey}
+// 這是 OctoDock 的核心入口：/mcp/{apiKey}
 // AI agent（Claude/ChatGPT）透過這個 URL 連接 MCP server
 // 每個用戶有一個唯一的 apiKey（ak_xxx），用來識別身份
 //
@@ -58,7 +58,7 @@ async function handleMcpRequest(
   // 3. 確保 Adapter 已載入
   await ensureAdaptersLoaded();
 
-  // 4. 為此用戶建立 MCP server（只含 agentdock_do + agentdock_help）
+  // 4. 為此用戶建立 MCP server（只含 octodock_do + octodock_help）
   const server = await createServerForUser(user);
 
   // 5. 建立 Stateless transport（每個請求獨立，不維護 session）

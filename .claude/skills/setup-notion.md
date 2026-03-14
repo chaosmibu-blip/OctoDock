@@ -15,11 +15,11 @@
 
 | 欄位 | 建議值 | 說明 |
 |------|--------|------|
-| Integration name | `AgentDock` | 用戶授權時看到的名稱 |
+| Integration name | `OctoDock` | 用戶授權時看到的名稱 |
 | Icon | `public/icon-512.png` | 512x512 PNG，專案內已有 |
 | Associated workspace | 用戶自己的工作區 | 僅影響開發/測試，其他用戶透過 OAuth 連自己的工作區 |
-| Company name | `AgentDock` | |
-| Website | `https://agent-dock.replit.app` | AgentDock 部署網址 |
+| Company name | `OctoDock` | |
+| Website | `https://agent-dock.replit.app` | OctoDock 部署網址 |
 | Tagline | `One MCP URL for all your apps` | |
 | Privacy Policy URL | `https://agent-dock.replit.app` | MVP 先填首頁 |
 | Terms of Use URL | `https://agent-dock.replit.app` | MVP 先填首頁 |
@@ -89,7 +89,7 @@ npm run build
 - 環境設定指南：`docs/setup-guide.md`
 - Notion Adapter 原始碼：`src/adapters/notion.ts`（18 個工具）
 
-## AgentDock Notion 工具清單
+## OctoDock Notion 工具清單
 
 | 類別 | 工具名稱 | 功能 |
 |------|---------|------|

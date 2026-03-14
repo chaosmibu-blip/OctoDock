@@ -7,13 +7,13 @@ import { queryMemory } from "./memory-engine";
 
 // ============================================================
 // 排程引擎（Scheduler）
-// AgentDock 的內部排程系統，處理用戶不在線時的自動操作
+// OctoDock 的內部排程系統，處理用戶不在線時的自動操作
 //
-// MCP 是單向的 — AI 呼叫 AgentDock，AgentDock 不能反叫 AI
-// 排程引擎解決這個問題：時間到時，AgentDock 內部代為執行
+// MCP 是單向的 — AI 呼叫 OctoDock，OctoDock 不能反叫 AI
+// 排程引擎解決這個問題：時間到時，OctoDock 內部代為執行
 //
 // 分層處理：
-//   simple → 規則引擎直接執行 agentdock_do（零成本）
+//   simple → 規則引擎直接執行 octodock_do（零成本）
 //   sop    → 內部 AI 讀 SOP 一步步執行（需要 Anthropic API key）
 //   ai     → 內部 AI 理解自然語言並執行（需要 Anthropic API key）
 //
@@ -96,7 +96,7 @@ async function executeSchedule(
   const config = schedule.actionConfig as Record<string, unknown>;
 
   switch (schedule.actionType) {
-    // ── 簡單排程：直接執行 agentdock_do（零成本） ──
+    // ── 簡單排程：直接執行 octodock_do（零成本） ──
     case "simple": {
       const { app, action, params = {} } = config as unknown as SimpleActionConfig;
 

@@ -13,7 +13,7 @@ interface I18nContextType {
 const translations: Record<Locale, Record<string, string>> = {
   "zh-TW": {
     // Common
-    "app.title": "AgentDock",
+    "app.title": "OctoDock",
     "app.tagline": "一個 MCP URL，讓任何 AI agent 都能用你所有的 App。",
     "common.copy": "複製",
     "common.copied": "已複製！",
@@ -67,7 +67,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Memory/Preferences
     "memory.title": "記憶",
     "memory.desc": "你的跨 agent 記憶。這些偏好和模式會在所有 AI agent 之間共享。",
-    "memory.empty": "尚無記憶。隨著你使用 AgentDock，AI agent 會逐漸學習你的偏好。",
+    "memory.empty": "尚無記憶。隨著你使用 OctoDock，AI agent 會逐漸學習你的偏好。",
     "memory.all": "全部",
     "memory.preference": "偏好",
     "memory.pattern": "模式",
@@ -100,7 +100,7 @@ const translations: Record<Locale, Record<string, string>> = {
   },
   en: {
     // Common
-    "app.title": "AgentDock",
+    "app.title": "OctoDock",
     "app.tagline": "One MCP URL to let any AI agent use all your apps.",
     "common.copy": "Copy",
     "common.copied": "Copied!",
@@ -154,7 +154,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Memory/Preferences
     "memory.title": "Memory",
     "memory.desc": "Your cross-agent memory. These preferences and patterns are shared across all AI agents.",
-    "memory.empty": "No memories yet. As you use AgentDock, AI agents will learn your preferences.",
+    "memory.empty": "No memories yet. As you use OctoDock, AI agents will learn your preferences.",
     "memory.all": "All",
     "memory.preference": "Preference",
     "memory.pattern": "Pattern",
@@ -191,7 +191,7 @@ const I18nContext = createContext<I18nContextType | null>(null);
 
 function getInitialLocale(): Locale {
   if (typeof window !== "undefined") {
-    const saved = localStorage.getItem("agentdock-locale");
+    const saved = localStorage.getItem("octodock-locale");
     if (saved === "zh-TW" || saved === "en") return saved;
   }
   return "zh-TW";
@@ -202,7 +202,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);
-    localStorage.setItem("agentdock-locale", newLocale);
+    localStorage.setItem("octodock-locale", newLocale);
   }, []);
 
   const t = useCallback(
