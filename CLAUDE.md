@@ -59,6 +59,12 @@ cron-based 排程，三種類型：
 三條收款線：Paddle（網站）、IAP（iOS，未來）、ECPay（台灣企業）。
 方案分級：free / pro / team。
 
+## 工作流程守則
+
+1. **自我改進**：每次修正程式碼或完成功能時，自動檢查 CLAUDE.md 和 skills 是否需要同步更新。不用等用戶提醒（詳見 `.claude/skills/self-improve.md`）
+2. **規劃先行**：涉及 3 個以上檔案改動的任務，必須先建立規劃文件（`docs/plan-*.md`），確認後才動手。完成後刪掉規劃文件避免堆積（詳見 `.claude/skills/planning-doc.md`）
+3. **語意觸發**：所有 skill 都是根據情境和語意判斷是否該觸發，不是只靠固定關鍵字。例如「這個功能需要改好幾個檔案」就該觸發規劃文件，「剛修完一個 bug」就該觸發自我改進檢查
+
 ## 開發原則
 
 0. **不重複造輪子**：寫程式碼或收到需求時，優先看現有程式碼有沒有可直接修改的。不要重複建立功能，也不要堆積廢棄程式碼。修改完要刪掉舊的（包含文件記錄），免得後續維護時錯亂
@@ -128,9 +134,17 @@ AI 可以用名稱（不用 ID）操作：
 
 ## 文件索引
 
+### 規劃與紀錄
 - **升級計畫書**：`docs/agentdock-upgrade-plan.md`（所有 Phase 的規劃和進度）
 - **討論紀錄**：`docs/agentdock-discussion-log.md`（Notion 討論彙整）
-- **Adapter 品質檢查**：`.claude/skills/adapter-quality-checklist.md`
+
+### Skills（語意觸發，不是固定關鍵字）
+- **自我改進檢查**：`.claude/skills/self-improve.md` — 每次改完程式碼自動檢查 CLAUDE.md 和 skills 是否需要更新
+- **規劃文件**：`.claude/skills/planning-doc.md` — 3 個以上檔案改動時必須先寫規劃文件
+- **Adapter 品質檢查**：`.claude/skills/adapter-quality-checklist.md` — 新增或修改 adapter 時的品質基準線
+- **新增 App 研究**：`.claude/skills/new-app-research.md` — 新增 App 時先研究 API 再寫程式碼
+
+### Agents
 - **開發指南**：`.claude/agents/octodock-dev.md`
 - **MCP 開發**：`.claude/agents/mcp-server-builder.md`
 - **認證開發**：`.claude/agents/oauth-integrator.md`
