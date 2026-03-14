@@ -140,11 +140,12 @@ AI 可以用名稱（不用 ID）操作：
 - **討論紀錄**：`docs/agentdock-discussion-log.md`（Notion 討論彙整）
 
 ### Skills（語意觸發，不是固定關鍵字）
-- **自我改進檢查**：`.claude/skills/self-improve.md` — 每次改完程式碼自動檢查 CLAUDE.md 和 skills 是否需要更新
+- **自我改進檢查**：`.claude/skills/self-improve.md` — 每次改完程式碼自動判斷 CLAUDE.md 和 skills 是否需要更新或建立新的
 - **規劃文件**：`.claude/skills/planning-doc.md` — 3 個以上檔案改動時必須先寫規劃文件
 - **前後端同步**：`.claude/skills/frontend-sync.md` — 後端變更時自動檢查前端是否需要同步
 - **Adapter 品質檢查**：`.claude/skills/adapter-quality-checklist.md` — 新增或修改 adapter 時的品質基準線
 - **新增 App 研究**：`.claude/skills/new-app-research.md` — 新增 App 時先研究 API 再寫程式碼
+- **Notion 設定指南**：`.claude/skills/setup-notion.md` — Notion integration 建立和 OAuth 設定流程
 
 ### Agents
 - **開發指南**：`.claude/agents/octodock-dev.md`
