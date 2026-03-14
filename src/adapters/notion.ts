@@ -1030,6 +1030,45 @@ async function execute(
 // Adapter Registry 會自動掃描這個檔案並註冊
 // ============================================================
 
+// ============================================================
+// 智慧錯誤引導（B3）
+// 攔截 Notion API 常見錯誤，回傳對用戶有用的提示
+// ============================================================
+
+/** 將 Notion API 錯誤轉成有用的提示 */
+function notionFormatError(action: string, errorMessage: string): string | null {
+  const msg = errorMessage.toLowerCase();
+
+  // 找不到資源
+  if (msg.includes("could not find") || msg.includes("not found")) {
+    if (action === "get_comments") {
+      return "找不到此頁面的評論。請確認：1) Notion integration 權限已勾選「Read comments」 2) 使用的是 page ID 而非 block ID";
+    }
+    return `找不到指定的資源。請用 search 先搜尋確認 ID 是否正確，或檢查該頁面是否已分享給 OctoDock integration。`;
+  }
+
+  // 權限不足
+  if (msg.includes("unauthorized") || msg.includes("forbidden") || msg.includes("insufficient permissions")) {
+    return "權限不足。請到 Notion 設定確認：1) OctoDock integration 已被加入該頁面 2) integration 的 capabilities 包含所需權限（Read/Update/Insert content, Read comments）";
+  }
+
+  // 格式錯誤
+  if (msg.includes("validation_error") || msg.includes("invalid")) {
+    if (action === "create_page" || action === "create_database_item") {
+      return "參數格式錯誤。create_page 需要 title（必填）和 content（Markdown 格式）。如果指定 parent，請用 search 先找到正確的 page/database ID。";
+    }
+    return `參數格式錯誤。使用 octodock_help(app: "notion", action: "${action}") 查看正確的參數格式。`;
+  }
+
+  // Rate limit
+  if (msg.includes("rate_limited") || msg.includes("rate limit")) {
+    return "Notion API 速率限制（3 次/秒）。請稍後再試。";
+  }
+
+  // 不攔截的錯誤回傳 null，使用原始錯誤訊息
+  return null;
+}
+
 export const notionAdapter: AppAdapter = {
   name: "notion",
   displayName: { zh: "Notion", en: "Notion" },
@@ -1040,6 +1079,7 @@ export const notionAdapter: AppAdapter = {
   actionMap, // do + help 架構：簡化 action → 內部工具對應
   getSkill, // do + help 架構：回傳精簡操作說明
   formatResponse, // G1/G3 通用框架：raw JSON → AI 友善格式（Markdown）
+  formatError: notionFormatError, // B3：智慧錯誤引導
   execute,
   // Notion token 不會過期 — 不需要 refreshToken
 };

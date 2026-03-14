@@ -33,6 +33,8 @@ export const systemActionMap: Record<string, string> = {
   sop_create: "system_sop_create",
   sop_update: "system_sop_update",
   sop_delete: "system_sop_delete",
+  // 輕量筆記（B4）
+  note: "system_note",
   // 排程引擎（Phase 5）
   schedule_list: "system_schedule_list",
   schedule_create: "system_schedule_create",
@@ -54,6 +56,7 @@ export function getSystemSkill(): string {
   sop_create(name, content) — create a new SOP (content in markdown)
   sop_update(name, content) — update an existing SOP
   sop_delete(name) — delete a SOP
+  note(text) — quick note for cross-agent memory
   schedule_list() — list all scheduled tasks
   schedule_create(name, cron, action_type, action_config, timezone?) — create schedule
     action_type: "simple" (direct do call) | "sop" (run a SOP) | "ai" (natural language task)
@@ -209,6 +212,14 @@ export async function executeSystemAction(
       const name = params.name as string;
       await deleteMemory(userId, name, "sop");
       return { ok: true, data: `SOP "${name}" deleted.` };
+    }
+
+    // ── 輕量筆記（B4）：快速留筆記給未來的自己或其他 agent ──
+    case "note": {
+      const text = params.text as string;
+      const timestamp = new Date().toISOString().substring(0, 16);
+      await storeMemory(userId, `note:${timestamp}`, text, "context");
+      return { ok: true, data: "Note saved." };
     }
 
     // ============================================================

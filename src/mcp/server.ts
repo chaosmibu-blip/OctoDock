@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware } from "./middleware/logger";
 import { learnIdentifier, resolveIdentifier, listMemory } from "@/services/memory-engine";
+import { detectSopCandidate } from "@/services/sop-detector";
 import {
   systemActionMap,
   getSystemSkill,
@@ -181,11 +182,29 @@ function registerDoTool(
         }
       }
 
+      // ── 智慧錯誤引導（B3）──
+      // 如果操作失敗且 adapter 有 formatError，嘗試提供更有用的提示
+      if (!result.ok && result.error && adapter.formatError) {
+        const betterError = adapter.formatError(action, result.error);
+        if (betterError) {
+          result.error = betterError;
+        }
+      }
+
       // 如果操作成功，嘗試從結果中學習 ID 對應（越用越懂你）
       if (result.ok) {
-        learnFromResult(userId, app, action, params, result).catch(() => {
-          // 學習失敗不影響主流程
-        });
+        learnFromResult(userId, app, action, params, result).catch(() => {});
+
+        // ── Phase 8：SOP 自動辨識 ──
+        // 非同步偵測重複操作模式，有候選 SOP 時附在 suggestions 裡
+        try {
+          const sopCandidate = await detectSopCandidate(userId);
+          if (sopCandidate) {
+            result.suggestions = [sopCandidate.message];
+          }
+        } catch {
+          // 偵測失敗不影響主流程
+        }
       }
 
       return {
@@ -209,15 +228,19 @@ function registerHelpTool(
 ): void {
   server.tool(
     "octodock_help",
-    "Get help about available apps and actions. Without app parameter: list all connected apps. With app parameter: show available actions for that app.",
+    "Get help about available apps and actions. Without app: list all connected apps. With app: show actions. With app+action: show detailed params and example.",
     {
       app: z
         .string()
         .optional()
-        .describe("App name to get detailed actions for (omit to list all apps)"),
+        .describe("App name to get actions for (omit to list all apps)"),
+      action: z
+        .string()
+        .optional()
+        .describe("Action name to get detailed params and example (requires app)"),
     },
     async (args) => {
-      const { app } = args as { app?: string };
+      const { app, action } = args as { app?: string; action?: string };
 
       // ── 不帶 app：列出所有已連結的 App ──
       if (!app) {
@@ -266,6 +289,49 @@ function registerHelpTool(
         };
       }
 
+      // ── 帶 app + action：回傳特定 action 的詳細參數和範例（B2 help 分層）──
+      if (app && action) {
+        const adapter = getAdapter(app);
+        if (!adapter) {
+          return {
+            content: [{ type: "text" as const, text: `App "${app}" not found.` }],
+          };
+        }
+
+        // 找到對應的工具定義
+        const toolName = adapter.actionMap?.[action];
+        const toolDef = toolName
+          ? adapter.tools.find((t) => t.name === toolName)
+          : adapter.tools.find((t) => t.name === action);
+
+        if (!toolDef) {
+          const available = adapter.actionMap
+            ? Object.keys(adapter.actionMap).join(", ")
+            : adapter.tools.map((t) => t.name).join(", ");
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Action "${action}" not found in ${app}. Available: ${available}`,
+            }],
+          };
+        }
+
+        // 組合詳細說明：描述 + 每個參數的 schema + 範例
+        const params = Object.entries(toolDef.inputSchema)
+          .map(([name, schema]) => {
+            const desc = (schema as { description?: string }).description || "";
+            const isOptional = (schema as { isOptional?: () => boolean }).isOptional?.() ? " (optional)" : "";
+            return `  ${name}${isOptional}: ${desc}`;
+          })
+          .join("\n");
+
+        const detail = `## ${app}.${action}\n\n${toolDef.description}\n\n### Parameters\n${params || "  (none)"}`;
+
+        return {
+          content: [{ type: "text" as const, text: detail }],
+        };
+      }
+
       // ── 帶 app：回傳該 App 的 Skill ──
 
       // system 虛擬 App
@@ -288,7 +354,7 @@ function registerHelpTool(
         };
       }
 
-      // 優先用 getSkill()（精簡版），沒有的話就列出 actionMap
+      // 優先用 getSkill()（精簡版）
       if (adapter.getSkill) {
         return {
           content: [{ type: "text" as const, text: adapter.getSkill() }],
@@ -378,17 +444,27 @@ async function translateSimplifiedParams(
     // 不是 UUID → 嘗試從記憶中解析名稱
     const resolved = await resolveIdentifier(userId, value, appName);
     if (resolved) {
-      // 解析成功：用 ID 替換名稱，並轉換欄位名
+      // 記憶命中：用 ID 替換名稱
       translated[config.apiField] = resolved.id;
       if (alias !== config.apiField) {
         delete translated[alias];
       }
     } else {
-      // 解析失敗：只做欄位名轉換，保留原始名稱值
-      // API 會回傳錯誤，octodock_do 的 suggestions 會引導 AI
-      if (alias !== config.apiField) {
-        translated[config.apiField] = value;
-        delete translated[alias];
+      // 記憶沒有 → fallback: 用 Notion search 查找
+      const searchResult = await searchForId(userId, appName, value, config.entityType);
+      if (searchResult) {
+        translated[config.apiField] = searchResult;
+        if (alias !== config.apiField) {
+          delete translated[alias];
+        }
+        // 學習這個對應，下次不用再搜
+        learnIdentifier(userId, appName, value, searchResult, config.entityType).catch(() => {});
+      } else {
+        // 搜尋也找不到：保留原值，讓 API 回傳錯誤
+        if (alias !== config.apiField) {
+          translated[config.apiField] = value;
+          delete translated[alias];
+        }
       }
     }
   }
@@ -399,6 +475,67 @@ async function translateSimplifiedParams(
   }
 
   return translated;
+}
+
+/**
+ * 名稱解析的 fallback：用 Notion search 查找名稱對應的 ID
+ * 當記憶裡找不到時，自動搜尋 Notion 嘗試匹配
+ */
+async function searchForId(
+  userId: string,
+  appName: string,
+  name: string,
+  entityType: string,
+): Promise<string | null> {
+  if (appName !== "notion") return null;
+
+  const adapter = getAdapter(appName);
+  if (!adapter) return null;
+
+  try {
+    // 用 adapter 的 execute 呼叫 notion_search
+    const token = await (await import("@/services/token-manager")).getValidToken(userId, appName);
+    const searchResult = await adapter.execute("notion_search", {
+      query: name,
+      filter: entityType === "database" ? "database" : "page",
+    }, token);
+
+    // 解析搜尋結果
+    const text = searchResult.content[0]?.text;
+    if (!text) return null;
+    const data = JSON.parse(text);
+    const results = data.results as Array<Record<string, unknown>> | undefined;
+    if (!results || results.length === 0) return null;
+
+    // 找最匹配的結果（標題包含搜尋名稱）
+    for (const item of results) {
+      const props = item.properties as Record<string, unknown> | undefined;
+      if (!props) continue;
+
+      // 檢查 title 屬性
+      const titleProp = props.title as { title?: Array<{ plain_text: string }> } | undefined;
+      const title = titleProp?.title?.[0]?.plain_text;
+      if (title && title.includes(name)) {
+        return item.id as string;
+      }
+
+      // 檢查 Name 屬性
+      const nameProp = props.Name as { title?: Array<{ plain_text: string }> } | undefined;
+      const itemName = nameProp?.title?.[0]?.plain_text;
+      if (itemName && itemName.includes(name)) {
+        return item.id as string;
+      }
+    }
+
+    // 沒有精確匹配，用第一個結果
+    if (results.length === 1) {
+      return results[0].id as string;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================

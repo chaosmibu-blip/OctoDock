@@ -124,6 +124,13 @@ export interface AppAdapter {
   formatResponse?(action: string, rawData: unknown): string;
 
   /**
+   * 智慧錯誤引導（B3）
+   * 攔截常見 API 錯誤，回傳對用戶有用的提示而非原始錯誤訊息
+   * 例如：「Could not find block」→「請確認 integration 權限包含 read comments」
+   */
+  formatError?(action: string, errorMessage: string): string | null;
+
+  /**
    * 執行內部工具（原始 API 呼叫）
    * octodock_do 在完成參數轉換後，最終會呼叫這個方法
    */

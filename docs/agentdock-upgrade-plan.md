@@ -1,271 +1,153 @@
-# AgentDock 架構升級計畫書
+# OctoDock 架構升級計畫書
 
-> 根據 2026-03-11~13 產品討論結論，對照現有程式碼產出的修改計畫
-> 制定日期：2026-03-14
-
----
-
-## 現狀概述
-
-AgentDock 已完成原始架構藍圖的施工，包含：
-- Adapter Registry 自動掃描機制
-- Notion adapter（18 個 MCP 工具）
-- OAuth 連線流程（授權 → 回調 → 加密存儲）
-- MCP Server（Streamable HTTP，stateless transport）
-- Dashboard（連結/斷開 App、查看工具列表）
-- 記憶層基礎（memory_query / memory_store）
-- 操作記錄（operations 表）
-
-**核心問題**：現有架構是「每個 App 暴露多個工具」的模式（Notion 就有 18 個），與討論結論的「do + help 雙工具」模式有根本差異。
+> 根據 2026-03-11~15 產品討論結論，對照現有程式碼產出的修改計畫
+> 制定日期：2026-03-14｜更新：2026-03-15
 
 ---
 
-## 修改計畫
+## 已完成進度
 
-### Phase 1：MCP 工具架構重構（核心）
+| Phase | 內容 | 狀態 |
+|-------|------|------|
+| Phase 1 | MCP do + help 雙工具架構 | ✅ 完成 |
+| Phase 2 | 記憶層強化（MD 渲染、pattern analyzer） | ✅ 完成 |
+| Phase 3 | 全部 6 個 Adapter 升級 do + help | ✅ 完成 |
+| Phase 4 | SOP 系統 CRUD | ✅ 完成 |
+| Phase 5 | 排程引擎 + 內部 AI 框架 | ✅ 完成 |
+| Phase 6 | 訂閱系統 + Paddle/ECPay webhook | ✅ 完成 |
+| 品牌重塑 | AgentDock → OctoDock | ✅ 完成 |
+| Adapter 品質框架 | formatResponse + CRUD 閉環 + I/O 對稱 | ✅ 完成 |
+| 開源準備 | README + Dockerfile + docker-compose + BSL 授權 | ✅ 完成 |
 
-#### 1.1 新增 do + help 雙工具
+---
 
-**目標**：MCP server 只暴露 `agentdock_do` 和 `agentdock_help` 兩個工具（~300 tokens）
+## Phase 7：Bug 修復 + 功能強化（2026-03-15 新增）
 
-**修改檔案**：
-- `src/mcp/server.ts` — 重寫 `createServerForUser`，移除逐個註冊 adapter 工具的邏輯，改為只註冊 `agentdock_do` 和 `agentdock_help`
+> 來源：Notion「Adapter 優化路線圖」第八～十節 + Claude AI 測試報告 + 競品分析
 
-**agentdock_do 規格**：
-```typescript
-agentdock_do({
-  app: string,        // "notion" | "gmail" | "line" | ...
-  action: string,     // "create_page" | "search" | "send" | ...
-  params: object      // 簡化參數，AgentDock 內部轉換成 API 格式
-})
+### 7.1 名稱自動解析 Bug 修復 🔴
 
-// 回傳格式
-{ ok: true, url?: string, data?: any, title?: string }
-{ ok: false, error: string, suggestions?: string[] }
+**問題**：v2 測試報告指出 `create_page(folder: "待辦")` 和 `get_page(page: "頁面名稱")` 報錯，只能接受 UUID。`resolveIdentifier` 寫好了但沒正確觸發。
+
+**修復**：
+- 檢查 `translateSimplifiedParams` 的欄位掃描邏輯
+- 確認 `page`、`folder`、`database` 這些 alias 有被正確匹配
+- 當記憶裡找不到時，自動 fallback 到 Notion search
+
+### 7.2 get_comments Bug 修復 🔴
+
+**問題**：`add_comment` 成功但 `get_comments` 報錯。可能是 Notion integration 權限或 endpoint 問題。
+
+**修復**：
+- 確認 integration capabilities 包含 read_comments
+- 確認 endpoint 是 `GET /v1/comments?block_id=xxx`
+
+### 7.3 help 分層查詢（B2）🟡
+
+**目標**：`octodock_help(app, action)` 回傳特定 action 的完整參數 schema + 使用範例
+
+**現狀**：help 只支援 app 級別，AI 遇到複雜參數只能猜
+
+**實作**：
+- `octodock_help` 新增 `action` 參數
+- 每個 adapter 的 `getSkill()` 改為接受可選的 action 參數
+- 回傳該 action 的完整參數說明 + 一個範例
+
+### 7.4 智慧錯誤引導（B3）🟡
+
+**目標**：adapter 層攔截常見 API 錯誤，回傳有用的提示而非原始錯誤
+
+**實作**：
+- AppAdapter 介面新增可選方法 `formatError(action, error)`
+- 在 `octodock_do` 的錯誤處理中呼叫
+- 各 adapter 定義常見錯誤的對應提示
+
+### 7.5 system.note 輕量筆記（B4）🟢
+
+**目標**：`octodock_do(app: "system", action: "note", params: {text: "..."})` 快速留筆記
+
+**實作**：本質上就是 `memory_store` 的簡化版，category 固定為 "note"
+
+---
+
+## Phase 8：SOP 自動辨識（第八、九節）
+
+> OctoDock 相對 Composio 的獨有優勢 — 記憶驅動的 SOP 三層模型
+
+### 8.1 操作序列記錄
+
+**目標**：按 session 分組記錄操作序列
+
+**實作**：
+- 在 operations 表上做 session 分組（同一個 MCP 請求鏈 = 一個 session）
+- 提取 `app.action` 序列
+
+### 8.2 規則引擎偵測重複模式
+
+**目標**：用 LCS（最長共同子序列）比對找出重複的操作流程
+
+**實作**：
+- `src/services/sop-detector.ts` — 序列比對引擎
+- 同一用戶的操作序列出現 3 次以上 → 標記為候選 SOP
+- 純程式碼邏輯，不需要 AI
+
+### 8.3 在回傳中塞 suggestions
+
+**目標**：偵測到候選 SOP 時，在 `octodock_do` 的回傳裡加入 suggestions
+
+**回傳格式**：
+```json
+{
+  "ok": true,
+  "data": "...正常結果...",
+  "suggestions": [{
+    "type": "sop_candidate",
+    "message": "你已經第 3 次執行『查 Notion 待辦 → 改逾期 → LINE 通知』，要存成快捷指令嗎？",
+    "pattern": ["notion.query_database", "notion.update_page", "line.send_message"]
+  }]
+}
 ```
 
-**agentdock_help 規格**：
-```typescript
-agentdock_help({
-  app?: string        // 省略 → 列出所有已連 App + SOP；指定 → 回傳該 App 的 skill
-})
-```
-
-#### 1.2 建立 Skill 定義
-
-**目標**：為每個 App 建立精簡的操作說明（100-200 tokens），`help` 被呼叫時回傳
-
-**新增檔案**：
-- `src/mcp/skills/notion.ts`
-- `src/mcp/skills/gmail.ts`（待 adapter 完成）
-- `src/mcp/skills/index.ts` — skill registry
-
-**Skill 範例（Notion）**：
-```
-notion 可用 action：
-  search(query) — 搜尋頁面和資料庫
-  create_page(title, content, folder?) — 建立頁面
-  update_page(page, content) — 更新頁面內容
-  get_page(page) — 取得頁面內容
-  delete_page(page) — 刪除頁面
-  query_database(database, filter?) — 查詢資料庫
-  create_database_item(database, properties) — 新增資料庫項目
-  create_comment(page, content) — 新增評論
-  get_users() — 列出工作區成員
-```
-
-#### 1.3 參數格式轉換層
-
-**目標**：AI 傳簡化參數，AgentDock 內部轉換成各 App API 的原始格式
-
-**修改檔案**：
-- `src/adapters/notion.ts` — 新增 `translateParams(action, simplifiedParams)` 方法
-- `src/adapters/types.ts` — `AppAdapter` 介面新增 `translateParams` 和 `getSkill` 方法
-
-**轉換範例**：
-```typescript
-// AI 傳入
-{ action: "create_page", params: { title: "會議紀錄", folder: "會議", content: "..." } }
-
-// AgentDock 內部轉換
-// 1. 查記憶：「會議」→ parent_id: "317a9617..."
-// 2. 轉換成 Notion API 格式：parent、properties、children blocks
-```
-
-#### 1.4 記憶輔助解析
-
-**目標**：`do` 收到簡化參數（名字、代稱）時，查記憶表對應到實際 ID
-
-**修改檔案**：
-- `src/services/memory-engine.ts` — 新增 `resolveIdentifier(userId, name, app)` 方法
-- `src/mcp/server.ts` — 在 `agentdock_do` 執行前呼叫 resolve
+正在連接的 AI（Claude/ChatGPT）看到 suggestions 會自然地問用戶確認。AgentDock 負責觀察，AI 負責溝通。
 
 ---
 
-### Phase 2：記憶層強化
+## Phase 9：跨 App Demo + 推廣準備
 
-#### 2.1 MD 格式渲染器
+### 9.1 跨 App Demo 流程（B1）
 
-**目標**：`memory_query` 回傳渲染好的 MD 格式，不是原始 JSON
+**目標**：設計殺手場景展示 OctoDock 的跨 App + 共享記憶優勢
 
-**修改檔案**：
-- `src/services/memory-engine.ts` — 新增 `renderToMarkdown(memories)` 方法
+**Demo 流程**：
+1. `octodock_do(notion, query_database, {database: "待辦"})` — 查詢逾期任務
+2. `octodock_do(gmail, send, {to: "boss@...", subject: "逾期任務提醒", body: "..."})` — 寄提醒
+3. `octodock_do(line, send_message, {user_id: "...", message: "已寄出提醒"})` — LINE 通知自己
 
-**回傳範例**：
-```markdown
-## 用戶記憶摘要
+一句話觸發：「幫我檢查 Notion 有沒有逾期任務，有的話寄信給老闆，然後 LINE 通知我」
 
-### 偏好
-- Notion 筆記結構：H2 分大段、bullet points、中英混用
-- 郵件回覆：簡短直接、署名用英文名
+### 9.2 60 秒影片腳本
 
-### 行為模式
-- 每週五下午從 Notion 整理週報
-```
-
-#### 2.2 自然語言寫入
-
-**目標**：`memory_store` 接收自然語言，後端 AI 解析為結構化資料
-
-**修改檔案**：
-- `src/services/memory-engine.ts` — 新增 `parseNaturalLanguage(text)` 方法
-- 使用 Haiku 解析 category / key / value / confidence
-
-**暫緩**：此項需要 Anthropic API key，可在 Phase 3 內部 AI 一起處理
-
-#### 2.3 操作自動記錄強化
-
-**目標**：所有 `do` 和 `help` 操作自動提煉跨對話記憶
-
-**修改檔案**：
-- `src/mcp/middleware/logger.ts` — 除了記 operations 表，還要分析是否有可提煉的記憶（常用 folder、常用操作模式）
+**Before**（直接接 5 個 MCP）：65 個工具、50,000 tokens、每個 App 分開設定
+**After**（接 OctoDock 一個 URL）：2 個工具、300 tokens、一句話跨 App 操作
 
 ---
 
-### Phase 3：Adapter 擴充
-
-#### 3.1 Google 全家桶
-
-**目標**：一次 OAuth，scope 累加，吃 Gmail + Calendar + Drive
-
-**新增檔案**：
-- `src/adapters/google/gmail.ts`
-- `src/adapters/google/calendar.ts`
-- `src/adapters/google/drive.ts`
-- `src/adapters/google/index.ts` — 共用 OAuth 邏輯
-
-**注意**：Google 系列 API 全部免費無限量，只有速率限制
-
-#### 3.2 LINE Adapter
-
-**目標**：Messaging API + LINE Login 整合
-
-**新增檔案**：
-- `src/adapters/line.ts`
-
-**Auth type**：bot_token（Channel Access Token）
-
-**核心 action**：
-- reply_message / push_message / broadcast
-- get_profile / get_content
-- set_rich_menu / get_quota
-
-**差異化價值**：Composio 不支援 LINE，這是 AgentDock 在亞洲市場的關鍵差異化
-
-#### 3.3 GitHub Adapter
-
-**新增檔案**：
-- `src/adapters/github.ts`
-
-**核心 action**：讀 repo、管 issue、PR
-
----
-
-### Phase 4：SOP 系統
-
-#### 4.1 SOP 存儲
-
-**目標**：SOP 存為 memory 表 `category='sop'`
-
-**修改檔案**：
-- `src/services/memory-engine.ts` — SOP 專用的存取方法
-
-#### 4.2 SOP 透過 help 取得
-
-`agentdock_help()` 不帶參數時，除了列出已連 App，也列出可用 SOP
-
----
-
-### Phase 5：排程引擎
-
-#### 5.1 排程器基礎
-
-**新增檔案**：
-- `src/services/scheduler.ts` — cron-based 排程引擎
-- `src/db/schema.ts` — 新增 `schedules` 表
-
-**分層處理**：
-- 簡單排程 → 規則引擎直接執行（零成本）
-- 需要理解的排程 → 呼叫內部 Haiku
-
-#### 5.2 內部 AI
-
-**新增檔案**：
-- `src/services/internal-ai.ts` — Haiku 呼叫封裝
-
-**成本**：~$0.001-0.005/次
-
----
-
-### Phase 6：收款與 iOS App
-
-#### 6.1 Paddle 串接
-
-**目標**：網站訂閱收款
-
-#### 6.2 iOS App
-
-**目標**：設定介面 + IAP 訂閱（RevenueCat）
-- 管理已連接的 App
-- 調整設定、記憶管理、SOP 編輯
-- 查看操作記錄
-- 訂閱管理
-
----
-
-## 優先序與里程碑
+## 優先序
 
 ```
-Phase 1（核心重構）  ← 最高優先，改完才算是討論結論的實現
-  ├── 1.1 do + help 雙工具
-  ├── 1.2 Skill 定義
-  ├── 1.3 參數格式轉換
-  └── 1.4 記憶輔助解析
+Phase 7（Bug 修復 + 強化）  ← 最急，影響用戶體驗
+  ├── 7.1 名稱自動解析 bug  🔴
+  ├── 7.2 get_comments bug  🔴
+  ├── 7.3 help 分層查詢     🟡
+  ├── 7.4 智慧錯誤引導       🟡
+  └── 7.5 system.note       🟢
 
-Phase 2（記憶強化）
-  ├── 2.1 MD 渲染器
-  └── 2.3 操作自動記錄
+Phase 8（SOP 自動辨識）  ← OctoDock 獨有優勢
+  ├── 8.1 操作序列記錄
+  ├── 8.2 規則引擎偵測重複
+  └── 8.3 suggestions 回傳
 
-Phase 3（Adapter 擴充）
-  ├── 3.1 Google 全家桶  ← 一次 OAuth 吃三個，CP 值最高
-  ├── 3.2 LINE          ← 差異化關鍵
-  └── 3.3 GitHub
-
-Phase 4（SOP）
-Phase 5（排程引擎 + 內部 AI）
-Phase 6（收款 + iOS App）
+Phase 9（跨 App Demo）  ← 推廣用
+  ├── 9.1 跨 App demo 流程
+  └── 9.2 影片腳本
 ```
-
----
-
-## 風險與注意事項
-
-1. **Phase 1 是破壞性變更** — 從多工具改為雙工具，所有現有 MCP 連線方式都會改變。建議保留舊路由一段時間做相容。
-
-2. **Skill 精簡度** — Skill 必須控制在 100-200 tokens，太多參數說明會失去「省 token」的優勢。
-
-3. **記憶輔助解析的準確度** — 「會議」→ parent_id 的對應需要足夠的記憶累積。初期可能需要 fallback 機制（找不到時回傳 suggestions 讓 AI 反問用戶）。
-
-4. **不串 Composio 的代價** — 自己串每個 App 的工作量較大，但保有核心控制權。MVP 先專注 4 個 App（Notion、Google、LINE、GitHub）。
-
-5. **Phase 2.2（自然語言寫入）需要 API key** — 依賴 Anthropic API，會產生成本。可以先用規則引擎做簡單解析，Phase 5 內部 AI 再統一處理。
