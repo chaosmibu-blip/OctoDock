@@ -22,7 +22,12 @@
       "WebSearch",
       "WebFetch(domain:developers.notion.com)",
       "WebFetch(domain:norahsakal.com)",
-      "Bash(convert:*)"
+      "Bash(convert:*)",
+      "Bash(npx tsx:*)",
+      "Bash(curl:*)",
+      "Bash(timeout:*)",
+      "Bash(echo:*)",
+      "Bash(kill:*)"
     ]
   }
 }
