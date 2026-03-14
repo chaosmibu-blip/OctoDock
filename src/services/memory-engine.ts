@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { memory } from "@/db/schema";
-import { and, eq, ilike, or, desc, sql } from "drizzle-orm";
+import { and, eq, ilike, or, desc, sql, inArray } from "drizzle-orm";
 import { getEmbedding, toVectorString } from "./embedding";
 
 // ============================================================
@@ -155,7 +155,7 @@ function updateLastUsed(userId: string, results: MemoryEntry[]): void {
     .where(
       and(
         eq(memory.userId, userId),
-        sql`${memory.key} = ANY(${keys})`,
+        inArray(memory.key, keys),
       ),
     )
     .catch((err) => console.error("Failed to update lastUsedAt:", err));
