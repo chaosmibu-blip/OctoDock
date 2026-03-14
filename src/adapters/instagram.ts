@@ -373,6 +373,17 @@ async function refreshInstagramToken(currentToken: string): Promise<TokenSet> {
   };
 }
 
+// --- 錯誤格式化：攔截常見 API 錯誤，回傳雙語提示 ---
+function formatError(action: string, errorMessage: string): string | null {
+  const msg = errorMessage.toLowerCase();
+  if (msg.includes("expired") || msg.includes("invalid.*token")) return "Instagram token 已過期。請到 Dashboard 重新連結 Instagram。";
+  if (msg.includes("no facebook page") || msg.includes("no.*business")) return "找不到 Instagram Business 帳號。請確認：1) 有連結 Facebook 粉絲專頁 2) Instagram 帳號已轉為 Business 類型。";
+  if (msg.includes("not found")) return "找不到指定的貼文或留言。請確認 ID 是否正確。";
+  if (msg.includes("rate") || msg.includes("limit")) return "Instagram API 速率限制。請稍後再試。";
+  if (action === "publish" && msg.includes("url")) return "圖片 URL 無效或無法存取。Instagram 要求圖片必須是可公開存取的 URL。";
+  return null;
+}
+
 export const instagramAdapter: AppAdapter = {
   name: "instagram",
   displayName: { zh: "Instagram", en: "Instagram" },
@@ -384,5 +395,6 @@ export const instagramAdapter: AppAdapter = {
   actionMap,
   getSkill,
   formatResponse,
+  formatError,
   refreshToken: refreshInstagramToken,
 };

@@ -317,6 +317,16 @@ async function refreshThreadsToken(currentToken: string): Promise<TokenSet> {
   };
 }
 
+// --- 錯誤格式化：攔截常見 API 錯誤，回傳雙語提示 ---
+function formatError(action: string, errorMessage: string): string | null {
+  const msg = errorMessage.toLowerCase();
+  if (msg.includes("expired") || msg.includes("invalid.*token")) return "Threads token 已過期。請到 Dashboard 重新連結 Threads。";
+  if (msg.includes("not found")) return "找不到指定的貼文。請確認 post_id 是否正確。";
+  if (msg.includes("rate") || msg.includes("limit")) return "Threads API 速率限制。請稍後再試。";
+  if (action === "publish" && msg.includes("500")) return "Threads 貼文字數上限 500 字。請縮短內容。";
+  return null;
+}
+
 export const threadsAdapter: AppAdapter = {
   name: "threads",
   displayName: { zh: "Threads", en: "Threads" },
@@ -329,6 +339,7 @@ export const threadsAdapter: AppAdapter = {
   actionMap, // do + help 架構：簡化 action → 內部工具對應
   getSkill, // do + help 架構：回傳精簡操作說明
   formatResponse, // G1/G3 通用框架：raw JSON → AI 友善格式
+  formatError,
 };
 
 // Exported for use in OAuth callback to exchange short→long-lived token

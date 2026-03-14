@@ -89,46 +89,31 @@ export interface AppAdapter {
 
   // === do + help 架構新增 ===
 
+  // === 以下全部必填 — 漏了任何一個 TypeScript 會報錯 ===
+
   /**
    * 簡化 action 名稱 → 內部工具名稱的對應表
-   * 例如：{ "create_page": "notion_create_page", "search": "notion_search" }
-   * octodock_do 收到 action 後查這張表找到要執行的內部工具
+   * 必填。octodock_do 收到 action 後查這張表找到要執行的內部工具
    */
-  actionMap?: Record<string, string>;
+  actionMap: Record<string, string>;
 
   /**
    * 回傳操作說明（Skill）
-   * - 不帶 action：回傳 App 級別的 action 清單（100-200 tokens）
-   * - 帶 action：回傳該 action 的完整參數說明 + 使用範例
+   * 必填。不帶 action：App 級別清單。帶 action：完整參數 + 範例
    */
-  getSkill?(action?: string): string;
-
-  // === 回傳格式轉換層（G1/G3 通用框架） ===
+  getSkill(action?: string): string;
 
   /**
    * 將 API 原始回傳轉成 AI 友善格式
-   * 這是 Adapter 品質的關鍵 — 不准把 raw JSON 直接丟給 AI
-   *
-   * 規則：
-   *   1. Read 類 action 必須轉成 AI 最容易消化的格式（MD / 純文字 / 簡化 JSON）
-   *   2. 輸入和輸出格式必須對稱（吃 MD 進去，就要吐 MD 出來）
-   *   3. 精簡回傳，只留 AI 需要的欄位
-   *
-   * 如果 adapter 沒實作這個方法，server.ts 會直接用 raw JSON
-   * 實作了的話，server.ts 會優先用轉換後的結果
-   *
-   * @param action 簡化 action 名稱（例如 "get_page"）
-   * @param rawData execute() 回傳的原始資料（已 JSON.parse）
-   * @returns AI 友善格式的字串（通常是 Markdown）
+   * 必填。不准把 raw JSON 直接丟給 AI
    */
-  formatResponse?(action: string, rawData: unknown): string;
+  formatResponse(action: string, rawData: unknown): string;
 
   /**
-   * 智慧錯誤引導（B3）
-   * 攔截常見 API 錯誤，回傳對用戶有用的提示而非原始錯誤訊息
-   * 例如：「Could not find block」→「請確認 integration 權限包含 read comments」
+   * 智慧錯誤引導
+   * 必填。攔截常見 API 錯誤，回傳有用提示。不需要攔截的回傳 null
    */
-  formatError?(action: string, errorMessage: string): string | null;
+  formatError(action: string, errorMessage: string): string | null;
 
   /**
    * 執行內部工具（原始 API 呼叫）
@@ -149,7 +134,7 @@ export interface AppAdapter {
 // Adapter Registry 掃描模組時用來判斷是否為合法的 AppAdapter
 // ============================================================
 
-/** 檢查一個物件是否實作了 AppAdapter 介面的必要屬性 */
+/** 檢查一個物件是否實作了 AppAdapter 介面的所有必要屬性 */
 export function isAppAdapter(obj: unknown): obj is AppAdapter {
   return (
     typeof obj === "object" &&
@@ -157,6 +142,10 @@ export function isAppAdapter(obj: unknown): obj is AppAdapter {
     "name" in obj &&
     "authType" in obj &&
     "tools" in obj &&
-    "execute" in obj
+    "execute" in obj &&
+    "actionMap" in obj &&
+    "getSkill" in obj &&
+    "formatResponse" in obj &&
+    "formatError" in obj
   );
 }

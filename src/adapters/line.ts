@@ -272,6 +272,17 @@ async function execute(
   }
 }
 
+// --- 錯誤格式化：攔截常見 API 錯誤，回傳雙語提示 ---
+function formatError(action: string, errorMessage: string): string | null {
+  const msg = errorMessage.toLowerCase();
+  if (msg.includes("invalid token") || msg.includes("authentication")) return "LINE Channel Access Token 無效或已過期。請到 LINE Developers Console 重新產生 token。";
+  if (msg.includes("not found")) return "找不到指定的用戶。請確認 user_id 是否正確。";
+  if (msg.includes("rate")) return "LINE API 速率限制。請稍後再試。";
+  if (action === "reply" && msg.includes("invalid")) return "Reply token 已過期（有效期僅 1 分鐘）。無法回覆過期的訊息。";
+  if (action === "broadcast") return `廣播失敗：${errorMessage}。請確認免費方案的每月訊息額度是否已用完。`;
+  return null;
+}
+
 export const lineAdapter: AppAdapter = {
   name: "line",
   displayName: { zh: "LINE", en: "LINE" },
@@ -283,4 +294,5 @@ export const lineAdapter: AppAdapter = {
   actionMap,
   getSkill,
   formatResponse,
+  formatError,
 };

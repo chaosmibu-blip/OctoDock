@@ -455,6 +455,16 @@ async function refreshGmailToken(refreshToken: string): Promise<TokenSet> {
   };
 }
 
+// ── 錯誤格式化：攔截常見 API 錯誤，回傳雙語提示 ────────
+function formatError(action: string, errorMessage: string): string | null {
+  const msg = errorMessage.toLowerCase();
+  if (msg.includes("invalid_grant") || msg.includes("token")) return "Gmail token 已過期。請到 Dashboard 重新連結 Gmail。";
+  if (msg.includes("not found")) return "找不到指定的郵件。請確認 message_id 是否正確。";
+  if (msg.includes("rate") || msg.includes("quota")) return "Gmail API 速率限制。請稍後再試。";
+  if (msg.includes("forbidden") || msg.includes("insufficient")) return "權限不足。請確認 Gmail OAuth 包含必要的 scope（readonly, send, compose, modify）。";
+  return null;
+}
+
 // ── Adapter 匯出 ─────────────────────────────────────────
 export const gmailAdapter: AppAdapter = {
   name: "gmail",
@@ -465,6 +475,7 @@ export const gmailAdapter: AppAdapter = {
   actionMap,
   getSkill,
   formatResponse,
+  formatError,
   tools,
   execute,
   refreshToken: refreshGmailToken,

@@ -250,6 +250,16 @@ async function execute(
   }
 }
 
+// --- 錯誤格式化：攔截常見 API 錯誤，回傳雙語提示 ---
+function formatError(action: string, errorMessage: string): string | null {
+  const msg = errorMessage.toLowerCase();
+  if (msg.includes("unauthorized") || msg.includes("token")) return "Telegram Bot Token 無效。請確認 token 是否正確（從 @BotFather 取得）。";
+  if (msg.includes("chat not found")) return "找不到指定的 chat。請確認 chat_id 是否正確，且 Bot 已加入該群組。";
+  if (msg.includes("blocked")) return "用戶已封鎖 Bot，無法發送訊息。";
+  if (msg.includes("too many")) return "Telegram API 速率限制。請稍後再試。";
+  return null;
+}
+
 export const telegramAdapter: AppAdapter = {
   name: "telegram",
   displayName: { zh: "Telegram", en: "Telegram" },
@@ -260,5 +270,6 @@ export const telegramAdapter: AppAdapter = {
   actionMap, // do + help 架構：簡化 action → 內部工具對應
   getSkill, // do + help 架構：回傳精簡操作說明
   formatResponse, // do + help 架構：raw JSON → AI 友善格式
+  formatError,
   execute,
 };
