@@ -169,6 +169,18 @@ function registerDoTool(
       // 轉換成標準化的 DoResult
       result = toolResultToDoResult(toolResult, app);
 
+      // ── 回傳格式轉換層（G1/G3 通用框架）──
+      // 如果 adapter 有實作 formatResponse，用它把 raw JSON 轉成 AI 友善格式
+      // 這一步在 toolResultToDoResult 之後，因為需要先解析 JSON
+      if (result.ok && result.data && adapter.formatResponse) {
+        try {
+          const formatted = adapter.formatResponse(action, result.data);
+          result.data = formatted;
+        } catch {
+          // 格式轉換失敗不影響主流程，保留原始 data
+        }
+      }
+
       // 如果操作成功，嘗試從結果中學習 ID 對應（越用越懂你）
       if (result.ok) {
         learnFromResult(userId, app, action, params, result).catch(() => {

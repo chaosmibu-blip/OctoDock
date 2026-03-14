@@ -103,6 +103,26 @@ export interface AppAdapter {
    */
   getSkill?(): string;
 
+  // === 回傳格式轉換層（G1/G3 通用框架） ===
+
+  /**
+   * 將 API 原始回傳轉成 AI 友善格式
+   * 這是 Adapter 品質的關鍵 — 不准把 raw JSON 直接丟給 AI
+   *
+   * 規則：
+   *   1. Read 類 action 必須轉成 AI 最容易消化的格式（MD / 純文字 / 簡化 JSON）
+   *   2. 輸入和輸出格式必須對稱（吃 MD 進去，就要吐 MD 出來）
+   *   3. 精簡回傳，只留 AI 需要的欄位
+   *
+   * 如果 adapter 沒實作這個方法，server.ts 會直接用 raw JSON
+   * 實作了的話，server.ts 會優先用轉換後的結果
+   *
+   * @param action 簡化 action 名稱（例如 "get_page"）
+   * @param rawData execute() 回傳的原始資料（已 JSON.parse）
+   * @returns AI 友善格式的字串（通常是 Markdown）
+   */
+  formatResponse?(action: string, rawData: unknown): string;
+
   /**
    * 執行內部工具（原始 API 呼叫）
    * agentdock_do 在完成參數轉換後，最終會呼叫這個方法

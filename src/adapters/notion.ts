@@ -72,6 +72,7 @@ const actionMap: Record<string, string> = {
   get_page: "notion_get_page",
   create_page: "notion_create_page",
   update_page: "notion_update_page",
+  replace_content: "notion_replace_content", // G2: 全文替換頁面內容
   delete_page: "notion_delete_page",
   get_page_property: "notion_get_page_property",
   // 區塊操作
@@ -100,19 +101,19 @@ const actionMap: Record<string, string> = {
  */
 function getSkill(): string {
   return `notion actions:
-  search(query, filter?) — search pages/databases in workspace
-  create_page(title, content?, folder?) — create page. folder can be a name (auto-resolved) or ID
-  get_page(page) — get page content. page can be a name or ID
-  update_page(page_id, properties?, icon?, cover?) — update page properties
-  delete_page(page_id) — archive page (recoverable within 30 days)
-  query_database(database, filter?, sorts?) — query database by name or ID
-  create_database_item(database, properties, content?) — add row to database
-  create_database(parent_page_id, title, properties) — create new database
-  append_blocks(block_id, children) — append content blocks to page
-  add_comment(page_id, text) — comment on a page
+  search(query, filter?) — search pages/databases
+  create_page(title, content?, folder?) — create page (content in markdown)
+  get_page(page) — get page content (returns markdown)
+  replace_content(page_id, content) — replace entire page body (content in markdown)
+  update_page(page_id, properties?, icon?, cover?) — update page properties only
+  delete_page(page_id) — archive page
+  query_database(database, filter?, sorts?) — query database
+  create_database_item(database, properties, content?) — add row
+  append_blocks(block_id, children) — append blocks to page
+  add_comment(page_id, text) — comment on page
   get_comments(block_id) — list comments
   get_users() — list workspace members
-You can use names instead of IDs for folder/page/database — AgentDock resolves them via memory. Use search to find items if resolution fails.`;
+Input and output both use markdown. Names auto-resolve to IDs via memory.`;
 }
 
 // ============================================================
@@ -183,6 +184,15 @@ const tools: ToolDefinition[] = [
         .record(z.string(), z.unknown())
         .optional()
         .describe("Cover image object"),
+    },
+  },
+  {
+    name: "notion_replace_content",
+    description:
+      "Replace the entire body content of a Notion page. Deletes all existing blocks and writes new content from Markdown. Use this to edit/rewrite page content.",
+    inputSchema: {
+      page_id: z.string().describe("Notion page ID"),
+      content: z.string().describe("New page content in Markdown format"),
     },
   },
   {
@@ -449,6 +459,240 @@ function markdownToBlocks(
 }
 
 // ============================================================
+// Notion Blocks → Markdown 轉換器（G1/G3 通用框架實作）
+// 將 Notion API 回傳的 blocks JSON 轉成 Markdown
+// 讓 AI 讀到的格式跟寫入的格式一致（對稱 I/O）
+// JSON blocks 體積是 Markdown 的 5-10 倍，轉換後大幅省 tokens
+// ============================================================
+
+/** 從 Notion rich_text 陣列提取純文字 */
+function richTextToPlain(richText: Array<{ plain_text: string }> | undefined): string {
+  if (!richText || richText.length === 0) return "";
+  return richText.map((t) => t.plain_text).join("");
+}
+
+/**
+ * 將 Notion blocks 陣列轉換成 Markdown 字串
+ * 支援：標題、段落、列表、待辦、引用、callout、程式碼、分隔線、表格
+ */
+function blocksToMarkdown(blocks: Array<Record<string, unknown>>): string {
+  const lines: string[] = [];
+
+  for (const block of blocks) {
+    const type = block.type as string;
+    const data = block[type] as Record<string, unknown> | undefined;
+    if (!data) continue;
+
+    const text = richTextToPlain(data.rich_text as Array<{ plain_text: string }>);
+
+    switch (type) {
+      case "heading_1":
+        lines.push(`# ${text}`);
+        break;
+      case "heading_2":
+        lines.push(`## ${text}`);
+        break;
+      case "heading_3":
+        lines.push(`### ${text}`);
+        break;
+      case "paragraph":
+        lines.push(text || "");
+        break;
+      case "bulleted_list_item":
+        lines.push(`- ${text}`);
+        break;
+      case "numbered_list_item":
+        lines.push(`1. ${text}`);
+        break;
+      case "to_do": {
+        const checked = data.checked ? "x" : " ";
+        lines.push(`- [${checked}] ${text}`);
+        break;
+      }
+      case "quote":
+        lines.push(`> ${text}`);
+        break;
+      case "callout": {
+        const icon = data.icon as { emoji?: string } | undefined;
+        const prefix = icon?.emoji ? `${icon.emoji} ` : "";
+        lines.push(`> ${prefix}${text}`);
+        break;
+      }
+      case "code": {
+        const lang = (data.language as string) || "";
+        lines.push(`\`\`\`${lang}\n${text}\n\`\`\``);
+        break;
+      }
+      case "divider":
+        lines.push("---");
+        break;
+      case "toggle":
+        // toggle 標題用 details 語法
+        lines.push(`<details><summary>${text}</summary></details>`);
+        break;
+      case "image": {
+        const imgData = data as { type?: string; file?: { url: string }; external?: { url: string } };
+        const url = imgData.file?.url || imgData.external?.url || "";
+        const caption = richTextToPlain(data.caption as Array<{ plain_text: string }>);
+        lines.push(`![${caption}](${url})`);
+        break;
+      }
+      case "bookmark": {
+        const bmUrl = (data as { url?: string }).url || "";
+        const caption = richTextToPlain(data.caption as Array<{ plain_text: string }>);
+        lines.push(`[${caption || bmUrl}](${bmUrl})`);
+        break;
+      }
+      case "table_row": {
+        const cells = (data.cells as Array<Array<{ plain_text: string }>>) ||
+          ((block as Record<string, { cells?: Array<Array<{ plain_text: string }>> }>).table_row?.cells);
+        if (cells) {
+          const row = cells.map((cell) => richTextToPlain(cell)).join(" | ");
+          lines.push(`| ${row} |`);
+        }
+        break;
+      }
+      case "child_page": {
+        const title = (data as { title?: string }).title || "";
+        lines.push(`📄 ${title}`);
+        break;
+      }
+      case "child_database": {
+        const title = (data as { title?: string }).title || "";
+        lines.push(`📊 ${title}`);
+        break;
+      }
+      default:
+        // 未知類型：標記但不丟掉
+        if (text) lines.push(text);
+        break;
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * 從 Notion 搜尋/查詢結果中提取精簡的項目摘要
+ * 不回傳完整的 properties JSON，只留 AI 需要的：標題、ID、URL、類型
+ */
+function summarizeSearchResults(results: Array<Record<string, unknown>>): string {
+  const items: string[] = [];
+
+  for (const item of results) {
+    const id = item.id as string;
+    const type = item.object as string; // "page" | "database"
+    const url = item.url as string | undefined;
+
+    // 提取標題
+    let title = "";
+    const props = item.properties as Record<string, unknown> | undefined;
+    if (props) {
+      // 頁面的 title 屬性
+      const titleProp = props.title as { title?: Array<{ plain_text: string }> } | undefined;
+      if (titleProp?.title?.[0]?.plain_text) {
+        title = titleProp.title[0].plain_text;
+      }
+      // 資料庫項目的 Name 屬性
+      const nameProp = props.Name as { title?: Array<{ plain_text: string }> } | undefined;
+      if (!title && nameProp?.title?.[0]?.plain_text) {
+        title = nameProp.title[0].plain_text;
+      }
+    }
+    // 資料庫本身的 title
+    const dbTitle = item.title as Array<{ plain_text: string }> | undefined;
+    if (!title && dbTitle?.[0]?.plain_text) {
+      title = dbTitle[0].plain_text;
+    }
+
+    items.push(`- **${title || "(untitled)"}** (${type}) id:${id}${url ? ` ${url}` : ""}`);
+  }
+
+  return items.join("\n");
+}
+
+/**
+ * 回傳格式轉換（G1/G3 通用框架）
+ * 將 Notion API 的 raw JSON 轉成 AI 友善的 Markdown
+ * 讀出來的格式和寫入的格式一致，AI 可以「讀 → 改 → 寫回」
+ */
+function formatResponse(action: string, rawData: unknown): string {
+  if (typeof rawData !== "object" || rawData === null) {
+    return String(rawData);
+  }
+
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // ── 搜尋結果：精簡為 title + id 列表 ──
+    case "search": {
+      const results = data.results as Array<Record<string, unknown>> | undefined;
+      if (!results || results.length === 0) return "No results found.";
+      const hasMore = data.has_more as boolean;
+      let output = `Found ${results.length} results:\n\n${summarizeSearchResults(results)}`;
+      if (hasMore) output += "\n\n(more results available — refine your query)";
+      return output;
+    }
+
+    // ── 取得頁面：properties 摘要 + 內容轉 Markdown ──
+    case "get_page": {
+      const page = data.page as Record<string, unknown> | undefined;
+      const blocksData = data.blocks as Record<string, unknown> | undefined;
+      const sections: string[] = [];
+
+      // 頁面基本資訊
+      if (page) {
+        const url = page.url as string | undefined;
+        const props = page.properties as Record<string, unknown> | undefined;
+        if (props) {
+          // 提取標題
+          const titleProp = props.title as { title?: Array<{ plain_text: string }> } | undefined;
+          if (titleProp?.title?.[0]?.plain_text) {
+            sections.push(`# ${titleProp.title[0].plain_text}`);
+          }
+        }
+        if (url) sections.push(`URL: ${url}`);
+        sections.push(`ID: ${page.id}`);
+        sections.push("");
+      }
+
+      // 內容轉 Markdown
+      if (blocksData) {
+        const blocks = (blocksData.results || blocksData) as Array<Record<string, unknown>>;
+        if (Array.isArray(blocks)) {
+          sections.push(blocksToMarkdown(blocks));
+        }
+      }
+
+      return sections.join("\n");
+    }
+
+    // ── 資料庫查詢結果 ──
+    case "query_database": {
+      const results = data.results as Array<Record<string, unknown>> | undefined;
+      if (!results || results.length === 0) return "No items found in database.";
+      return `Found ${results.length} items:\n\n${summarizeSearchResults(results)}`;
+    }
+
+    // ── 建立/更新操作：精簡為 ok + url ──
+    case "create_page":
+    case "create_database_item":
+    case "create_database":
+    case "update_page":
+    case "replace_content":
+    case "delete_page": {
+      const url = data.url as string | undefined;
+      const id = data.id as string | undefined;
+      return url ? `Done. ${url}` : `Done. ID: ${id}`;
+    }
+
+    // ── 其他 action 不特別轉換 ──
+    default:
+      return JSON.stringify(rawData, null, 2);
+  }
+}
+
+// ============================================================
 // 工具執行路由
 // 根據工具名稱分派到對應的 Notion API 呼叫
 // 這是 Adapter 的核心邏輯，agentdock_do 最終會呼叫這裡
@@ -533,6 +777,45 @@ async function execute(
       });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // ── 全文替換頁面內容（G2: CRUD 完整閉環） ──
+    // Notion API 沒有 "update content" endpoint，所以用組合操作：
+    // 1. 取得所有現有 blocks
+    // 2. 逐一刪除
+    // 3. 用新的 Markdown 內容建立新 blocks
+    case "notion_replace_content": {
+      const pageId = params.page_id as string;
+      const newContent = params.content as string;
+
+      // Step 1: 取得現有的所有 child blocks
+      const existing = (await notionFetch(
+        `/blocks/${pageId}/children?page_size=100`,
+        token,
+      )) as { results: Array<{ id: string }> };
+
+      // Step 2: 逐一刪除現有 blocks（Notion 不支援批次刪除）
+      const deletePromises = existing.results.map((block) =>
+        notionFetch(`/blocks/${block.id}`, token, { method: "DELETE" }).catch(() => {
+          // 某些 block 可能無法刪除（例如子頁面），跳過
+        }),
+      );
+      await Promise.all(deletePromises);
+
+      // Step 3: 用新的 Markdown 內容建立新 blocks
+      const newBlocks = markdownToBlocks(newContent);
+      if (newBlocks.length > 0) {
+        await notionFetch(`/blocks/${pageId}/children`, token, {
+          method: "PATCH",
+          body: JSON.stringify({ children: newBlocks }),
+        });
+      }
+
+      // 回傳頁面資訊
+      const updatedPage = await notionFetch(`/pages/${pageId}`, token);
+      return {
+        content: [{ type: "text", text: JSON.stringify(updatedPage, null, 2) }],
       };
     }
 
@@ -755,6 +1038,7 @@ export const notionAdapter: AppAdapter = {
   tools,
   actionMap, // do + help 架構：簡化 action → 內部工具對應
   getSkill, // do + help 架構：回傳精簡操作說明
+  formatResponse, // G1/G3 通用框架：raw JSON → AI 友善格式（Markdown）
   execute,
   // Notion token 不會過期 — 不需要 refreshToken
 };
