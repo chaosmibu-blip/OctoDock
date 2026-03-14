@@ -7,6 +7,10 @@ import type {
   TokenSet,
 } from "./types";
 
+// ============================================================
+// OAuth 認證設定
+// Instagram 透過 Facebook OAuth 進行授權
+// ============================================================
 const authConfig: OAuthConfig = {
   type: "oauth2",
   authorizeUrl: "https://www.facebook.com/dialog/oauth",
@@ -24,6 +28,77 @@ const authConfig: OAuthConfig = {
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
+// ============================================================
+// do+help 架構：actionMap / getSkill / formatResponse
+// 讓 agent 能用自然語言對應工具、取得技能說明、格式化回應
+// ============================================================
+
+/** 自然語言動作 → MCP 工具名稱對應表 */
+const actionMap: Record<string, string> = {
+  publish: "instagram_publish",
+  get_posts: "instagram_get_posts",
+  reply_comment: "instagram_reply_comment",
+  get_comments: "instagram_get_comments",
+  get_insights: "instagram_get_insights",
+};
+
+/** 回傳 Instagram adapter 的技能說明（供 agent 理解可用操作） */
+function getSkill(): string {
+  return `instagram actions:
+  publish(image_url, caption?) — publish photo post (requires public image URL)
+  get_posts(limit?) — get recent posts with engagement stats
+  reply_comment(comment_id, message) — reply to a comment
+  get_comments(media_id, limit?) — get post comments
+  get_insights(media_id) — get post metrics (impressions, reach, likes, etc.)
+Requires Instagram Business account linked to Facebook Page.`;
+}
+
+/** 將 API 原始回應格式化為人類可讀的摘要文字 */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function formatResponse(action: string, rawData: unknown): string {
+  if (typeof rawData !== "object" || rawData === null) return String(rawData);
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // 發佈貼文 / 回覆留言：回傳 ID 即可
+    case "publish":
+    case "reply_comment": {
+      return `Done. ID: ${data.id}`;
+    }
+    // 取得貼文列表：顯示摘要標題、互動數據、連結
+    case "get_posts": {
+      const posts = (data.data || data) as Array<Record<string, unknown>>;
+      if (!Array.isArray(posts) || posts.length === 0) return "No posts found.";
+      return posts
+        .map(
+          (p: any) =>
+            `- ${p.caption?.substring(0, 80) || "(no caption)"}${p.caption?.length > 80 ? "..." : ""}\n  ID: ${p.id} | ${p.timestamp} | ❤️ ${p.like_count ?? 0} 💬 ${p.comments_count ?? 0}\n  ${p.permalink || ""}`,
+        )
+        .join("\n");
+    }
+    // 取得留言：顯示用戶名、時間、內容
+    case "get_comments": {
+      const comments = (data.data || data) as Array<Record<string, unknown>>;
+      if (!Array.isArray(comments) || comments.length === 0)
+        return "No comments.";
+      return comments
+        .map((c: any) => `- **@${c.username}** (${c.timestamp}): ${c.text}`)
+        .join("\n");
+    }
+    // 取得洞察數據：顯示各指標名稱與數值
+    case "get_insights": {
+      const metrics = (data.data || data) as Array<Record<string, unknown>>;
+      if (!Array.isArray(metrics)) return JSON.stringify(rawData);
+      return metrics
+        .map((m: any) => `${m.name}: ${m.values?.[0]?.value ?? "N/A"}`)
+        .join("\n");
+    }
+    default:
+      return JSON.stringify(rawData, null, 2);
+  }
+}
+
+/** 封裝 Instagram Graph API 請求，自動處理 token 與錯誤 */
 async function igFetch(
   path: string,
   token: string,
@@ -51,7 +126,7 @@ async function igFetch(
   return res.json();
 }
 
-// Get user's Instagram Business Account ID via Facebook Pages
+/** 透過 Facebook Pages 取得用戶的 Instagram 商業帳號 ID */
 async function getIgAccountId(token: string): Promise<string> {
   const pages = (await igFetch("/me/accounts", token)) as {
     data: Array<{ id: string }>;
@@ -73,6 +148,10 @@ async function getIgAccountId(token: string): Promise<string> {
   return igAccount.instagram_business_account.id;
 }
 
+// ============================================================
+// MCP 工具定義
+// 每個工具對應一個 Instagram API 操作
+// ============================================================
 const tools: ToolDefinition[] = [
   {
     name: "instagram_publish",
@@ -125,6 +204,10 @@ const tools: ToolDefinition[] = [
   },
 ];
 
+// ============================================================
+// 工具執行邏輯
+// 根據工具名稱分派到對應的 API 操作
+// ============================================================
 async function execute(
   toolName: string,
   params: Record<string, unknown>,
@@ -154,7 +237,7 @@ async function execute(
       });
 
       return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: formatResponse("publish", result) }],
       };
     }
 
@@ -166,7 +249,7 @@ async function execute(
         token,
       );
       return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: formatResponse("get_posts", result) }],
       };
     }
 
@@ -179,7 +262,7 @@ async function execute(
         }),
       });
       return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: formatResponse("reply_comment", result) }],
       };
     }
 
@@ -190,7 +273,7 @@ async function execute(
         token,
       );
       return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: formatResponse("get_comments", result) }],
       };
     }
 
@@ -200,7 +283,7 @@ async function execute(
         token,
       );
       return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: formatResponse("get_insights", result) }],
       };
     }
 
@@ -212,7 +295,10 @@ async function execute(
   }
 }
 
-// Exchange short-lived token for long-lived (60 days)
+// ============================================================
+// Token 管理
+// Instagram 短期 token 轉換為長期 token（60 天有效）
+// ============================================================
 export async function instagramExchangeLongLived(shortLivedToken: string): Promise<TokenSet> {
   const res = await fetch(
     `${GRAPH_API}/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.META_OAUTH_CLIENT_ID}&client_secret=${process.env.META_OAUTH_CLIENT_SECRET}&fb_exchange_token=${shortLivedToken}`,
@@ -226,6 +312,7 @@ export async function instagramExchangeLongLived(shortLivedToken: string): Promi
   };
 }
 
+/** 刷新 Instagram 長期 token（到期前重新交換） */
 async function refreshInstagramToken(currentToken: string): Promise<TokenSet> {
   const res = await fetch(
     `${GRAPH_API}/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.META_OAUTH_CLIENT_ID}&client_secret=${process.env.META_OAUTH_CLIENT_SECRET}&fb_exchange_token=${currentToken}`,
@@ -247,5 +334,8 @@ export const instagramAdapter: AppAdapter = {
   authConfig,
   tools,
   execute,
+  actionMap,
+  getSkill,
+  formatResponse,
   refreshToken: refreshInstagramToken,
 };

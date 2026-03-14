@@ -23,6 +23,65 @@ const authConfig: OAuthConfig = {
 
 const THREADS_API = "https://graph.threads.net/v1.0";
 
+// do + help 架構：自然語言 action → 內部工具名稱對應
+const actionMap: Record<string, string> = {
+  publish: "threads_publish",
+  get_posts: "threads_get_posts",
+  reply: "threads_reply",
+  get_insights: "threads_get_insights",
+  get_profile: "threads_get_profile",
+};
+
+// do + help 架構：回傳精簡操作說明，讓 agent 快速理解可用功能
+function getSkill(): string {
+  return `threads actions:
+  publish(text) — publish text post (max 500 chars)
+  get_posts(limit?) — get recent posts
+  reply(post_id, text) — reply to a post
+  get_insights(post_id) — get post engagement metrics
+  get_profile() — get user profile info`;
+}
+
+// G1/G3 通用框架：將 raw JSON 轉為 AI 友善的可讀格式
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function formatResponse(action: string, rawData: unknown): string {
+  if (typeof rawData !== "object" || rawData === null) return String(rawData);
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // 發文或回覆：只回傳貼文 ID
+    case "publish":
+    case "reply": {
+      return `Done. Post ID: ${data.id}`;
+    }
+    // 取得貼文列表：精簡顯示內文摘要、ID、時間
+    case "get_posts": {
+      const posts = (data.data || data) as Array<Record<string, unknown>>;
+      if (!Array.isArray(posts) || posts.length === 0) return "No posts found.";
+      return posts
+        .map(
+          (p: any) =>
+            `- ${p.text?.substring(0, 100)}${p.text?.length > 100 ? "..." : ""}\n  ID: ${p.id} | ${p.timestamp} | ${p.permalink || ""}`,
+        )
+        .join("\n");
+    }
+    // 取得互動數據：逐項列出指標名稱與數值
+    case "get_insights": {
+      const metrics = (data.data || data) as Array<Record<string, unknown>>;
+      if (!Array.isArray(metrics)) return JSON.stringify(rawData);
+      return metrics
+        .map((m: any) => `${m.name}: ${m.values?.[0]?.value ?? "N/A"}`)
+        .join("\n");
+    }
+    // 取得個人檔案：格式化顯示用戶名、名稱、簡介
+    case "get_profile": {
+      return `Username: @${data.username}\nName: ${data.name || "N/A"}\nBio: ${data.threads_biography || "N/A"}`;
+    }
+    default:
+      return JSON.stringify(rawData, null, 2);
+  }
+}
+
 async function threadsFetch(
   path: string,
   token: string,
@@ -227,6 +286,9 @@ export const threadsAdapter: AppAdapter = {
   tools,
   execute,
   refreshToken: refreshThreadsToken,
+  actionMap, // do + help 架構：簡化 action → 內部工具對應
+  getSkill, // do + help 架構：回傳精簡操作說明
+  formatResponse, // G1/G3 通用框架：raw JSON → AI 友善格式
 };
 
 // Exported for use in OAuth callback to exchange short→long-lived token

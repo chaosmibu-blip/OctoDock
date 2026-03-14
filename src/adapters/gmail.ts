@@ -1,3 +1,7 @@
+/**
+ * Gmail Adapter
+ * 提供 Gmail 郵件搜尋、閱讀、發送、回覆、草稿功能
+ */
 import { z } from "zod";
 import type {
   AppAdapter,
@@ -7,6 +11,7 @@ import type {
   TokenSet,
 } from "./types";
 
+// ── OAuth 設定 ─────────────────────────────────────────────
 const authConfig: OAuthConfig = {
   type: "oauth2",
   authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -20,8 +25,10 @@ const authConfig: OAuthConfig = {
   authMethod: "post",
 };
 
+// ── API 基礎設定 ───────────────────────────────────────────
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
 
+// ── 輔助函式：Gmail API 請求封裝 ──────────────────────────
 async function gmailFetch(
   path: string,
   token: string,
@@ -44,12 +51,12 @@ async function gmailFetch(
   return res.json();
 }
 
-// Decode base64url email body
+// ── 輔助函式：解碼 base64url 郵件內容 ────────────────────
 function decodeBody(body: string): string {
   return Buffer.from(body, "base64url").toString("utf8");
 }
 
-// Build RFC 2822 email message
+// ── 輔助函式：建構 RFC 2822 格式郵件 ─────────────────────
 function buildRawEmail(
   to: string,
   subject: string,
@@ -67,7 +74,7 @@ function buildRawEmail(
   return Buffer.from(lines.join("\r\n")).toString("base64url");
 }
 
-// Extract plain text from message parts
+// ── 輔助函式：從郵件結構中提取純文字內容 ──────────────────
 function extractText(payload: Record<string, unknown>): string {
   if (
     (payload as { mimeType?: string }).mimeType === "text/plain" &&
@@ -87,7 +94,7 @@ function extractText(payload: Record<string, unknown>): string {
   return "";
 }
 
-// Extract header value
+// ── 輔助函式：提取郵件標頭值 ──────────────────────────────
 function getHeader(
   headers: Array<{ name: string; value: string }>,
   name: string,
@@ -95,6 +102,63 @@ function getHeader(
   return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
 }
 
+// ── do+help 架構：動作對照表 ──────────────────────────────
+// 將自然語言動作名稱對應到 MCP 工具名稱
+const actionMap: Record<string, string> = {
+  search: "gmail_search",
+  read: "gmail_read",
+  send: "gmail_send",
+  reply: "gmail_reply",
+  draft: "gmail_draft",
+};
+
+// ── do+help 架構：技能描述（供 agent 理解可用操作）────────
+function getSkill(): string {
+  return `gmail actions:
+  search(query, max_results?) — search emails (Gmail search syntax)
+  read(message_id) — read full email content
+  send(to, subject, body) — send new email
+  reply(message_id, body) — reply to email thread
+  draft(to, subject, body) — create draft email
+Input/output use plain text format.`;
+}
+
+// ── do+help 架構：格式化回應（將原始資料轉為簡潔文字）────
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function formatResponse(action: string, rawData: unknown): string {
+  if (typeof rawData !== "object" || rawData === null) return String(rawData);
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // 搜尋結果：精簡摘要列表
+    case "search": {
+      if (Array.isArray(rawData)) {
+        if (rawData.length === 0) return "No emails found.";
+        return rawData.map((e: any) =>
+          `- **${e.subject}** from ${e.from} (${e.date})\n  ID: ${e.id} | ${e.snippet}`
+        ).join("\n");
+      }
+      return String(rawData);
+    }
+    // 閱讀結果：完整郵件格式
+    case "read": {
+      const { subject, from, to, date, body, id, threadId } = data as any;
+      return `From: ${from}\nTo: ${to}\nDate: ${date}\nSubject: ${subject}\nThread: ${threadId}\n\n${body}`;
+    }
+    // 發送/回覆/草稿：完成確認
+    case "send":
+    case "reply":
+    case "draft": {
+      const msg = data.message as Record<string, unknown> | undefined;
+      const id = data.id || msg?.id;
+      return `Done. Message ID: ${id}`;
+    }
+    default:
+      return JSON.stringify(rawData, null, 2);
+  }
+}
+
+// ── MCP 工具定義 ──────────────────────────────────────────
 const tools: ToolDefinition[] = [
   {
     name: "gmail_search",
@@ -149,12 +213,14 @@ const tools: ToolDefinition[] = [
   },
 ];
 
+// ── 工具執行邏輯 ──────────────────────────────────────────
 async function execute(
   toolName: string,
   params: Record<string, unknown>,
   token: string,
 ): Promise<ToolResult> {
   switch (toolName) {
+    // 搜尋郵件：使用 Gmail 搜尋語法，並行取得摘要
     case "gmail_search": {
       const maxResults = Math.min((params.max_results as number) ?? 10, 50);
       const list = (await gmailFetch(
@@ -166,7 +232,7 @@ async function execute(
         return { content: [{ type: "text", text: "No emails found." }] };
       }
 
-      // Fetch summaries in parallel
+      // 並行取得每封郵件的摘要資訊
       const summaries = await Promise.all(
         list.messages.map(async (msg) => {
           const full = (await gmailFetch(
@@ -194,6 +260,7 @@ async function execute(
       };
     }
 
+    // 閱讀郵件：取得完整郵件內容（標頭 + 純文字本文）
     case "gmail_read": {
       const msg = (await gmailFetch(
         `/messages/${params.message_id}?format=full`,
@@ -231,6 +298,7 @@ async function execute(
       };
     }
 
+    // 發送郵件：建構 RFC 2822 格式並透過 API 發送
     case "gmail_send": {
       const raw = buildRawEmail(
         params.to as string,
@@ -246,8 +314,9 @@ async function execute(
       };
     }
 
+    // 回覆郵件：取得原始郵件的 thread 資訊，維持對話脈絡
     case "gmail_reply": {
-      // Get original message for thread context
+      // 取得原始郵件的 thread 上下文
       const original = (await gmailFetch(
         `/messages/${params.message_id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Message-ID`,
         token,
@@ -280,6 +349,7 @@ async function execute(
       };
     }
 
+    // 建立草稿：儲存為草稿，稍後可在 Gmail 中編輯發送
     case "gmail_draft": {
       const raw = buildRawEmail(
         params.to as string,
@@ -303,6 +373,7 @@ async function execute(
   }
 }
 
+// ── Token 刷新：使用 refresh_token 取得新的 access_token ─
 async function refreshGmailToken(refreshToken: string): Promise<TokenSet> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -327,12 +398,16 @@ async function refreshGmailToken(refreshToken: string): Promise<TokenSet> {
   };
 }
 
+// ── Adapter 匯出 ─────────────────────────────────────────
 export const gmailAdapter: AppAdapter = {
   name: "gmail",
   displayName: { zh: "Gmail", en: "Gmail" },
   icon: "gmail",
   authType: "oauth2",
   authConfig,
+  actionMap,
+  getSkill,
+  formatResponse,
   tools,
   execute,
   refreshToken: refreshGmailToken,

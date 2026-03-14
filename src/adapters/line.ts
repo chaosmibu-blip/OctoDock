@@ -1,3 +1,10 @@
+/**
+ * LINE Messaging API Adapter
+ *
+ * 透過 LINE Messaging API 讓 agent 能傳送訊息、廣播、查詢用戶資料與粉絲統計。
+ * 認證方式：API Key（Channel Access Token），從 LINE Developers Console 取得。
+ * 所有訊息皆為純文字格式。
+ */
 import { z } from "zod";
 import type {
   AppAdapter,
@@ -6,6 +13,9 @@ import type {
   ToolResult,
 } from "./types";
 
+// --- 認證設定 ---
+// LINE 使用 API Key 認證（Channel Access Token），不走 OAuth。
+// 用戶需到 LINE Developers Console 產生 token 並貼入。
 const authConfig: ApiKeyConfig = {
   type: "api_key",
   instructions: {
@@ -17,6 +27,7 @@ const authConfig: ApiKeyConfig = {
 
 const LINE_API = "https://api.line.me/v2";
 
+// --- LINE API 共用 fetch 封裝 ---
 async function lineFetch(
   path: string,
   token: string,
@@ -40,7 +51,57 @@ async function lineFetch(
   return res.json();
 }
 
+// --- do+help 架構：actionMap ---
+// 將簡短動作名稱對應到完整的 MCP 工具名稱，方便 agent 快速呼叫
+const actionMap: Record<string, string> = {
+  send_message: "line_send_message",
+  broadcast: "line_broadcast",
+  get_profile: "line_get_profile",
+  get_followers: "line_get_followers",
+  reply: "line_reply",
+};
+
+// --- do+help 架構：getSkill ---
+// 回傳此 adapter 可用動作的摘要說明，供 agent 理解能力範圍
+function getSkill(): string {
+  return `line actions:
+  send_message(user_id, message) — send text message to user
+  broadcast(message) — broadcast to all followers (use with caution)
+  get_profile(user_id) — get user display name and picture
+  get_followers() — get follower count statistics
+  reply(reply_token, message) — reply using webhook reply token (valid 1 min)
+All messages are text format.`;
+}
+
+// --- do+help 架構：formatResponse ---
+// 將 LINE API 的原始回應轉為人類可讀格式，讓 agent 回覆更友善
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function formatResponse(action: string, rawData: unknown): string {
+  if (typeof rawData !== "object" || rawData === null) return String(rawData);
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // 用戶資料：顯示名稱、頭像、狀態訊息
+    case "get_profile": {
+      return `Name: ${data.displayName}\nPicture: ${data.pictureUrl || "N/A"}\nStatus: ${data.statusMessage || "N/A"}\nUser ID: ${data.userId}`;
+    }
+    // 粉絲統計：追蹤數、可觸及數、封鎖數
+    case "get_followers": {
+      return `Followers: ${data.followers || "N/A"}\nTargeted reaches: ${data.targetedReaches || "N/A"}\nBlocks: ${data.blocks || "N/A"}`;
+    }
+    // 傳送類動作：統一回覆已完成
+    case "send_message":
+    case "broadcast":
+    case "reply":
+      return "Done. Message sent.";
+    default:
+      return JSON.stringify(rawData, null, 2);
+  }
+}
+
+// --- 工具定義 ---
 const tools: ToolDefinition[] = [
+  // 傳送訊息給指定用戶（需要 user_id）
   {
     name: "line_send_message",
     description:
@@ -50,6 +111,7 @@ const tools: ToolDefinition[] = [
       message: z.string().describe("Text message to send"),
     },
   },
+  // 廣播訊息給所有好友（請謹慎使用）
   {
     name: "line_broadcast",
     description:
@@ -58,6 +120,7 @@ const tools: ToolDefinition[] = [
       message: z.string().describe("Text message to broadcast"),
     },
   },
+  // 查詢用戶個人資料（顯示名稱、頭像、狀態訊息）
   {
     name: "line_get_profile",
     description:
@@ -66,12 +129,14 @@ const tools: ToolDefinition[] = [
       user_id: z.string().describe("LINE user ID"),
     },
   },
+  // 取得 bot 的粉絲數與相關統計
   {
     name: "line_get_followers",
     description:
       "Get the number of followers (friends) of the bot and recent follower count changes.",
     inputSchema: {},
   },
+  // 使用 reply token 回覆訊息（token 有效期 1 分鐘）
   {
     name: "line_reply",
     description:
@@ -83,12 +148,14 @@ const tools: ToolDefinition[] = [
   },
 ];
 
+// --- 工具執行邏輯 ---
 async function execute(
   toolName: string,
   params: Record<string, unknown>,
   token: string,
 ): Promise<ToolResult> {
   switch (toolName) {
+    // 推送訊息：使用 push API 傳送文字訊息給指定用戶
     case "line_send_message": {
       const result = await lineFetch("/bot/message/push", token, {
         method: "POST",
@@ -102,6 +169,7 @@ async function execute(
       };
     }
 
+    // 廣播訊息：傳送給所有加入好友的用戶
     case "line_broadcast": {
       const result = await lineFetch("/bot/message/broadcast", token, {
         method: "POST",
@@ -114,6 +182,7 @@ async function execute(
       };
     }
 
+    // 查詢用戶資料：透過 user_id 取得 displayName、pictureUrl 等
     case "line_get_profile": {
       const result = await lineFetch(`/bot/profile/${params.user_id}`, token);
       return {
@@ -121,6 +190,7 @@ async function execute(
       };
     }
 
+    // 粉絲統計：查詢今日的追蹤者數據
     case "line_get_followers": {
       // Get bot info for follower statistics
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -133,6 +203,7 @@ async function execute(
       };
     }
 
+    // 回覆訊息：使用 webhook 提供的 reply token（有效期 1 分鐘）
     case "line_reply": {
       const result = await lineFetch("/bot/message/reply", token, {
         method: "POST",
@@ -162,4 +233,7 @@ export const lineAdapter: AppAdapter = {
   authConfig,
   tools,
   execute,
+  actionMap,
+  getSkill,
+  formatResponse,
 };

@@ -616,6 +616,7 @@ function summarizeSearchResults(results: Array<Record<string, unknown>>): string
  * 將 Notion API 的 raw JSON 轉成 AI 友善的 Markdown
  * 讀出來的格式和寫入的格式一致，AI 可以「讀 → 改 → 寫回」
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 function formatResponse(action: string, rawData: unknown): string {
   if (typeof rawData !== "object" || rawData === null) {
     return String(rawData);

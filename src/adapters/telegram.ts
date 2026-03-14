@@ -17,6 +17,67 @@ const authConfig: BotTokenConfig = {
 
 const TG_API = "https://api.telegram.org";
 
+// ============================================================
+// do + help 架構：actionMap / getSkill / formatResponse
+// agentdock_do 透過 actionMap 找到工具名稱後，交給 execute() 執行
+// ============================================================
+
+/** 簡化 action 名稱 → 內部工具名稱對應表 */
+const actionMap: Record<string, string> = {
+  send_message: "telegram_send_message",
+  send_photo: "telegram_send_photo",
+  get_updates: "telegram_get_updates",
+  set_webhook: "telegram_set_webhook",
+};
+
+/**
+ * 回傳 Telegram Bot 可用操作的精簡說明
+ * agentdock_help 會呼叫此方法，讓 AI 知道有哪些操作可用
+ * 進入對話歷史後，同一個 chat 不需要再問
+ */
+function getSkill(): string {
+  return `telegram actions:
+  send_message(chat_id, text, parse_mode?) — send text message (supports Markdown)
+  send_photo(chat_id, photo, caption?) — send photo from URL
+  get_updates(limit?, offset?) — get recent incoming messages
+  set_webhook(url) — configure webhook URL (HTTPS required)`;
+}
+
+/**
+ * 將 Telegram API 回傳的 raw JSON 轉為 AI 友善的精簡格式
+ * 減少 token 使用量，讓 AI 更容易理解結果
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function formatResponse(action: string, rawData: unknown): string {
+  if (typeof rawData !== "object" || rawData === null) return String(rawData);
+
+  switch (action) {
+    case "send_message":
+    case "send_photo": {
+      const msg = rawData as Record<string, unknown>;
+      const msgId = msg.message_id;
+      return `Done. Message ID: ${msgId}`;
+    }
+    case "get_updates": {
+      if (!Array.isArray(rawData) || rawData.length === 0)
+        return "No new messages.";
+      return rawData
+        .map((u: any) => {
+          const msg = u.message;
+          if (!msg) return `Update ${u.update_id}`;
+          const from = msg.from?.first_name || "Unknown";
+          const text = msg.text || "(non-text message)";
+          return `[${from}] ${text}`;
+        })
+        .join("\n");
+    }
+    case "set_webhook":
+      return "Done. Webhook configured.";
+    default:
+      return JSON.stringify(rawData, null, 2);
+  }
+}
+
 async function tgFetch(
   method: string,
   token: string,
@@ -155,5 +216,8 @@ export const telegramAdapter: AppAdapter = {
   authType: "bot_token",
   authConfig,
   tools,
+  actionMap, // do + help 架構：簡化 action → 內部工具對應
+  getSkill, // do + help 架構：回傳精簡操作說明
+  formatResponse, // do + help 架構：raw JSON → AI 友善格式
   execute,
 };
