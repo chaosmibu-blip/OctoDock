@@ -21,10 +21,22 @@ interface DashboardProps {
 }
 
 const APP_KEYS = [
+  // 筆記 / 文件
   { name: "notion", displayName: "Notion", descKey: "app.notion.desc" },
+  { name: "google_docs", displayName: "Google Docs", descKey: "app.google_docs.desc" },
+  // 信箱
   { name: "gmail", displayName: "Gmail", descKey: "app.gmail.desc" },
+  // 行事曆 / 待辦
+  { name: "google_calendar", displayName: "Google Calendar", descKey: "app.google_calendar.desc" },
+  { name: "google_tasks", displayName: "Google Tasks", descKey: "app.google_tasks.desc" },
+  // 雲端 / 試算表
+  { name: "google_drive", displayName: "Google Drive", descKey: "app.google_drive.desc" },
+  { name: "google_sheets", displayName: "Google Sheets", descKey: "app.google_sheets.desc" },
+  // 社群
   { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
   { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
+  { name: "youtube", displayName: "YouTube", descKey: "app.youtube.desc" },
+  // 通訊
   { name: "line", displayName: "LINE", descKey: "app.line.desc" },
   { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc" },
 ];
