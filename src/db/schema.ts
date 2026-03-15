@@ -235,7 +235,31 @@ export const subscriptions = pgTable(
 );
 
 // ============================================================
-// 4.8 bot_configs (Phase 3+)
+// 4.8 stored_results（回傳壓縮：大回傳暫存區）
+// 超過 3000 字元的操作回傳會被截斷，完整內容存在這裡
+// AI 用 get_stored(ref) 按需取用，24 小時後自動過期
+// ============================================================
+export const storedResults = pgTable(
+  "stored_results",
+  {
+    id: text("id").primaryKey(), // nanoid 12 碼
+    userId: text("user_id").notNull(),
+    appName: text("app_name").notNull(),
+    action: text("action").notNull(),
+    content: text("content").notNull(), // 完整的回傳內容
+    contentLength: integer("content_length").notNull(),
+    summary: text("summary").notNull(), // 摘要（前 N 行 + 後 N 行）
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }), // 過期自動清理
+  },
+  (table) => [
+    index("idx_stored_results_user").on(table.userId),
+    index("idx_stored_results_expires").on(table.expiresAt),
+  ],
+);
+
+// ============================================================
+// 4.9 bot_configs (Phase 3+)
 // ============================================================
 export const botConfigs = pgTable("bot_configs", {
   id: uuid("id").primaryKey().defaultRandom(),

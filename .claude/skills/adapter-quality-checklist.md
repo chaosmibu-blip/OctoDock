@@ -59,6 +59,22 @@ description: 開發或審查 App Adapter 時自動檢查的品質基準線
 
 **自檢**：把 `get_xxx` 的回傳值直接當 `create_xxx` 或 `update_xxx` 的輸入，能不能直接用？
 
+## G4：回傳大小控制 — 自動壓縮，adapter 不用管
+
+**規則**：所有回傳自動經過 `compressIfNeeded()` 處理。超過 3000 字元的回傳會被截斷並存入暫存區（stored_results 表）。
+
+**為什麼**：
+- 一個 700 行原始碼檔案 = 8,000-10,000 tokens，直接塞進 context window 會浪費
+- 壓縮後只佔 ~800 tokens（前 30 行 + 後 10 行摘要 + ref ID）
+- AI 需要特定段落時用 `get_stored(ref, lines:"50-100")` 按需取用
+
+**怎麼做**：
+- **Adapter 開發者不需要手動處理**，這是核心系統層面的通用保護
+- `server.ts` 在 `formatResponse()` 之後自動呼叫 `compressIfNeeded()`
+- 暫存 24 小時後自動過期清理
+
+**自檢**：呼叫一個會回傳大量內容的 action（如 get_file），確認回傳被截斷且附有 ref ID。
+
 ## 快速開發流程
 
 新增一個 App adapter 時：

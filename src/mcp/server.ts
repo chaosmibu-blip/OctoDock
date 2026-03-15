@@ -1,8 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/db";
-import { connectedApps } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { connectedApps, storedResults } from "@/db/schema";
+import { eq, lt } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware } from "./middleware/logger";
 import { learnIdentifier, resolveIdentifier, listMemory } from "@/services/memory-engine";
@@ -51,6 +52,80 @@ export async function createServerForUser(user: User): Promise<McpServer> {
   registerHelpTool(server, user.id, connectedAppNames);
 
   return server;
+}
+
+// ============================================================
+// 回傳壓縮（Level 3）
+// 超過 MAX_RESPONSE_CHARS 的回傳存到 DB，只回傳摘要 + ref ID
+// AI 需要完整內容時用 system.get_stored 按需取用
+// ============================================================
+
+const MAX_RESPONSE_CHARS = 3000; // 約 750 tokens
+const SUMMARY_HEAD_LINES = 30; // 摘要保留前 30 行
+const SUMMARY_TAIL_LINES = 10; // 摘要保留後 10 行
+const EXPIRY_HOURS = 24; // 暫存 24 小時後過期
+
+/**
+ * 如果回傳內容超過上限，存入 DB 並回傳摘要 + 取用指令
+ * 不超過就直接回傳原始內容
+ */
+async function compressIfNeeded(
+  userId: string,
+  appName: string,
+  action: string,
+  formatted: string,
+): Promise<string> {
+  if (formatted.length <= MAX_RESPONSE_CHARS) {
+    return formatted; // 不超過就直接回傳
+  }
+
+  // 產生 reference ID
+  const refId = nanoid(12);
+  const summary = buildSummary(formatted, SUMMARY_HEAD_LINES, SUMMARY_TAIL_LINES);
+
+  // 存到 DB
+  await db.insert(storedResults).values({
+    id: refId,
+    userId,
+    appName,
+    action,
+    content: formatted,
+    contentLength: formatted.length,
+    summary,
+    expiresAt: new Date(Date.now() + EXPIRY_HOURS * 60 * 60 * 1000),
+  });
+
+  // 非同步清理過期資料（不阻塞主流程）
+  cleanExpiredResults().catch(() => {});
+
+  // 回傳摘要 + 取用指令
+  return (
+    summary +
+    `\n\n---\n⚠️ Response truncated (${formatted.length} chars total). Full content stored as ref:${refId}\n` +
+    `To get full content: octodock_do(app:"system", action:"get_stored", params:{ref:"${refId}"})\n` +
+    `To get specific lines: octodock_do(app:"system", action:"get_stored", params:{ref:"${refId}", lines:"50-100"})`
+  );
+}
+
+/**
+ * 從完整文字中擷取摘要：保留前 N 行 + 後 N 行，中間標示省略行數
+ */
+function buildSummary(text: string, headLines: number, tailLines: number): string {
+  const lines = text.split("\n");
+  if (lines.length <= headLines + tailLines) return text;
+
+  const head = lines.slice(0, headLines).join("\n");
+  const tail = lines.slice(-tailLines).join("\n");
+  const omitted = lines.length - headLines - tailLines;
+
+  return head + `\n\n... (${omitted} lines omitted) ...\n\n` + tail;
+}
+
+/**
+ * 清理過期的暫存回傳結果
+ */
+async function cleanExpiredResults(): Promise<void> {
+  await db.delete(storedResults).where(lt(storedResults.expiresAt, new Date()));
 }
 
 // ============================================================
@@ -204,6 +279,12 @@ function registerDoTool(
           }
         } catch {
           // 偵測失敗不影響主流程
+        }
+
+        // ── 回傳壓縮（Level 3）──
+        // 超過上限的回傳存 DB，只回傳摘要 + ref ID
+        if (result.data && typeof result.data === "string") {
+          result.data = await compressIfNeeded(userId, app, action, result.data);
         }
       }
 
