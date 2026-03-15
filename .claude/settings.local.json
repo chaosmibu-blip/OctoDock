@@ -32,7 +32,9 @@
       "Bash(find /home/runner/workspace -type d -name *截圖*)",
       "Read(//home/runner/**)",
       "Bash(find / -type d -name *截圖*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:octo-dock.com)"
     ]
   }
 }
