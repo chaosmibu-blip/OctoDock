@@ -3,8 +3,8 @@ import { execSync } from "child_process";
 
 // Build time 注入 Git SHA 和時間戳，讓 octodock_help 可以顯示版本
 const gitSha = (() => {
-  try { return execSync("git rev-parse --short HEAD").toString().trim(); }
-  catch { return "unknown"; }
+  try { return execSync("git rev-parse --short HEAD", { stdio: ["pipe", "pipe", "pipe"] }).toString().trim(); }
+  catch { return process.env.REPL_SLUG ? "deployed" : "unknown"; }
 })();
 
 const nextConfig: NextConfig = {
