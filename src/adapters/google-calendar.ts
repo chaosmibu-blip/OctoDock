@@ -347,8 +347,9 @@ function formatResponse(action: string, rawData: unknown): string {
         } else {
           lines.push(`- **${calId}**: ${busySlots.length} busy slot(s)`);
           for (const slot of busySlots) {
-            const start = new Date(slot.start).toLocaleString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: (data as any).timeZone ?? "Asia/Taipei" });
-            const end = new Date(slot.end).toLocaleString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: (data as any).timeZone ?? "Asia/Taipei" });
+            const freebusyTz = (data as Record<string, unknown>).timeZone as string | undefined ?? "Asia/Taipei";
+            const start = new Date(slot.start).toLocaleString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: freebusyTz });
+            const end = new Date(slot.end).toLocaleString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: freebusyTz });
             lines.push(`  - ${start} ~ ${end}`);
           }
         }
