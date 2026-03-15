@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { users, connectedApps } from "@/db/schema";
@@ -27,10 +26,9 @@ export default async function DashboardPage() {
     .from(connectedApps)
     .where(eq(connectedApps.userId, session.user.id));
 
-  const headersList = await headers();
-  const host = headersList.get("host") ?? "localhost:3000";
-  const protocol = headersList.get("x-forwarded-proto") ?? "http";
-  const origin = `${protocol}://${host}`;
+  // MCP URL 固定使用正式域名，不從 request header 取
+  // 確保用戶複製的 URL 永遠是 octo-dock.com，不會是 replit.app
+  const origin = process.env.NEXTAUTH_URL ?? "https://octo-dock.com";
 
   return (
     <DashboardClient
