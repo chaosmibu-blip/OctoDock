@@ -124,3 +124,43 @@ export async function checkPlanLimit(
       return { allowed: true, plan };
   }
 }
+
+/**
+ * 檢查每日操作次數是否超過方案限制
+ */
+export async function checkDailyOperationLimit(
+  userId: string,
+): Promise<{ allowed: boolean; reason?: string; remaining?: number }> {
+  const { plan, limits } = await getUserLimits(userId);
+
+  // 查詢今日操作次數
+  const { db } = await import("@/db");
+  const { operations } = await import("@/db/schema");
+  const { eq, and, gte, sql } = await import("drizzle-orm");
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const result = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(operations)
+    .where(
+      and(
+        eq(operations.userId, userId),
+        gte(operations.createdAt, today),
+      ),
+    );
+
+  const todayCount = result[0]?.count ?? 0;
+  const remaining = limits.maxOperationsPerDay - todayCount;
+
+  if (remaining <= 0) {
+    return {
+      allowed: false,
+      reason: `Daily operation limit reached (${limits.maxOperationsPerDay}/day on ${plan} plan). Upgrade for more.`,
+      remaining: 0,
+    };
+  }
+
+  return { allowed: true, remaining };
+}

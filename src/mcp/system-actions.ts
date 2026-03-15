@@ -39,6 +39,8 @@ export const systemActionMap: Record<string, string> = {
   import_memory: "system_import_memory",
   // 工具搜尋
   find_tool: "system_find_tool",
+  // 通用 HTTP 請求（混合模式）
+  http_request: "system_http_request",
   // 排程引擎（Phase 5）
   schedule_list: "system_schedule_list",
   schedule_create: "system_schedule_create",
@@ -70,6 +72,7 @@ export function getSystemSkill(): string {
   schedule_toggle(schedule_id, is_active) — enable/disable schedule
   schedule_delete(schedule_id) — delete schedule
   find_tool(task) — find the right app and action for a task (e.g. "send an email", "create a note")
+  http_request(url, method?, headers?, body?) — make a generic HTTP request to any API (requires user's connected app token)
 SOPs and schedules persist across agents and sessions.`;
 }
 
@@ -340,6 +343,57 @@ export async function executeSystemAction(
     // 排程引擎（Phase 5）
     // 讓用戶設定定時任務，OctoDock 在時間到時自動執行
     // ============================================================
+
+    // ── 通用 HTTP 請求（混合模式）──
+    // 讓 AI 可以呼叫未預定義的 API endpoint
+    // 用於長尾需求：核心功能用預定義 action，邊緣功能用 http_request
+    case "http_request": {
+      const url = params.url as string;
+      const method = (params.method as string) || "GET";
+      const headers = (params.headers as Record<string, string>) || {};
+      const body = params.body as string | undefined;
+
+      // 安全檢查：只允許 HTTPS
+      if (!url.startsWith("https://")) {
+        return { ok: false, error: "Only HTTPS URLs are allowed for security." };
+      }
+
+      // 安全檢查：阻擋已知危險的 URL 模式
+      const blocked = ["localhost", "127.0.0.1", "0.0.0.0", "169.254", "10.", "192.168"];
+      if (blocked.some((b) => url.includes(b))) {
+        return { ok: false, error: "Internal/private URLs are not allowed." };
+      }
+
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json", ...headers },
+          body: method !== "GET" && body ? body : undefined,
+        });
+
+        const contentType = res.headers.get("content-type") || "";
+        let data: string;
+        if (contentType.includes("json")) {
+          const json = await res.json();
+          data = JSON.stringify(json, null, 2);
+        } else {
+          data = await res.text();
+        }
+
+        // 截斷過長的回傳
+        if (data.length > 5000) {
+          data = data.substring(0, 5000) + "\n\n... (truncated, total " + data.length + " chars)";
+        }
+
+        return {
+          ok: res.ok,
+          data: res.ok ? data : undefined,
+          error: res.ok ? undefined : `HTTP ${res.status}: ${data.substring(0, 200)}`,
+        };
+      } catch (err) {
+        return { ok: false, error: `Request failed: ${err instanceof Error ? err.message : "Unknown error"}` };
+      }
+    }
 
     // ── 排程列表 ──
     case "schedule_list": {

@@ -284,12 +284,26 @@ function registerHelpTool(
 
         text += `\n\nUse \`octodock_help(app: "app_name")\` to see actions for a specific app.`;
 
-        // ── Onboarding：新用戶記憶導入提示 ──
-        // 偵測用戶記憶是否為空，是的話提示 AI 問用戶是否要導入記憶
+        // ── 用戶記憶：自動帶入或 onboarding ──
         try {
           const allMemories = await listMemory(userId);
-          if (allMemories.length === 0) {
-            text += `\n\n---\n\n🐙 **Welcome to OctoDock!** This is your first time here — no memories stored yet.\n\nOctoDock remembers user preferences across all AI platforms (Claude, ChatGPT, Gemini, etc.).\n\nPlease ask the user:\n> 「OctoDock 可以跨平台記住你的偏好和習慣。要不要讓我把目前對你的了解告訴 OctoDock？這樣不管你用哪個 AI 都會記得你。」\n\nIf the user agrees, gather what you know about them and call:\n\`\`\`\noctodock_do(app: "system", action: "import_memory", params: {\n  memories: [\n    {key: "writing_style", value: "casual, uses emoji", category: "preference"},\n    {key: "language", value: "Traditional Chinese", category: "preference"},\n    {key: "work_pattern", value: "reviews weekly reports on Fridays", category: "pattern"},\n    // ... add what you know about this user\n  ]\n})\n\`\`\``;
+          if (allMemories.length > 0) {
+            // 有記憶 → 自動帶入用戶摘要，AI 立刻知道用戶是誰
+            const prefs = allMemories.filter((m) => m.category === "preference").slice(0, 5);
+            const patterns = allMemories.filter((m) => m.category === "pattern").slice(0, 3);
+            const sections: string[] = [];
+            if (prefs.length > 0) {
+              sections.push("### Preferences\n" + prefs.map((m) => `- ${m.key}: ${m.value}`).join("\n"));
+            }
+            if (patterns.length > 0) {
+              sections.push("### Patterns\n" + patterns.map((m) => `- ${m.key}: ${m.value}`).join("\n"));
+            }
+            if (sections.length > 0) {
+              text += `\n\n## About This User\n\n${sections.join("\n\n")}`;
+            }
+          } else {
+            // 沒記憶 → onboarding：提示 AI 問用戶是否要導入記憶
+            text += `\n\n---\n\n🐙 **Welcome to OctoDock!** No memories stored yet.\n\nPlease ask the user:\n> 「OctoDock 可以跨平台記住你的偏好和習慣。要不要讓我把目前對你的了解告訴 OctoDock？」\n\nIf they agree, call:\n\`\`\`\noctodock_do(app: "system", action: "import_memory", params: {\n  memories: [\n    {key: "writing_style", value: "...", category: "preference"},\n    {key: "work_pattern", value: "...", category: "pattern"}\n  ]\n})\n\`\`\``;
           }
         } catch {
           // 記憶查詢失敗不影響主流程
