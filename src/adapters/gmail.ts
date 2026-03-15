@@ -87,23 +87,52 @@ function buildRawEmail(
 }
 
 // ── 輔助函式：從郵件結構中提取純文字內容 ──────────────────
+// 優先取 text/plain，fallback 到 text/html（去除 HTML 標籤）
 function extractText(payload: Record<string, unknown>): string {
+  // 先嘗試找 text/plain
+  const plain = extractByMimeType(payload, "text/plain");
+  if (plain) return plain;
+  // Fallback：取 text/html 並去除 HTML 標籤
+  const html = extractByMimeType(payload, "text/html");
+  if (html) return stripHtml(html);
+  return "";
+}
+
+/** 按 MIME type 遞迴搜尋並解碼郵件內容 */
+function extractByMimeType(payload: Record<string, unknown>, mimeType: string): string {
   if (
-    (payload as { mimeType?: string }).mimeType === "text/plain" &&
+    (payload as { mimeType?: string }).mimeType === mimeType &&
     (payload as { body?: { data?: string } }).body?.data
   ) {
-    return decodeBody(
-      (payload as { body: { data: string } }).body.data,
-    );
+    return decodeBody((payload as { body: { data: string } }).body.data);
   }
   const parts = (payload as { parts?: Array<Record<string, unknown>> }).parts;
   if (parts) {
     for (const part of parts) {
-      const text = extractText(part);
+      const text = extractByMimeType(part, mimeType);
       if (text) return text;
     }
   }
   return "";
+}
+
+/** 簡易 HTML → 純文字轉換（去標籤、保留結構） */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 // ── 輔助函式：提取附件資訊（名稱、大小、ID）──────────────

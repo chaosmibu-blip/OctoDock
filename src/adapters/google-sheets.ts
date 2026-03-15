@@ -74,27 +74,27 @@ octodock_do(app:"google_sheets", action:"create", params:{title:"Sales Report 20
   get: `## google_sheets.get
 Get spreadsheet metadata (sheet names, titles, sheet count).
 ### Parameters
-  spreadsheetId: Spreadsheet ID (from URL or create result)
+  spreadsheet_id: Spreadsheet ID (from URL or create result)
 ### Example
-octodock_do(app:"google_sheets", action:"get", params:{spreadsheetId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"})`,
+octodock_do(app:"google_sheets", action:"get", params:{spreadsheet_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"})`,
 
   read: `## google_sheets.read
 Read cell values from a range.
 ### Parameters
-  spreadsheetId: Spreadsheet ID
+  spreadsheet_id: Spreadsheet ID
   range: A1 notation range (e.g. "Sheet1!A1:D10", "Sheet1!A:A")
 ### Example
-octodock_do(app:"google_sheets", action:"read", params:{spreadsheetId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", range:"Sheet1!A1:D10"})`,
+octodock_do(app:"google_sheets", action:"read", params:{spreadsheet_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", range:"Sheet1!A1:D10"})`,
 
   write: `## google_sheets.write
 Write cell values to a range (overwrites existing data).
 ### Parameters
-  spreadsheetId: Spreadsheet ID
+  spreadsheet_id: Spreadsheet ID
   range: A1 notation range (e.g. "Sheet1!A1:C3")
   values: 2D array of values (rows × columns)
 ### Example
 octodock_do(app:"google_sheets", action:"write", params:{
-  spreadsheetId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms",
+  spreadsheet_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms",
   range:"Sheet1!A1:C2",
   values:[["Name","Age","City"],["Alice",30,"Taipei"]]
 })`,
@@ -102,12 +102,12 @@ octodock_do(app:"google_sheets", action:"write", params:{
   append: `## google_sheets.append
 Append rows after existing data in a range.
 ### Parameters
-  spreadsheetId: Spreadsheet ID
+  spreadsheet_id: Spreadsheet ID
   range: A1 notation range to append after (e.g. "Sheet1!A:C")
   values: 2D array of rows to append
 ### Example
 octodock_do(app:"google_sheets", action:"append", params:{
-  spreadsheetId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms",
+  spreadsheet_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms",
   range:"Sheet1!A:C",
   values:[["Bob",25,"Kaohsiung"],["Carol",28,"Taichung"]]
 })`,
@@ -115,10 +115,10 @@ octodock_do(app:"google_sheets", action:"append", params:{
   clear: `## google_sheets.clear
 Clear cell values in a range (keeps formatting).
 ### Parameters
-  spreadsheetId: Spreadsheet ID
+  spreadsheet_id: Spreadsheet ID
   range: A1 notation range to clear (e.g. "Sheet1!A1:D10")
 ### Example
-octodock_do(app:"google_sheets", action:"clear", params:{spreadsheetId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", range:"Sheet1!A1:D10"})`,
+octodock_do(app:"google_sheets", action:"clear", params:{spreadsheet_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", range:"Sheet1!A1:D10"})`,
 
   add_sheet: `## google_sheets.add_sheet
 Add a new sheet (tab) to a spreadsheet.
@@ -162,11 +162,11 @@ function getSkill(action?: string): string {
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   return `google_sheets actions (${Object.keys(actionMap).length}):
   create(title) — create new spreadsheet
-  get(spreadsheetId) — get spreadsheet metadata (sheet names)
-  read(spreadsheetId, range) — read cell values (returns markdown table)
-  write(spreadsheetId, range, values) — write cell values (2D array)
-  append(spreadsheetId, range, values) — append rows after existing data
-  clear(spreadsheetId, range) — clear cell values
+  get(spreadsheet_id) — get spreadsheet metadata (sheet names)
+  read(spreadsheet_id, range) — read cell values (returns markdown table)
+  write(spreadsheet_id, range, values) — write cell values (2D array)
+  append(spreadsheet_id, range, values) — append rows after existing data
+  clear(spreadsheet_id, range) — clear cell values
   add_sheet(spreadsheet_id, title) — add new sheet tab
   delete_sheet(spreadsheet_id, sheet_id) — delete sheet tab
   rename_sheet(spreadsheet_id, sheet_id, new_title) — rename sheet tab
@@ -324,7 +324,7 @@ const tools: ToolDefinition[] = [
     description:
       "Get spreadsheet metadata including sheet names, titles, and sheet count. Does not return cell data.",
     inputSchema: {
-      spreadsheetId: z.string().describe("Google Spreadsheet ID"),
+      spreadsheet_id: z.string().describe("Google Spreadsheet ID"),
     },
   },
   {
@@ -332,7 +332,7 @@ const tools: ToolDefinition[] = [
     description:
       "Read cell values from a specified range in a spreadsheet. Use A1 notation (e.g. 'Sheet1!A1:D10').",
     inputSchema: {
-      spreadsheetId: z.string().describe("Google Spreadsheet ID"),
+      spreadsheet_id: z.string().describe("Google Spreadsheet ID"),
       range: z.string().describe("A1 notation range (e.g. 'Sheet1!A1:D10')"),
     },
   },
@@ -341,7 +341,7 @@ const tools: ToolDefinition[] = [
     description:
       "Write cell values to a specified range in a spreadsheet. Overwrites existing data in the range.",
     inputSchema: {
-      spreadsheetId: z.string().describe("Google Spreadsheet ID"),
+      spreadsheet_id: z.string().describe("Google Spreadsheet ID"),
       range: z.string().describe("A1 notation range (e.g. 'Sheet1!A1:C3')"),
       values: z
         .array(z.array(z.unknown()))
@@ -353,7 +353,7 @@ const tools: ToolDefinition[] = [
     description:
       "Append rows of data after the last row with data in a range. Does not overwrite existing data.",
     inputSchema: {
-      spreadsheetId: z.string().describe("Google Spreadsheet ID"),
+      spreadsheet_id: z.string().describe("Google Spreadsheet ID"),
       range: z.string().describe("A1 notation range to append after (e.g. 'Sheet1!A:C')"),
       values: z
         .array(z.array(z.unknown()))
@@ -365,7 +365,7 @@ const tools: ToolDefinition[] = [
     description:
       "Clear all cell values in a specified range. Keeps cell formatting intact.",
     inputSchema: {
-      spreadsheetId: z.string().describe("Google Spreadsheet ID"),
+      spreadsheet_id: z.string().describe("Google Spreadsheet ID"),
       range: z.string().describe("A1 notation range to clear (e.g. 'Sheet1!A1:D10')"),
     },
   },
@@ -434,7 +434,7 @@ async function execute(
 
     // 取得試算表資訊（工作表名稱、標題等）
     case "gsheets_get": {
-      const spreadsheetId = params.spreadsheetId as string;
+      const spreadsheetId = (params.spreadsheet_id ?? params.spreadsheetId) as string;
       const result = await sheetsFetch(
         `/${spreadsheetId}?fields=spreadsheetId,properties.title,sheets.properties`,
         token,
@@ -446,7 +446,7 @@ async function execute(
 
     // 讀取儲存格資料
     case "gsheets_read": {
-      const spreadsheetId = params.spreadsheetId as string;
+      const spreadsheetId = (params.spreadsheet_id ?? params.spreadsheetId) as string;
       const range = encodeURIComponent(params.range as string);
       const result = await sheetsFetch(
         `/${spreadsheetId}/values/${range}`,
@@ -459,7 +459,7 @@ async function execute(
 
     // 寫入儲存格資料（覆蓋）
     case "gsheets_write": {
-      const spreadsheetId = params.spreadsheetId as string;
+      const spreadsheetId = (params.spreadsheet_id ?? params.spreadsheetId) as string;
       const range = encodeURIComponent(params.range as string);
       const result = await sheetsFetch(
         `/${spreadsheetId}/values/${range}?valueInputOption=USER_ENTERED`,
@@ -480,7 +480,7 @@ async function execute(
 
     // 追加列資料（在現有資料之後）
     case "gsheets_append": {
-      const spreadsheetId = params.spreadsheetId as string;
+      const spreadsheetId = (params.spreadsheet_id ?? params.spreadsheetId) as string;
       const range = encodeURIComponent(params.range as string);
       const result = await sheetsFetch(
         `/${spreadsheetId}/values/${range}:append?valueInputOption=USER_ENTERED`,
@@ -501,7 +501,7 @@ async function execute(
 
     // 清除儲存格資料（保留格式）
     case "gsheets_clear": {
-      const spreadsheetId = params.spreadsheetId as string;
+      const spreadsheetId = (params.spreadsheet_id ?? params.spreadsheetId) as string;
       const range = encodeURIComponent(params.range as string);
       const result = await sheetsFetch(
         `/${spreadsheetId}/values/${range}:clear`,

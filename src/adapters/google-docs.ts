@@ -71,36 +71,36 @@ octodock_do(app:"google_docs", action:"create", params:{title:"Meeting Notes 202
   get: `## google_docs.get
 Get document content as plain text.
 ### Parameters
-  documentId: Google Document ID (from URL or create result)
+  document_id: Google Document ID (from URL or create result)
 ### Example
-octodock_do(app:"google_docs", action:"get", params:{documentId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"})`,
+octodock_do(app:"google_docs", action:"get", params:{document_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"})`,
 
   insert_text: `## google_docs.insert_text
 Insert text at a specific position (index) in the document.
 ### Parameters
-  documentId: Google Document ID
+  document_id: Google Document ID
   text: Text to insert
   index: Position index (1 = beginning of document)
 ### Example
-octodock_do(app:"google_docs", action:"insert_text", params:{documentId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", text:"Hello World\\n", index:1})`,
+octodock_do(app:"google_docs", action:"insert_text", params:{document_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", text:"Hello World\\n", index:1})`,
 
   replace_text: `## google_docs.replace_text
 Find and replace all occurrences of text in the document.
 ### Parameters
-  documentId: Google Document ID
+  document_id: Google Document ID
   findText: Text to find
   replaceText: Text to replace with
   matchCase: Whether to match case (default: true)
 ### Example
-octodock_do(app:"google_docs", action:"replace_text", params:{documentId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", findText:"draft", replaceText:"final", matchCase:true})`,
+octodock_do(app:"google_docs", action:"replace_text", params:{document_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", findText:"draft", replaceText:"final", matchCase:true})`,
 
   append_text: `## google_docs.append_text
 Append text at the end of the document.
 ### Parameters
-  documentId: Google Document ID
+  document_id: Google Document ID
   text: Text to append
 ### Example
-octodock_do(app:"google_docs", action:"append_text", params:{documentId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", text:"\\nAppended paragraph."})`,
+octodock_do(app:"google_docs", action:"append_text", params:{document_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", text:"\\nAppended paragraph."})`,
 
   delete_text: `## google_docs.delete_text
 Delete text in a range specified by start and end index.
@@ -127,10 +127,10 @@ function getSkill(action?: string): string {
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   return `google_docs actions (${Object.keys(actionMap).length}):
   create(title) — create new document
-  get(documentId) — get document content as plain text
-  insert_text(documentId, text, index) — insert text at position
-  replace_text(documentId, findText, replaceText, matchCase) — find and replace text
-  append_text(documentId, text) — append text at end of document
+  get(document_id) — get document content as plain text
+  insert_text(document_id, text, index) — insert text at position
+  replace_text(document_id, findText, replaceText, matchCase) — find and replace text
+  append_text(document_id, text) — append text at end of document
   delete_text(document_id, start_index, end_index) — delete text in range
   insert_table(document_id, rows, columns, index) — insert table at position
 Use octodock_help(app:"google_docs", action:"ACTION") for detailed params + example.`;
@@ -237,7 +237,7 @@ const tools: ToolDefinition[] = [
     description:
       "Get document content as plain text. Extracts all text from the document body.",
     inputSchema: {
-      documentId: z.string().describe("Google Document ID"),
+      document_id: z.string().describe("Google Document ID"),
     },
   },
   {
@@ -245,7 +245,7 @@ const tools: ToolDefinition[] = [
     description:
       "Insert text at a specific position in the document. Use index 1 for the beginning.",
     inputSchema: {
-      documentId: z.string().describe("Google Document ID"),
+      document_id: z.string().describe("Google Document ID"),
       text: z.string().describe("Text to insert"),
       index: z.number().describe("Position index (1 = beginning of document)"),
     },
@@ -255,7 +255,7 @@ const tools: ToolDefinition[] = [
     description:
       "Find and replace all occurrences of text in the document.",
     inputSchema: {
-      documentId: z.string().describe("Google Document ID"),
+      document_id: z.string().describe("Google Document ID"),
       findText: z.string().describe("Text to find"),
       replaceText: z.string().describe("Text to replace with"),
       matchCase: z.boolean().optional().default(true).describe("Whether to match case (default: true)"),
@@ -266,7 +266,7 @@ const tools: ToolDefinition[] = [
     description:
       "Append text at the end of the document.",
     inputSchema: {
-      documentId: z.string().describe("Google Document ID"),
+      document_id: z.string().describe("Google Document ID"),
       text: z.string().describe("Text to append"),
     },
   },
@@ -331,7 +331,7 @@ async function execute(
 
     // 取得文件內容
     case "gdocs_get": {
-      const documentId = params.documentId as string;
+      const documentId = (params.document_id ?? params.documentId) as string;
       const result = await docsFetch(`/${documentId}`, token);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -340,7 +340,7 @@ async function execute(
 
     // 在指定位置插入文字
     case "gdocs_insert_text": {
-      const documentId = params.documentId as string;
+      const documentId = (params.document_id ?? params.documentId) as string;
       const text = params.text as string;
       const index = params.index as number;
       const result = await docsFetch(`/${documentId}:batchUpdate`, token, {
@@ -363,7 +363,7 @@ async function execute(
 
     // 全文尋找與取代
     case "gdocs_replace_text": {
-      const documentId = params.documentId as string;
+      const documentId = (params.document_id ?? params.documentId) as string;
       const findText = params.findText as string;
       const replaceText = params.replaceText as string;
       const matchCase = (params.matchCase as boolean) ?? true;
@@ -390,7 +390,7 @@ async function execute(
 
     // 在文件末尾追加文字
     case "gdocs_append_text": {
-      const documentId = params.documentId as string;
+      const documentId = (params.document_id ?? params.documentId) as string;
       const text = params.text as string;
       // 先取得文件末尾的 index
       const endIndex = await getDocumentEndIndex(documentId, token);

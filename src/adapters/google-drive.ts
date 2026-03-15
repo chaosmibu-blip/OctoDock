@@ -387,6 +387,10 @@ function formatError(action: string, errorMessage: string): string | null {
   if (errorMessage.includes("notFound") && action === "share") {
     return `「檔案不存在或無權分享 (SHARE_NOT_FOUND)」— 請確認您是檔案擁有者或有管理者權限。`;
   }
+  // Drive search 用自然語言會失敗，需要提示正確語法
+  if (errorMessage.includes("Invalid Value") || errorMessage.includes("invalid_query") || errorMessage.includes("400")) {
+    return `「查詢格式錯誤 (GDRIVE_INVALID_QUERY)」— Google Drive 需要使用 query 語法，不支援自然語言搜尋。\n範例：\n- name contains '報告'\n- mimeType='application/pdf'\n- modifiedTime > '2026-01-01'\n- name contains 'meeting' and mimeType='application/vnd.google-apps.document'`;
+  }
   return null;
 }
 

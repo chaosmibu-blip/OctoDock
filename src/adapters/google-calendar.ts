@@ -73,13 +73,16 @@ function formatEventTime(event: Record<string, unknown>): string {
   if (start.dateTime) {
     const startDate = new Date(start.dateTime);
     const endDate = end?.dateTime ? new Date(end.dateTime) : null;
+    // 從事件的 start.timeZone 提取時區，用於 toLocaleString 顯示正確時間
+    const startObj = event.start as Record<string, unknown> | undefined;
+    const tz = (startObj?.timeZone as string | undefined) ?? "Asia/Taipei";
     const startStr = startDate.toLocaleString("zh-TW", {
       year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", hour12: false,
+      hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz,
     });
     if (endDate) {
       const endStr = endDate.toLocaleString("zh-TW", {
-        hour: "2-digit", minute: "2-digit", hour12: false,
+        hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz,
       });
       return `${startStr} ~ ${endStr}`;
     }
@@ -344,8 +347,8 @@ function formatResponse(action: string, rawData: unknown): string {
         } else {
           lines.push(`- **${calId}**: ${busySlots.length} busy slot(s)`);
           for (const slot of busySlots) {
-            const start = new Date(slot.start).toLocaleString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false });
-            const end = new Date(slot.end).toLocaleString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false });
+            const start = new Date(slot.start).toLocaleString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: (data as any).timeZone ?? "Asia/Taipei" });
+            const end = new Date(slot.end).toLocaleString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: (data as any).timeZone ?? "Asia/Taipei" });
             lines.push(`  - ${start} ~ ${end}`);
           }
         }
