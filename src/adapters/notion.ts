@@ -74,6 +74,7 @@ const actionMap: Record<string, string> = {
   update_page: "notion_update_page",
   replace_content: "notion_replace_content", // G2: 全文替換頁面內容
   append_content: "notion_append_content", // 尾部追加 Markdown 內容
+  move_page: "notion_move_page",
   delete_page: "notion_delete_page",
   get_page_property: "notion_get_page_property",
   // 區塊操作
@@ -216,6 +217,17 @@ octodock_do(app:"notion", action:"append_content", params:{
   content:"## 新增章節\\n- 追加的內容\\n- 不會覆蓋原有內容"
 })`,
 
+  move_page: `## notion.move_page
+Move a page to a different parent page.
+### Parameters
+  page_id: Page ID to move
+  new_parent_id: Target parent page ID
+### Example
+octodock_do(app:"notion", action:"move_page", params:{
+  page_id:"317a9617-...",
+  new_parent_id:"322a9617-..."
+})`,
+
   get_users: `## notion.get_users
 List all workspace members.
 ### Parameters
@@ -233,13 +245,14 @@ function getSkill(action?: string): string {
   if (action) {
     return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   }
-  // app 級別：全部 20 個 action
-  return `notion actions (20):
+  // app 級別：全部 21 個 action
+  return `notion actions (21):
   search(query, filter?) — search pages/databases
   create_page(title, content?, folder?) — create page (markdown)
   get_page(page) — get page content (returns markdown)
   replace_content(page_id, content) — replace page body (markdown)
   append_content(page_id, content) — append to end of page (markdown, no overwrite)
+  move_page(page_id, new_parent_id) — move page to different parent
   update_page(page_id, properties?, icon?, cover?) — update properties
   delete_page(page_id) — archive page
   get_page_property(page_id, property_id) — get specific property value
@@ -344,6 +357,15 @@ const tools: ToolDefinition[] = [
     inputSchema: {
       page_id: z.string().describe("Notion page ID"),
       content: z.string().describe("Markdown content to append"),
+    },
+  },
+  {
+    name: "notion_move_page",
+    description:
+      "Move a page to a different parent page in the workspace.",
+    inputSchema: {
+      page_id: z.string().describe("Page ID to move"),
+      new_parent_id: z.string().describe("New parent page ID"),
     },
   },
   {
@@ -543,6 +565,31 @@ function markdownToBlocks(
         type: "heading_1",
         heading_1: {
           rich_text: [{ type: "text", text: { content: line.slice(2) } }],
+        },
+      };
+    }
+    // 引用區塊（> ）
+    if (line.startsWith("> ")) {
+      return {
+        object: "block",
+        type: "quote",
+        quote: {
+          rich_text: [{ type: "text", text: { content: line.slice(2) } }],
+        },
+      };
+    }
+    // 表格行（| ... |）
+    if (line.startsWith("|") && line.endsWith("|")) {
+      const cells = line.split("|").filter(c => c.trim()).map(c => c.trim());
+      if (cells.some(c => /^[-:]+$/.test(c))) {
+        // This is a separator line, skip it
+        return { object: "block", type: "paragraph", paragraph: { rich_text: [] } };
+      }
+      return {
+        object: "block",
+        type: "paragraph",
+        paragraph: {
+          rich_text: [{ type: "text", text: { content: cells.join(" | ") } }],
         },
       };
     }
@@ -841,6 +888,11 @@ function formatResponse(action: string, rawData: unknown): string {
       return url ? `Done. ${url}` : `Done. ID: ${id}`;
     }
 
+    case "move_page": {
+      const url = data.url as string | undefined;
+      return url ? `Done. Moved to ${url}` : `Done. Page moved.`;
+    }
+
     // ── 區塊內容：轉 Markdown ──
     case "get_block": {
       // 單一 block 轉 Markdown
@@ -1044,6 +1096,19 @@ async function execute(
       const page = await notionFetch(`/pages/${pageId}`, token);
       return {
         content: [{ type: "text", text: JSON.stringify(page, null, 2) }],
+      };
+    }
+
+    // ── 移動頁面到不同父頁面 ──
+    case "notion_move_page": {
+      const result = await notionFetch(`/pages/${params.page_id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({
+          parent: { page_id: params.new_parent_id },
+        }),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     }
 

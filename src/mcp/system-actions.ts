@@ -37,6 +37,8 @@ export const systemActionMap: Record<string, string> = {
   note: "system_note",
   // 記憶導入（onboarding：AI 把對用戶的認知傳給 OctoDock）
   import_memory: "system_import_memory",
+  // 工具搜尋
+  find_tool: "system_find_tool",
   // 排程引擎（Phase 5）
   schedule_list: "system_schedule_list",
   schedule_create: "system_schedule_create",
@@ -67,6 +69,7 @@ export function getSystemSkill(): string {
     cron: standard 5-field cron expression (min hour day month weekday)
   schedule_toggle(schedule_id, is_active) — enable/disable schedule
   schedule_delete(schedule_id) — delete schedule
+  find_tool(task) — find the right app and action for a task (e.g. "send an email", "create a note")
 SOPs and schedules persist across agents and sessions.`;
 }
 
@@ -250,6 +253,87 @@ export async function executeSystemAction(
       const timestamp = new Date().toISOString().substring(0, 16);
       await storeMemory(userId, `note:${timestamp}`, text, "context");
       return { ok: true, data: "Note saved." };
+    }
+
+    // ── 工具搜尋（語意搜尋）：不用知道 App 名稱就能找到工具 ──
+    case "find_tool": {
+      const task = (params.task as string).toLowerCase();
+
+      // 從所有已載入的 adapter 中搜尋匹配的 action
+      const { getAllAdapters } = await import("@/mcp/registry");
+      const allAdapters = getAllAdapters();
+      const matches: Array<{ app: string; action: string; description: string; score: number }> = [];
+
+      for (const adapter of allAdapters) {
+        for (const tool of adapter.tools) {
+          const desc = tool.description.toLowerCase();
+          const name = tool.name.toLowerCase();
+
+          // 簡單的關鍵字匹配計分
+          let score = 0;
+          const words = task.split(/\s+/);
+          for (const word of words) {
+            if (word.length < 2) continue;
+            if (desc.includes(word)) score += 2;
+            if (name.includes(word)) score += 3;
+          }
+
+          // 常見意圖對應
+          const intentMap: Record<string, string[]> = {
+            "email": ["gmail"],
+            "信": ["gmail"],
+            "郵件": ["gmail"],
+            "行程": ["calendar", "event"],
+            "會議": ["calendar", "event"],
+            "日曆": ["calendar"],
+            "檔案": ["drive", "file"],
+            "文件": ["docs", "drive", "notion"],
+            "筆記": ["notion", "docs"],
+            "頁面": ["notion", "page"],
+            "試算表": ["sheets", "spreadsheet"],
+            "表格": ["sheets", "spreadsheet"],
+            "待辦": ["tasks", "todo"],
+            "任務": ["tasks", "todo"],
+            "影片": ["youtube", "video"],
+            "訊息": ["line", "telegram", "message"],
+            "貼文": ["threads", "instagram", "publish"],
+            "程式碼": ["github", "code"],
+            "issue": ["github"],
+            "pr": ["github", "pull"],
+          };
+
+          for (const [keyword, targets] of Object.entries(intentMap)) {
+            if (task.includes(keyword)) {
+              for (const target of targets) {
+                if (name.includes(target) || desc.includes(target)) {
+                  score += 5;
+                }
+              }
+            }
+          }
+
+          if (score > 0) {
+            // 找到 simplified action name
+            const actionName = adapter.actionMap
+              ? Object.entries(adapter.actionMap).find(([_, v]) => v === tool.name)?.[0] || tool.name
+              : tool.name;
+            matches.push({ app: adapter.name, action: actionName, description: tool.description, score });
+          }
+        }
+      }
+
+      if (matches.length === 0) {
+        return { ok: true, data: `No matching tools found for "${params.task}". Try octodock_help() to see all available apps.` };
+      }
+
+      // 按分數排序，取前 5 個
+      matches.sort((a, b) => b.score - a.score);
+      const top = matches.slice(0, 5);
+      const result = top.map(m =>
+        `- **${m.app}.${m.action}** — ${m.description}`
+      ).join("\n");
+
+      return { ok: true, data: `Found ${matches.length} matching tools:\n\n${result}\n\nUse octodock_do(app:"APP", action:"ACTION", params:{...}) to execute.` };
     }
 
     // ============================================================

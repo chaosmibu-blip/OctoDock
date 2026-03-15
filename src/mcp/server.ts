@@ -489,6 +489,31 @@ async function translateSimplifiedParams(
     }
   }
 
+  // ── 第二輪：檢查 API 欄位名本身是否包含非 UUID 值 ──
+  // 解決 AI 直接傳 {page_id: "會議紀錄"} 而不是 {page: "會議紀錄"} 的情況
+  const apiFieldsToCheck = ["page_id", "parent_id", "database_id", "block_id"];
+  for (const field of apiFieldsToCheck) {
+    const value = translated[field];
+    if (typeof value !== "string") continue;
+    if (UUID_REGEX.test(value)) continue; // 已經是 UUID，不用解析
+
+    // 判斷 entity type
+    const entityType = field.includes("database") ? "database" : "page";
+
+    // 嘗試記憶解析
+    const resolved = await resolveIdentifier(userId, value, appName);
+    if (resolved) {
+      translated[field] = resolved.id;
+    } else {
+      // fallback search
+      const searchResult = await searchForId(userId, appName, value, entityType);
+      if (searchResult) {
+        translated[field] = searchResult;
+        learnIdentifier(userId, appName, value, searchResult, entityType).catch(() => {});
+      }
+    }
+  }
+
   // 特殊處理：如果有 folder 且沒有 parent_type，自動補上
   if (translated.parent_id && !translated.parent_type) {
     translated.parent_type = "page_id";
