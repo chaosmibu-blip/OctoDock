@@ -34,7 +34,8 @@
       "Bash(find / -type d -name *截圖*)",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "WebFetch(domain:octo-dock.com)"
+      "WebFetch(domain:octo-dock.com)",
+      "WebFetch(domain:developers.line.biz)"
     ]
   }
 }
