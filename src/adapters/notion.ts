@@ -18,6 +18,7 @@ const authConfig: OAuthConfig = {
   tokenUrl: "https://api.notion.com/v1/oauth/token",
   scopes: [], // Notion 的權限由 integration 設定決定，不走傳統 scope
   authMethod: "basic", // Notion 要求用 Basic Auth（base64(clientId:clientSecret)）
+  extraParams: { owner: "user" },
 };
 
 // ============================================================

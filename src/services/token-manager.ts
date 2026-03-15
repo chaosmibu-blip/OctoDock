@@ -29,8 +29,9 @@ export async function getValidToken(
     );
   }
 
-  // Check if token is expired and needs refresh
-  if (app.tokenExpiresAt && app.tokenExpiresAt < new Date()) {
+  // 提前 5 分鐘 refresh，避免在請求中段過期
+  const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+  if (app.tokenExpiresAt && app.tokenExpiresAt.getTime() - REFRESH_BUFFER_MS < Date.now()) {
     // For Meta apps (threads/instagram), the access_token itself is the refresh token
     const refreshSource = app.refreshToken ?? app.accessToken;
     if (refreshSource) {

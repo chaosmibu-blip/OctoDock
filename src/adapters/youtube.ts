@@ -22,6 +22,7 @@ const authConfig: OAuthConfig = {
     "https://www.googleapis.com/auth/youtube.force-ssl",
   ],
   authMethod: "post",
+  extraParams: { access_type: "offline", prompt: "consent" },
 };
 
 // ── API 基礎設定 ───────────────────────────────────────────

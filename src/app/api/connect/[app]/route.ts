@@ -58,16 +58,12 @@ export async function GET(
       authUrl.searchParams.set("scope", config.scopes.join(" "));
     }
 
-    // Google 系全部需要 offline access 才能拿到 refresh token
-    const googleApps = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
-    if (googleApps.includes(appName)) {
-      authUrl.searchParams.set("access_type", "offline");
-      authUrl.searchParams.set("prompt", "consent");
-    }
-
-    // Notion-specific: owner=user
-    if (appName === "notion") {
-      authUrl.searchParams.set("owner", "user");
+    // 讓 adapter 自己聲明需要的額外 OAuth 參數（access_type, prompt, owner 等）
+    // 不再硬編碼 app 名稱，新增 App 時只需在 adapter 的 authConfig.extraParams 設定
+    if (config.extraParams) {
+      for (const [key, value] of Object.entries(config.extraParams)) {
+        authUrl.searchParams.set(key, value);
+      }
     }
 
     return NextResponse.redirect(authUrl.toString());

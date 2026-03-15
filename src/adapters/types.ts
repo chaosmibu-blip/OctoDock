@@ -12,6 +12,7 @@ export type OAuthConfig = {
   tokenUrl: string; // Token 交換 URL
   scopes: string[]; // 申請的權限範圍
   authMethod: "basic" | "post"; // Notion 用 basic，Google/Meta 用 post
+  extraParams?: Record<string, string>; // 額外的 OAuth 參數（如 access_type, prompt）
 };
 
 /** API Key 認證設定（簡單的 key-based 認證） */

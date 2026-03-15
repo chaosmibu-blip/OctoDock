@@ -21,6 +21,7 @@ const authConfig: OAuthConfig = {
     "https://www.googleapis.com/auth/drive.readonly",
   ],
   authMethod: "post",
+  extraParams: { access_type: "offline", prompt: "consent" },
 };
 
 // ── API 基礎設定 ───────────────────────────────────────────

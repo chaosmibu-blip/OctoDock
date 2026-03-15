@@ -18,6 +18,7 @@ const authConfig: OAuthConfig = {
   tokenUrl: "https://oauth2.googleapis.com/token",
   scopes: ["https://www.googleapis.com/auth/documents"],
   authMethod: "post",
+  extraParams: { access_type: "offline", prompt: "consent" },
 };
 
 // ── API 基礎設定 ───────────────────────────────────────────
