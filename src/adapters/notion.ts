@@ -266,7 +266,7 @@ function getSkill(action?: string): string {
   create_database(parent_page_id, title, properties) — create new database
   update_database(database_id, title?, properties?) — update database schema
   add_comment(page_id, text) — comment on page
-  get_comments(block_id) — list comments
+  get_comments(page_id) — list comments on page
   get_users() — list workspace members
 Input/output use markdown. Names auto-resolve to IDs. Use octodock_help(app:"notion", action:"ACTION") for details.`;
 }
@@ -512,9 +512,10 @@ const tools: ToolDefinition[] = [
   {
     name: "notion_get_comments",
     description:
-      "List all comments on a Notion page, including block-level discussions.",
+      "List all comments on a Notion page. Requires 'Read comments' capability on the integration.",
     inputSchema: {
-      block_id: z.string().describe("Page or block ID to get comments for"),
+      page_id: z.string().optional().describe("Page ID to get comments for (preferred)"),
+      block_id: z.string().optional().describe("Block ID to get comments for (alternative)"),
     },
   },
 
@@ -810,6 +811,138 @@ function summarizeSearchResults(results: Array<Record<string, unknown>>): string
 }
 
 /**
+ * 從 Notion property value 中提取可讀文字
+ * 支援所有常見 property types
+ */
+function extractPropertyValue(prop: Record<string, unknown>): string {
+  const type = prop.type as string;
+  switch (type) {
+    case "title": {
+      const arr = prop.title as Array<{ plain_text: string }> | undefined;
+      return arr?.map((t) => t.plain_text).join("") || "";
+    }
+    case "rich_text": {
+      const arr = prop.rich_text as Array<{ plain_text: string }> | undefined;
+      return arr?.map((t) => t.plain_text).join("") || "";
+    }
+    case "number":
+      return prop.number != null ? String(prop.number) : "";
+    case "select": {
+      const sel = prop.select as { name: string } | null;
+      return sel?.name || "";
+    }
+    case "multi_select": {
+      const arr = prop.multi_select as Array<{ name: string }> | undefined;
+      return arr?.map((s) => s.name).join(", ") || "";
+    }
+    case "status": {
+      const st = prop.status as { name: string } | null;
+      return st?.name || "";
+    }
+    case "date": {
+      const d = prop.date as { start: string; end?: string } | null;
+      if (!d) return "";
+      return d.end ? `${d.start} → ${d.end}` : d.start;
+    }
+    case "checkbox":
+      return prop.checkbox ? "✅" : "⬜";
+    case "url":
+      return (prop.url as string) || "";
+    case "email":
+      return (prop.email as string) || "";
+    case "phone_number":
+      return (prop.phone_number as string) || "";
+    case "formula": {
+      const f = prop.formula as Record<string, unknown>;
+      if (f?.string) return f.string as string;
+      if (f?.number != null) return String(f.number);
+      if (f?.boolean != null) return f.boolean ? "true" : "false";
+      if (f?.date) return (f.date as { start: string }).start || "";
+      return "";
+    }
+    case "relation": {
+      const arr = prop.relation as Array<{ id: string }> | undefined;
+      return arr?.map((r) => r.id).join(", ") || "";
+    }
+    case "rollup": {
+      const r = prop.rollup as Record<string, unknown>;
+      if (r?.number != null) return String(r.number);
+      const arr = r?.array as Array<Record<string, unknown>> | undefined;
+      if (arr) return arr.map((item) => extractPropertyValue(item)).filter(Boolean).join(", ");
+      return "";
+    }
+    case "people": {
+      const arr = prop.people as Array<{ name?: string }> | undefined;
+      return arr?.map((p) => p.name || "?").join(", ") || "";
+    }
+    case "created_time":
+      return (prop.created_time as string)?.substring(0, 10) || "";
+    case "last_edited_time":
+      return (prop.last_edited_time as string)?.substring(0, 10) || "";
+    case "created_by":
+    case "last_edited_by": {
+      const user = prop[type] as { name?: string } | undefined;
+      return user?.name || "";
+    }
+    case "files": {
+      const arr = prop.files as Array<{ name: string }> | undefined;
+      return arr?.map((f) => f.name).join(", ") || "";
+    }
+    default:
+      return "";
+  }
+}
+
+/**
+ * 從 Notion 資料庫查詢結果中提取項目摘要（包含各欄位值）
+ * 比 summarizeSearchResults 更豐富，適合 query_database 的回傳
+ */
+function summarizeDatabaseItems(results: Array<Record<string, unknown>>): string {
+  const items: string[] = [];
+
+  for (const item of results) {
+    const id = item.id as string;
+    const url = item.url as string | undefined;
+    const props = item.properties as Record<string, unknown> | undefined;
+
+    if (!props) {
+      items.push(`- (untitled) id:${id}`);
+      continue;
+    }
+
+    // 提取標題（title 類型的 property）
+    let title = "";
+    const fields: string[] = [];
+
+    for (const [key, val] of Object.entries(props)) {
+      const prop = val as Record<string, unknown>;
+      const type = prop.type as string;
+
+      // title 類型 → 作為項目標題
+      if (type === "title") {
+        const arr = prop.title as Array<{ plain_text: string }> | undefined;
+        title = arr?.map((t) => t.plain_text).join("") || "";
+        continue;
+      }
+
+      // 其他類型 → 提取值
+      const value = extractPropertyValue(prop);
+      if (value) {
+        fields.push(`${key}: ${value}`);
+      }
+    }
+
+    // 組合輸出
+    let line = `- **${title || "(untitled)"}** id:${id}`;
+    if (url) line += ` ${url}`;
+    if (fields.length > 0) line += `\n  ${fields.join(" | ")}`;
+    items.push(line);
+  }
+
+  return items.join("\n");
+}
+
+/**
  * 回傳格式轉換（G1/G3 通用框架）
  * 將 Notion API 的 raw JSON 轉成 AI 友善的 Markdown
  * 讀出來的格式和寫入的格式一致，AI 可以「讀 → 改 → 寫回」
@@ -866,11 +999,11 @@ function formatResponse(action: string, rawData: unknown): string {
       return sections.join("\n");
     }
 
-    // ── 資料庫查詢結果 ──
+    // ── 資料庫查詢結果：包含各欄位的值 ──
     case "query_database": {
       const results = data.results as Array<Record<string, unknown>> | undefined;
       if (!results || results.length === 0) return "No items found in database.";
-      return `Found ${results.length} items:\n\n${summarizeSearchResults(results)}`;
+      return `Found ${results.length} items:\n\n${summarizeDatabaseItems(results)}`;
     }
 
     // ── 建立/更新/刪除操作：精簡為 ok + url ──
@@ -880,6 +1013,7 @@ function formatResponse(action: string, rawData: unknown): string {
     case "update_page":
     case "replace_content":
     case "append_content":
+    case "append_blocks":
     case "update_database":
     case "delete_page":
     case "delete_block": {
@@ -1289,10 +1423,11 @@ async function execute(
       };
     }
 
-    // ── 取得評論列表 ──
+    // ── 取得評論列表（支援 page_id 或 block_id） ──
     case "notion_get_comments": {
+      const blockId = (params.page_id || params.block_id) as string;
       const result = await notionFetch(
-        `/comments?block_id=${params.block_id}`,
+        `/comments?block_id=${blockId}`,
         token,
       );
       return {
