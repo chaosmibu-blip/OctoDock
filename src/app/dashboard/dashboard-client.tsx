@@ -41,6 +41,7 @@ const APP_KEYS = [
   // 通訊
   { name: "line", displayName: "LINE", descKey: "app.line.desc" },
   { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc" },
+  { name: "discord", displayName: "Discord", descKey: "app.discord.desc" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {

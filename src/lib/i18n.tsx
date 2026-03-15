@@ -57,6 +57,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.github.desc": "管理 repo、issue、PR 和查看程式碼",
     "app.line.desc": "發送訊息、廣播和管理追蹤者",
     "app.telegram.desc": "發送訊息、照片和管理 Bot Webhook",
+    "app.discord.desc": "發送訊息、管理頻道、成員和角色",
 
     // Bots
     "bots.title": "Bot 自動回覆設定",
@@ -152,6 +153,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.github.desc": "Manage repos, issues, PRs, and view code",
     "app.line.desc": "Send messages, broadcast, and manage followers",
     "app.telegram.desc": "Send messages, photos, and manage Bot webhooks",
+    "app.discord.desc": "Send messages, manage channels, members, and roles",
 
     // Bots
     "bots.title": "Bot Auto-Reply Settings",
