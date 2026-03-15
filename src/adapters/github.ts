@@ -16,7 +16,7 @@ const authConfig: OAuthConfig = {
   type: "oauth2",
   authorizeUrl: "https://github.com/login/oauth/authorize",
   tokenUrl: "https://github.com/login/oauth/access_token",
-  scopes: ["repo", "read:user"],
+  scopes: ["repo", "read:user", "gist"],
   authMethod: "post",
 };
 
@@ -82,6 +82,7 @@ const actionMap: Record<string, string> = {
   search_issues: "github_search_issues",
   star_repo: "github_star_repo",
   fork_repo: "github_fork_repo",
+  create_branch: "github_create_branch",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -181,7 +182,7 @@ octodock_do(app:"github", action:"create_comment", params:{
 })`,
 
   get_file: `## github.get_file
-Get the content of a file from a repository (automatically decoded from base64).
+Get the content of a file from a repository (automatically decoded from base64). Returns the file's SHA (needed for update_file/delete_file) followed by the content.
 ### Parameters
   owner: Repository owner (username or org)
   repo: Repository name
@@ -288,6 +289,7 @@ Create a new release for a repository.
   name: Release title
   body (optional): Release notes
   draft (optional): Whether this is a draft release (default false)
+  target_commitish (optional): Branch or commit SHA for the tag (default: repo's default branch)
 ### Example
 octodock_do(app:"github", action:"create_release", params:{owner:"octocat", repo:"Hello-World", tag_name:"v1.0.0", name:"Version 1.0", body:"First stable release"})`,
 
@@ -356,13 +358,23 @@ Fork a repository to the authenticated user's account.
   repo: Repository name
 ### Example
 octodock_do(app:"github", action:"fork_repo", params:{owner:"octocat", repo:"Hello-World"})`,
+
+  create_branch: `## github.create_branch
+Create a new branch from an existing branch or the default branch.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  branch: New branch name to create
+  from (optional): Source branch name (default: repo's default branch)
+### Example
+octodock_do(app:"github", action:"create_branch", params:{owner:"octocat", repo:"Hello-World", branch:"feature-x", from:"main"})`,
 };
 
 // ── do+help 架構：取得技能說明 ────────────────────────────
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `github actions (28 total):
+  return `github actions (29 total):
   list_repos() — list your repositories
   get_repo(owner, repo) — get repo details (stars, forks, description)
   search_code(query) — search code across repos
@@ -372,17 +384,18 @@ function getSkill(action?: string): string {
   list_prs(owner, repo) — list open pull requests
   get_pr(owner, repo, pull_number) — get PR details + diff stats
   create_comment(owner, repo, issue_number, body) — comment on issue/PR
-  get_file(owner, repo, path) — get file content
+  get_file(owner, repo, path) — get file content (includes SHA for update/delete)
   create_file(owner, repo, path, content, message) — create a file with commit
   update_file(owner, repo, path, content, message, sha) — update a file with commit
   delete_file(owner, repo, path, message, sha) — delete a file with commit
   list_branches(owner, repo) — list branches
+  create_branch(owner, repo, branch, from?) — create a new branch
   create_pr(owner, repo, title, body, head, base?) — create pull request
   merge_pr(owner, repo, pull_number, merge_method?) — merge pull request
   list_commits(owner, repo, per_page?) — list recent commits
   create_repo(name, description?, private?) — create new repository
   list_releases(owner, repo) — list releases
-  create_release(owner, repo, tag_name, name, body?, draft?) — create release
+  create_release(owner, repo, tag_name, name, body?, draft?, target_commitish?) — create release
   list_workflows(owner, repo) — list GitHub Actions workflows
   trigger_workflow(owner, repo, workflow_id, ref?) — trigger workflow dispatch
   list_gists(per_page?) — list your gists
@@ -433,12 +446,12 @@ function formatResponse(action: string, rawData: unknown): string {
       return String(rawData);
     }
 
-    // 取得檔案內容：解碼 base64 並回傳純文字
+    // 取得檔案內容：解碼 base64 並回傳純文字 + SHA（供 update/delete 使用）
     case "get_file": {
       const data = rawData as any;
       if (data.content && data.encoding === "base64") {
         const decoded = Buffer.from(data.content, "base64").toString("utf8");
-        return decoded;
+        return `sha: ${data.sha}\n---\n${decoded}`;
       }
       return JSON.stringify(rawData, null, 2);
     }
@@ -468,6 +481,13 @@ function formatResponse(action: string, rawData: unknown): string {
     case "merge_pr": {
       const data = rawData as any;
       return `Done. ${data.message ?? "Pull request merged."}`;
+    }
+
+    // 建立分支：回傳分支名稱
+    case "create_branch": {
+      const data = rawData as any;
+      const branchName = data.ref?.replace("refs/heads/", "") ?? "unknown";
+      return `Done. Branch "${branchName}" created.`;
     }
 
     // Star 倉庫：204 No Content 成功
@@ -725,7 +745,7 @@ const tools: ToolDefinition[] = [
   {
     name: "github_get_file",
     description:
-      "Get the content of a file from a repository. The file content is automatically decoded from base64 to plain text.",
+      "Get the content of a file from a repository. Returns SHA (for update/delete) and decoded content.",
     inputSchema: {
       owner: z.string().describe("Repository owner (username or organization)"),
       repo: z.string().describe("Repository name"),
@@ -843,6 +863,7 @@ const tools: ToolDefinition[] = [
       name: z.string().describe("Release title"),
       body: z.string().optional().describe("Release notes in Markdown"),
       draft: z.boolean().optional().describe("Whether this is a draft release (default false)"),
+      target_commitish: z.string().optional().describe("Branch or commit SHA for the tag (default: repo's default branch)"),
     },
   },
   {
@@ -917,6 +938,17 @@ const tools: ToolDefinition[] = [
     inputSchema: {
       owner: z.string().describe("Repository owner (username or organization)"),
       repo: z.string().describe("Repository name"),
+    },
+  },
+  {
+    name: "github_create_branch",
+    description:
+      "Create a new branch from an existing branch or the repo's default branch.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      branch: z.string().describe("New branch name to create"),
+      from: z.string().optional().describe("Source branch name (default: repo's default branch)"),
     },
   },
 ];
@@ -1213,6 +1245,7 @@ async function execute(
       };
       if (params.body) body.body = params.body;
       body.draft = params.draft ?? false;
+      if (params.target_commitish) body.target_commitish = params.target_commitish;
 
       const result = await githubFetch(
         `/repos/${params.owner}/${params.repo}/releases`,
@@ -1312,6 +1345,33 @@ async function execute(
         `/user/starred/${params.owner}/${params.repo}`,
         token,
         { method: "PUT" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立新分支（先取得來源分支的 SHA，再建立 ref）
+    case "github_create_branch": {
+      // 取得來源分支的最新 commit SHA
+      const sourceBranch = (params.from as string) || "main";
+      const refData = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/git/ref/heads/${sourceBranch}`,
+        token,
+      ) as { object: { sha: string } };
+      const sha = refData.object.sha;
+
+      // 建立新分支
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/git/refs`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ref: `refs/heads/${params.branch}`,
+            sha,
+          }),
+        },
       );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
