@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { operations } from "@/db/schema";
 import { getValidToken } from "@/services/token-manager";
 import { analyzePatterns } from "@/mcp/pattern-analyzer";
+import { runMaintenanceIfNeeded } from "@/services/memory-maintenance";
 import type { ToolResult } from "@/adapters/types";
 
 // ============================================================
@@ -57,6 +58,9 @@ export async function executeWithMiddleware(
     // 非同步分析行為模式（不阻塞回應）
     // 從操作記錄中提煉常用操作、常用參數等模式存入記憶
     analyzePatterns(userId, appName, toolName).catch(() => {});
+
+    // 非同步執行記憶維護（衰減 + 清理 + 偏好推斷，每用戶每小時最多一次）
+    runMaintenanceIfNeeded(userId).catch(() => {});
 
     return result;
   } catch (error) {

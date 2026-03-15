@@ -13,6 +13,11 @@ import {
   getSystemSkill,
   executeSystemAction,
 } from "./system-actions";
+import {
+  detectSessionState,
+  shouldSolicitMemory,
+  getUserSummary,
+} from "@/services/memory-maintenance";
 import type { DoResult } from "@/adapters/types";
 
 // ============================================================
@@ -286,6 +291,26 @@ function registerDoTool(
         if (result.data && typeof result.data === "string") {
           result.data = await compressIfNeeded(userId, app, action, result.data);
         }
+      }
+
+      // ── 記憶層：Session 偵測 + 記憶不足提醒（缺口 1、2、7）──
+      try {
+        const sessionState = await detectSessionState(userId, connectedAppNames);
+        if (sessionState) {
+          // 缺口 2：新 session 的第一次 do() 附帶用戶上下文
+          const summary = await getUserSummary(userId);
+          if (summary) {
+            result.context = summary;
+          }
+          // 缺口 1 + 7：記憶不足時請 AI 分享用戶記憶
+          const solicitation = shouldSolicitMemory(sessionState);
+          if (solicitation) {
+            if (!result.suggestions) result.suggestions = [];
+            result.suggestions.push(solicitation);
+          }
+        }
+      } catch {
+        // Session 偵測失敗不影響主流程
       }
 
       return {

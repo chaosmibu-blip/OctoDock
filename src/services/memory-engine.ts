@@ -267,6 +267,49 @@ export async function listMemory(
 }
 
 // ============================================================
+// 批量刪除 / 導出
+// ============================================================
+
+/** 刪除某個 App 的所有記憶 */
+export async function deleteMemoryByApp(
+  userId: string,
+  appName: string,
+): Promise<number> {
+  const result = await db
+    .delete(memory)
+    .where(
+      and(eq(memory.userId, userId), eq(memory.appName, appName)),
+    )
+    .returning({ id: memory.id });
+  return result.length;
+}
+
+/** 刪除用戶的所有記憶 */
+export async function deleteAllMemory(userId: string): Promise<number> {
+  const result = await db
+    .delete(memory)
+    .where(eq(memory.userId, userId))
+    .returning({ id: memory.id });
+  return result.length;
+}
+
+/** 導出用戶的所有記憶 */
+export async function exportMemory(userId: string): Promise<MemoryEntry[]> {
+  return db
+    .select({
+      key: memory.key,
+      value: memory.value,
+      category: memory.category,
+      appName: memory.appName,
+      confidence: memory.confidence,
+      lastUsedAt: memory.lastUsedAt,
+    })
+    .from(memory)
+    .where(eq(memory.userId, userId))
+    .orderBy(memory.category, memory.appName, memory.key);
+}
+
+// ============================================================
 // 名稱 → ID 解析（do + help 架構核心）
 // octodock_do 收到簡化參數（名字、代稱）時，查記憶表對應到實際 ID
 // 例如：「會議」→ page_id: "317a9617..."

@@ -69,6 +69,7 @@ export interface DoResult {
   title?: string; // 資源標題（例如頁面標題）
   error?: string; // 錯誤訊息（失敗時）
   suggestions?: string[]; // 建議（失敗時提供替代方案）
+  context?: string; // 用戶上下文摘要（僅 session 首次 do() 附帶）
 }
 
 // ============================================================

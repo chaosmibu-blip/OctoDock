@@ -6,6 +6,9 @@ import {
   storeMemory,
   listMemory,
   deleteMemory,
+  deleteMemoryByApp,
+  deleteAllMemory,
+  exportMemory,
 } from "@/services/memory-engine";
 import {
   createSchedule,
@@ -39,6 +42,10 @@ export const systemActionMap: Record<string, string> = {
   import_memory: "system_import_memory",
   // 工具搜尋
   find_tool: "system_find_tool",
+  // 記憶批量操作
+  memory_delete_app: "system_memory_delete_app",
+  memory_delete_all: "system_memory_delete_all",
+  memory_export: "system_memory_export",
   // 回傳壓縮：取得暫存的完整回傳
   get_stored: "system_get_stored",
   // 通用 HTTP 請求（混合模式）
@@ -58,6 +65,9 @@ export function getSystemSkill(): string {
   return `system actions:
   memory_query(query, category?) — search user memory (preference/pattern/context/sop)
   memory_store(key, value, category, app_name?) — store a memory entry
+  memory_delete_app(app_name) — delete all memories for a specific app
+  memory_delete_all(confirm:true) — delete ALL user memories (requires confirm:true)
+  memory_export() — export all memories as structured data
   bot_conversations(platform, platform_user_id?, limit?) — view bot chat history (line/telegram)
   sop_list() — list all saved SOPs
   sop_get(name) — get a specific SOP by name
@@ -247,10 +257,55 @@ export async function executeSystemAction(
         imported++;
       }
 
+      // 記錄最後一次記憶導入時間（供定期更新判斷用）
+      await storeMemory(userId, "_last_memory_import", new Date().toISOString(), "context");
+
       return {
         ok: true,
         data: `Successfully imported ${imported} memories. OctoDock will now remember these across all AI platforms.`,
       };
+    }
+
+    // ── 刪除某 App 的所有記憶 ──
+    case "memory_delete_app": {
+      const appName = params.app_name as string;
+      if (!appName) {
+        return { ok: false, error: "app_name parameter is required." };
+      }
+      const count = await deleteMemoryByApp(userId, appName);
+      return { ok: true, data: `Deleted ${count} memories for app "${appName}".` };
+    }
+
+    // ── 刪除用戶的所有記憶（需要確認） ──
+    case "memory_delete_all": {
+      if (!params.confirm) {
+        return { ok: false, error: "This will delete ALL your memories. Pass confirm:true to proceed." };
+      }
+      const count = await deleteAllMemory(userId);
+      return { ok: true, data: `Deleted all ${count} memories.` };
+    }
+
+    // ── 導出用戶的所有記憶 ──
+    case "memory_export": {
+      const memories = await exportMemory(userId);
+      if (memories.length === 0) {
+        return { ok: true, data: "No memories to export." };
+      }
+      // 按 category 分組輸出 Markdown
+      const grouped: Record<string, typeof memories> = {};
+      for (const m of memories) {
+        const cat = m.category;
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(m);
+      }
+      const sections: string[] = [];
+      for (const [category, items] of Object.entries(grouped)) {
+        sections.push(`## ${category}\n` + items.map((m) => {
+          const app = m.appName ? ` (${m.appName})` : "";
+          return `- **${m.key}**${app}: ${m.value}`;
+        }).join("\n"));
+      }
+      return { ok: true, data: `# Memory Export (${memories.length} entries)\n\n${sections.join("\n\n")}` };
     }
 
     // ── 輕量筆記（B4）：快速留筆記給未來的自己或其他 agent ──
