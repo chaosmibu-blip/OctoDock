@@ -1,6 +1,6 @@
 /**
  * Google Tasks Adapter
- * 提供 Google Tasks 任務清單管理功能：列出清單、建立/更新/刪除/完成任務
+ * 提供 Google Tasks 任務清單管理功能：列出清單、建立/更新/刪除/完成/移動任務、清除已完成、建立清單
  */
 import { z } from "zod";
 import type {
@@ -62,6 +62,9 @@ const actionMap: Record<string, string> = {
   update_task: "gtasks_update_task",
   delete_task: "gtasks_delete_task",
   complete_task: "gtasks_complete_task",
+  move_task: "gtasks_move_task",
+  clear_completed: "gtasks_clear_completed",
+  create_tasklist: "gtasks_create_tasklist",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -138,6 +141,31 @@ Mark a task as completed.
   task: Task ID
 ### Example
 octodock_do(app:"google_tasks", action:"complete_task", params:{tasklist:"MTYzMTY...", task:"dGFzay0x..."})`,
+
+  move_task: `## google_tasks.move_task
+Move a task to a different position, make it a subtask, or reorder within a list.
+### Parameters
+  tasklist: Task list ID
+  task: Task ID
+  parent (optional): Parent task ID (makes this task a subtask)
+  previous (optional): Previous sibling task ID (positions after this task)
+### Example
+octodock_do(app:"google_tasks", action:"move_task", params:{tasklist:"MTYzMTY...", task:"dGFzay0x...", parent:"cGFyZW50..."})
+octodock_do(app:"google_tasks", action:"move_task", params:{tasklist:"MTYzMTY...", task:"dGFzay0x...", previous:"c2libGluZw..."})`,
+
+  clear_completed: `## google_tasks.clear_completed
+Clear all completed tasks from a task list. This permanently removes them.
+### Parameters
+  tasklist: Task list ID
+### Example
+octodock_do(app:"google_tasks", action:"clear_completed", params:{tasklist:"MTYzMTY..."})`,
+
+  create_tasklist: `## google_tasks.create_tasklist
+Create a new task list.
+### Parameters
+  title: Task list name
+### Example
+octodock_do(app:"google_tasks", action:"create_tasklist", params:{title:"Work Projects"})`,
 };
 
 function getSkill(action?: string): string {
@@ -147,8 +175,8 @@ function getSkill(action?: string): string {
   if (action) {
     return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   }
-  // app 級別：全部 7 個 action
-  return `google_tasks actions (7):
+  // app 級別：全部 10 個 action
+  return `google_tasks actions (10):
   list_tasklists() — list all task lists
   list_tasks(tasklist, show_completed?, max_results?) — list tasks in a list
   get_task(tasklist, task) — get single task details
@@ -156,6 +184,9 @@ function getSkill(action?: string): string {
   update_task(tasklist, task, title?, notes?, due?, status?) — update task
   delete_task(tasklist, task) — delete task permanently
   complete_task(tasklist, task) — mark task as completed
+  move_task(tasklist, task, parent?, previous?) — move/reorder task
+  clear_completed(tasklist) — clear all completed tasks
+  create_tasklist(title) — create new task list
 Use octodock_help(app:"google_tasks", action:"ACTION") for detailed params + example.`;
 }
 
@@ -227,6 +258,24 @@ function formatResponse(action: string, rawData: unknown): string {
     // 刪除任務
     case "delete_task": {
       return "Done. Task deleted.";
+    }
+
+    // 移動任務
+    case "move_task": {
+      const task = data as GTaskItem;
+      return `Done. Task moved. ${formatTask(task)}\n  ID: ${task.id}`;
+    }
+
+    // 清除已完成任務
+    case "clear_completed": {
+      return "Done. All completed tasks cleared.";
+    }
+
+    // 建立任務清單
+    case "create_tasklist": {
+      const id = data.id as string | undefined;
+      const title = data.title as string | undefined;
+      return `Done. Task list "${title ?? "Untitled"}" created.\n  ID: ${id}`;
     }
 
     default:
@@ -352,6 +401,36 @@ const tools: ToolDefinition[] = [
       task: z.string().describe("Task ID"),
     },
   },
+  // 移動/排序任務
+  {
+    name: "gtasks_move_task",
+    description:
+      "Move a task to a different position, make it a subtask of another task, or reorder within a list.",
+    inputSchema: {
+      tasklist: z.string().describe("Task list ID"),
+      task: z.string().describe("Task ID to move"),
+      parent: z.string().optional().describe("Parent task ID (makes this task a subtask)"),
+      previous: z.string().optional().describe("Previous sibling task ID (positions after this task)"),
+    },
+  },
+  // 清除已完成任務
+  {
+    name: "gtasks_clear_completed",
+    description:
+      "Clear all completed tasks from a task list. Permanently removes completed tasks.",
+    inputSchema: {
+      tasklist: z.string().describe("Task list ID"),
+    },
+  },
+  // 建立任務清單
+  {
+    name: "gtasks_create_tasklist",
+    description:
+      "Create a new task list in Google Tasks.",
+    inputSchema: {
+      title: z.string().describe("Task list name"),
+    },
+  },
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
@@ -461,6 +540,49 @@ async function execute(
         {
           method: "PATCH",
           body: JSON.stringify({ status: "completed" }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 移動/排序任務
+    case "gtasks_move_task": {
+      const queryParams = new URLSearchParams();
+      if (params.parent) queryParams.set("parent", params.parent as string);
+      if (params.previous) queryParams.set("previous", params.previous as string);
+      const qs = queryParams.toString();
+      const result = await gtasksFetch(
+        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task as string)}/move${qs ? `?${qs}` : ""}`,
+        token,
+        { method: "POST" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 清除已完成任務
+    case "gtasks_clear_completed": {
+      const result = await gtasksFetch(
+        `/lists/${encodeURIComponent(params.tasklist as string)}/clear`,
+        token,
+        { method: "POST" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立任務清單
+    case "gtasks_create_tasklist": {
+      const result = await gtasksFetch(
+        "/users/@me/lists",
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({ title: params.title as string }),
         },
       );
       return {

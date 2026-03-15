@@ -1,6 +1,6 @@
 /**
  * Google Sheets Adapter
- * 提供 Google Sheets 試算表的建立、讀取、寫入、追加、清除功能
+ * 提供 Google Sheets 試算表的建立、讀取、寫入、追加、清除、新增/刪除/重新命名工作表、批次更新功能
  */
 import { z } from "zod";
 import type {
@@ -55,6 +55,10 @@ const actionMap: Record<string, string> = {
   write: "gsheets_write",
   append: "gsheets_append",
   clear: "gsheets_clear",
+  add_sheet: "gsheets_add_sheet",
+  delete_sheet: "gsheets_delete_sheet",
+  rename_sheet: "gsheets_rename_sheet",
+  batch_update: "gsheets_batch_update",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -114,18 +118,58 @@ Clear cell values in a range (keeps formatting).
   range: A1 notation range to clear (e.g. "Sheet1!A1:D10")
 ### Example
 octodock_do(app:"google_sheets", action:"clear", params:{spreadsheetId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", range:"Sheet1!A1:D10"})`,
+
+  add_sheet: `## google_sheets.add_sheet
+Add a new sheet (tab) to a spreadsheet.
+### Parameters
+  spreadsheet_id: Spreadsheet ID
+  title: Name for the new sheet
+### Example
+octodock_do(app:"google_sheets", action:"add_sheet", params:{spreadsheet_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", title:"Q2 Data"})`,
+
+  delete_sheet: `## google_sheets.delete_sheet
+Delete a sheet (tab) from a spreadsheet by its sheet ID (integer).
+### Parameters
+  spreadsheet_id: Spreadsheet ID
+  sheet_id: Sheet ID (integer, use "get" to find sheet IDs)
+### Example
+octodock_do(app:"google_sheets", action:"delete_sheet", params:{spreadsheet_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", sheet_id:123456789})`,
+
+  rename_sheet: `## google_sheets.rename_sheet
+Rename an existing sheet (tab) in a spreadsheet.
+### Parameters
+  spreadsheet_id: Spreadsheet ID
+  sheet_id: Sheet ID (integer, use "get" to find sheet IDs)
+  new_title: New name for the sheet
+### Example
+octodock_do(app:"google_sheets", action:"rename_sheet", params:{spreadsheet_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", sheet_id:123456789, new_title:"Archived Data"})`,
+
+  batch_update: `## google_sheets.batch_update
+Send raw batchUpdate requests for advanced operations (formatting, merging, etc.).
+### Parameters
+  spreadsheet_id: Spreadsheet ID
+  requests: Array of batchUpdate request objects (Google Sheets API format)
+### Example
+octodock_do(app:"google_sheets", action:"batch_update", params:{
+  spreadsheet_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms",
+  requests:[{repeatCell:{range:{sheetId:0,startRowIndex:0,endRowIndex:1,startColumnIndex:0,endColumnIndex:3},cell:{userEnteredFormat:{textFormat:{bold:true}}},fields:"userEnteredFormat(textFormat)"}}]
+})`,
 };
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `google_sheets actions (6):
+  return `google_sheets actions (10):
   create(title) — create new spreadsheet
   get(spreadsheetId) — get spreadsheet metadata (sheet names)
   read(spreadsheetId, range) — read cell values (returns markdown table)
   write(spreadsheetId, range, values) — write cell values (2D array)
   append(spreadsheetId, range, values) — append rows after existing data
   clear(spreadsheetId, range) — clear cell values
+  add_sheet(spreadsheet_id, title) — add new sheet tab
+  delete_sheet(spreadsheet_id, sheet_id) — delete sheet tab
+  rename_sheet(spreadsheet_id, sheet_id, new_title) — rename sheet tab
+  batch_update(spreadsheet_id, requests) — raw batchUpdate for advanced ops
 Use octodock_help(app:"google_sheets", action:"ACTION") for detailed params + example.`;
 }
 
@@ -197,6 +241,29 @@ function formatResponse(action: string, rawData: unknown): string {
     case "clear": {
       const clearedRange = data.clearedRange as string | undefined;
       return `Done. Cleared ${clearedRange ?? "range"}.`;
+    }
+
+    // 新增工作表
+    case "add_sheet": {
+      const replies = data.replies as Array<{ addSheet?: { properties?: { sheetId?: number; title?: string } } }> | undefined;
+      const added = replies?.[0]?.addSheet?.properties;
+      return `Done. Sheet "${added?.title ?? "Untitled"}" added (id: ${added?.sheetId ?? "?"}).`;
+    }
+
+    // 刪除工作表
+    case "delete_sheet": {
+      return "Done. Sheet deleted.";
+    }
+
+    // 重新命名工作表
+    case "rename_sheet": {
+      return "Done. Sheet renamed.";
+    }
+
+    // 批次更新
+    case "batch_update": {
+      const replies = data.replies as unknown[] | undefined;
+      return `Done. Batch update completed (${replies?.length ?? 0} operations).`;
     }
 
     default:
@@ -301,6 +368,47 @@ const tools: ToolDefinition[] = [
       range: z.string().describe("A1 notation range to clear (e.g. 'Sheet1!A1:D10')"),
     },
   },
+  // 新增工作表
+  {
+    name: "gsheets_add_sheet",
+    description:
+      "Add a new sheet (tab) to a Google Spreadsheet.",
+    inputSchema: {
+      spreadsheet_id: z.string().describe("Google Spreadsheet ID"),
+      title: z.string().describe("Name for the new sheet"),
+    },
+  },
+  // 刪除工作表
+  {
+    name: "gsheets_delete_sheet",
+    description:
+      "Delete a sheet (tab) from a Google Spreadsheet by its sheet ID.",
+    inputSchema: {
+      spreadsheet_id: z.string().describe("Google Spreadsheet ID"),
+      sheet_id: z.number().describe("Sheet ID (integer, use 'get' to find sheet IDs)"),
+    },
+  },
+  // 重新命名工作表
+  {
+    name: "gsheets_rename_sheet",
+    description:
+      "Rename an existing sheet (tab) in a Google Spreadsheet.",
+    inputSchema: {
+      spreadsheet_id: z.string().describe("Google Spreadsheet ID"),
+      sheet_id: z.number().describe("Sheet ID (integer, use 'get' to find sheet IDs)"),
+      new_title: z.string().describe("New name for the sheet"),
+    },
+  },
+  // 批次更新（進階操作：格式化、合併儲存格等）
+  {
+    name: "gsheets_batch_update",
+    description:
+      "Send raw batchUpdate requests for advanced spreadsheet operations (formatting, merging cells, conditional formatting, etc.).",
+    inputSchema: {
+      spreadsheet_id: z.string().describe("Google Spreadsheet ID"),
+      requests: z.array(z.record(z.string(), z.unknown())).describe("Array of batchUpdate request objects (Google Sheets API format)"),
+    },
+  },
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
@@ -398,6 +506,88 @@ async function execute(
         `/${spreadsheetId}/values/${range}:clear`,
         token,
         { method: "POST", body: JSON.stringify({}) },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 新增工作表
+    case "gsheets_add_sheet": {
+      const spreadsheetId = params.spreadsheet_id as string;
+      const title = params.title as string;
+      const result = await sheetsFetch(
+        `/${spreadsheetId}:batchUpdate`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            requests: [{ addSheet: { properties: { title } } }],
+          }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 刪除工作表
+    case "gsheets_delete_sheet": {
+      const spreadsheetId = params.spreadsheet_id as string;
+      const sheetId = params.sheet_id as number;
+      const result = await sheetsFetch(
+        `/${spreadsheetId}:batchUpdate`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            requests: [{ deleteSheet: { sheetId } }],
+          }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 重新命名工作表
+    case "gsheets_rename_sheet": {
+      const spreadsheetId = params.spreadsheet_id as string;
+      const sheetId = params.sheet_id as number;
+      const newTitle = params.new_title as string;
+      const result = await sheetsFetch(
+        `/${spreadsheetId}:batchUpdate`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            requests: [
+              {
+                updateSheetProperties: {
+                  properties: { sheetId, title: newTitle },
+                  fields: "title",
+                },
+              },
+            ],
+          }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 批次更新（進階操作）
+    case "gsheets_batch_update": {
+      const spreadsheetId = params.spreadsheet_id as string;
+      const requests = params.requests as unknown[];
+      const result = await sheetsFetch(
+        `/${spreadsheetId}:batchUpdate`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({ requests }),
+        },
       );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],

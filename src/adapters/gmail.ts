@@ -1,6 +1,6 @@
 /**
  * Gmail Adapter
- * 提供 Gmail 郵件搜尋、閱讀、發送、回覆、草稿功能
+ * 提供 Gmail 郵件搜尋、閱讀、發送、回覆、草稿、標籤管理、封存、垃圾桶、已讀/未讀、附件下載功能
  */
 import { z } from "zod";
 import type {
@@ -110,6 +110,13 @@ const actionMap: Record<string, string> = {
   send: "gmail_send",
   reply: "gmail_reply",
   draft: "gmail_draft",
+  label_list: "gmail_label_list",
+  trash: "gmail_trash",
+  untrash: "gmail_untrash",
+  archive: "gmail_archive",
+  mark_read: "gmail_mark_read",
+  mark_unread: "gmail_mark_unread",
+  get_attachment: "gmail_get_attachment",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -166,6 +173,56 @@ octodock_do(app:"gmail", action:"draft", params:{
   subject:"Proposal Draft",
   body:"Dear Partner,\\n\\nPlease find our proposal..."
 })`,
+
+  label_list: `## gmail.label_list
+List all labels in user's Gmail account (system + custom labels).
+### Parameters
+  (none)
+### Example
+octodock_do(app:"gmail", action:"label_list", params:{})`,
+
+  trash: `## gmail.trash
+Move an email to trash.
+### Parameters
+  message_id: Gmail message ID
+### Example
+octodock_do(app:"gmail", action:"trash", params:{message_id:"18e5a3b2c4d6f789"})`,
+
+  untrash: `## gmail.untrash
+Remove an email from trash (restore it).
+### Parameters
+  message_id: Gmail message ID
+### Example
+octodock_do(app:"gmail", action:"untrash", params:{message_id:"18e5a3b2c4d6f789"})`,
+
+  archive: `## gmail.archive
+Archive an email (remove from Inbox but keep in All Mail).
+### Parameters
+  message_id: Gmail message ID
+### Example
+octodock_do(app:"gmail", action:"archive", params:{message_id:"18e5a3b2c4d6f789"})`,
+
+  mark_read: `## gmail.mark_read
+Mark an email as read.
+### Parameters
+  message_id: Gmail message ID
+### Example
+octodock_do(app:"gmail", action:"mark_read", params:{message_id:"18e5a3b2c4d6f789"})`,
+
+  mark_unread: `## gmail.mark_unread
+Mark an email as unread.
+### Parameters
+  message_id: Gmail message ID
+### Example
+octodock_do(app:"gmail", action:"mark_unread", params:{message_id:"18e5a3b2c4d6f789"})`,
+
+  get_attachment: `## gmail.get_attachment
+Download an email attachment by attachment ID. Returns base64-decoded content.
+### Parameters
+  message_id: Gmail message ID
+  attachment_id: Attachment ID (found in message payload parts)
+### Example
+octodock_do(app:"gmail", action:"get_attachment", params:{message_id:"18e5a3b2c4d6f789", attachment_id:"ANGjdJ8..."})`,
 };
 
 function getSkill(action?: string): string {
@@ -177,6 +234,13 @@ function getSkill(action?: string): string {
   send(to, subject, body) — send new email
   reply(message_id, body) — reply to email thread
   draft(to, subject, body) — create draft email
+  label_list() — list all labels
+  trash(message_id) — move email to trash
+  untrash(message_id) — restore email from trash
+  archive(message_id) — archive email (remove from Inbox)
+  mark_read(message_id) — mark email as read
+  mark_unread(message_id) — mark email as unread
+  get_attachment(message_id, attachment_id) — download attachment
 Use octodock_help(app:"gmail", action:"ACTION") for detailed params + example.`;
 }
 
@@ -209,6 +273,30 @@ function formatResponse(action: string, rawData: unknown): string {
       const msg = data.message as Record<string, unknown> | undefined;
       const id = data.id || msg?.id;
       return `Done. Message ID: ${id}`;
+    }
+    // 標籤列表：列出所有標籤名稱
+    case "label_list": {
+      const labels = (data as any).labels;
+      if (!Array.isArray(labels) || labels.length === 0) return "No labels found.";
+      return labels.map((l: any) => `- ${l.name} (${l.type}, id: ${l.id})`).join("\n");
+    }
+    // 移至垃圾桶 / 從垃圾桶還原
+    case "trash":
+      return `Done. Message ${(data as any).id} moved to trash.`;
+    case "untrash":
+      return `Done. Message ${(data as any).id} restored from trash.`;
+    // 封存郵件
+    case "archive":
+      return `Done. Message ${(data as any).id} archived.`;
+    // 標記已讀 / 未讀
+    case "mark_read":
+      return `Done. Message ${(data as any).id} marked as read.`;
+    case "mark_unread":
+      return `Done. Message ${(data as any).id} marked as unread.`;
+    // 下載附件
+    case "get_attachment": {
+      const size = (data as any).size;
+      return `Attachment downloaded. Size: ${size ?? "unknown"} bytes. Data included in response.`;
     }
     default:
       return JSON.stringify(rawData, null, 2);
@@ -266,6 +354,61 @@ const tools: ToolDefinition[] = [
       to: z.string().describe("Recipient email address"),
       subject: z.string().describe("Email subject line"),
       body: z.string().describe("Email body in plain text"),
+    },
+  },
+  {
+    name: "gmail_label_list",
+    description:
+      "List all labels in user's Gmail account, including system labels (INBOX, SENT, etc.) and custom labels.",
+    inputSchema: {},
+  },
+  {
+    name: "gmail_trash",
+    description:
+      "Move an email to trash. The email can be recovered within 30 days.",
+    inputSchema: {
+      message_id: z.string().describe("Gmail message ID to trash"),
+    },
+  },
+  {
+    name: "gmail_untrash",
+    description:
+      "Remove an email from trash and restore it to its previous location.",
+    inputSchema: {
+      message_id: z.string().describe("Gmail message ID to restore from trash"),
+    },
+  },
+  {
+    name: "gmail_archive",
+    description:
+      "Archive an email by removing it from the Inbox. The email remains accessible in All Mail.",
+    inputSchema: {
+      message_id: z.string().describe("Gmail message ID to archive"),
+    },
+  },
+  {
+    name: "gmail_mark_read",
+    description:
+      "Mark an email as read by removing the UNREAD label.",
+    inputSchema: {
+      message_id: z.string().describe("Gmail message ID to mark as read"),
+    },
+  },
+  {
+    name: "gmail_mark_unread",
+    description:
+      "Mark an email as unread by adding the UNREAD label.",
+    inputSchema: {
+      message_id: z.string().describe("Gmail message ID to mark as unread"),
+    },
+  },
+  {
+    name: "gmail_get_attachment",
+    description:
+      "Download an email attachment by its attachment ID. Returns the decoded attachment data.",
+    inputSchema: {
+      message_id: z.string().describe("Gmail message ID containing the attachment"),
+      attachment_id: z.string().describe("Attachment ID (found in message payload parts)"),
     },
   },
 ];
@@ -419,6 +562,105 @@ async function execute(
       });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 列出所有標籤：取得系統標籤和自訂標籤
+    case "gmail_label_list": {
+      const result = await gmailFetch("/labels", token);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 移至垃圾桶：將郵件標記為垃圾（30 天後自動刪除）
+    case "gmail_trash": {
+      const result = await gmailFetch(
+        `/messages/${params.message_id}/trash`,
+        token,
+        { method: "POST" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 從垃圾桶還原：將郵件移出垃圾桶
+    case "gmail_untrash": {
+      const result = await gmailFetch(
+        `/messages/${params.message_id}/untrash`,
+        token,
+        { method: "POST" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 封存郵件：移除 INBOX 標籤，郵件仍在「所有郵件」中
+    case "gmail_archive": {
+      const result = await gmailFetch(
+        `/messages/${params.message_id}/modify`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({ removeLabelIds: ["INBOX"] }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 標記已讀：移除 UNREAD 標籤
+    case "gmail_mark_read": {
+      const result = await gmailFetch(
+        `/messages/${params.message_id}/modify`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 標記未讀：加上 UNREAD 標籤
+    case "gmail_mark_unread": {
+      const result = await gmailFetch(
+        `/messages/${params.message_id}/modify`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({ addLabelIds: ["UNREAD"] }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 下載附件：取得附件資料並解碼 base64url
+    case "gmail_get_attachment": {
+      const result = (await gmailFetch(
+        `/messages/${params.message_id}/attachments/${params.attachment_id}`,
+        token,
+      )) as { size: number; data: string };
+      // 將 base64url 編碼的附件資料解碼
+      const decoded = Buffer.from(result.data, "base64url").toString("base64");
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              { size: result.size, data: decoded },
+              null,
+              2,
+            ),
+          },
+        ],
       };
     }
 

@@ -1,6 +1,6 @@
 /**
  * Google Drive Adapter
- * 提供 Google Drive 檔案搜尋、取得、下載、建立、更新、刪除、分享功能
+ * 提供 Google Drive 檔案搜尋、取得、下載、建立、更新、刪除、分享、複製、移動、建立資料夾、匯出、權限列表、新增留言功能
  */
 import { z } from "zod";
 import type {
@@ -138,6 +138,12 @@ const actionMap: Record<string, string> = {
   update: "gdrive_update",
   delete: "gdrive_delete",
   share: "gdrive_share",
+  copy: "gdrive_copy",
+  move: "gdrive_move",
+  create_folder: "gdrive_create_folder",
+  export: "gdrive_export",
+  list_permissions: "gdrive_list_permissions",
+  add_comment: "gdrive_add_comment",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -202,12 +208,61 @@ Share a file with a specific email or make it accessible to anyone with the link
 ### Example
 octodock_do(app:"google_drive", action:"share", params:{file_id:"1Bxi...", role:"reader", type:"user", email:"colleague@company.com"})
 octodock_do(app:"google_drive", action:"share", params:{file_id:"1Bxi...", role:"reader", type:"anyone"})`,
+
+  copy: `## google_drive.copy
+Copy a file in Google Drive, optionally with a new name.
+### Parameters
+  file_id: Google Drive file ID
+  name (optional): New name for the copied file
+### Example
+octodock_do(app:"google_drive", action:"copy", params:{file_id:"1Bxi...", name:"Report Copy"})`,
+
+  move: `## google_drive.move
+Move a file to a different folder in Google Drive.
+### Parameters
+  file_id: Google Drive file ID
+  new_parent_id: Destination folder ID
+### Example
+octodock_do(app:"google_drive", action:"move", params:{file_id:"1Bxi...", new_parent_id:"0BxiFolder..."})`,
+
+  create_folder: `## google_drive.create_folder
+Create a new folder in Google Drive.
+### Parameters
+  name: Folder name
+  parent_id (optional): Parent folder ID (default: root)
+### Example
+octodock_do(app:"google_drive", action:"create_folder", params:{name:"Project Files"})
+octodock_do(app:"google_drive", action:"create_folder", params:{name:"Subfolder", parent_id:"0BxiFolder..."})`,
+
+  export: `## google_drive.export
+Export a Google Workspace file (Doc, Sheet, Slides) to a downloadable format.
+### Parameters
+  file_id: Google Drive file ID
+  format: Export format ("pdf", "docx", "txt", "csv")
+### Example
+octodock_do(app:"google_drive", action:"export", params:{file_id:"1Bxi...", format:"pdf"})
+octodock_do(app:"google_drive", action:"export", params:{file_id:"1Bxi...", format:"csv"})`,
+
+  list_permissions: `## google_drive.list_permissions
+List all permissions (sharing settings) for a file in Google Drive.
+### Parameters
+  file_id: Google Drive file ID
+### Example
+octodock_do(app:"google_drive", action:"list_permissions", params:{file_id:"1Bxi..."})`,
+
+  add_comment: `## google_drive.add_comment
+Add a comment to a file in Google Drive.
+### Parameters
+  file_id: Google Drive file ID
+  content: Comment text
+### Example
+octodock_do(app:"google_drive", action:"add_comment", params:{file_id:"1Bxi...", content:"Please review this section."})`,
 };
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `google_drive actions:
+  return `google_drive actions (13 total):
   search(query, max_results?) — search files by name/type (Drive query syntax)
   get_file(file_id) — get file metadata
   download(file_id) — download text file content
@@ -215,6 +270,12 @@ function getSkill(action?: string): string {
   update(file_id, name?, description?) — update file metadata
   delete(file_id) — move file to trash
   share(file_id, role, type, email?) — share file with user or anyone
+  copy(file_id, name?) — copy a file
+  move(file_id, new_parent_id) — move file to another folder
+  create_folder(name, parent_id?) — create a new folder
+  export(file_id, format) — export Google Workspace file to pdf/docx/txt/csv
+  list_permissions(file_id) — list file permissions
+  add_comment(file_id, content) — add a comment to a file
 Use octodock_help(app:"google_drive", action:"ACTION") for detailed params + example.`;
 }
 
@@ -273,6 +334,41 @@ function formatResponse(action: string, rawData: unknown): string {
     case "share": {
       const s = rawData as any;
       return `Shared. Permission ID: ${s.id}, Role: ${s.role}, Type: ${s.type}`;
+    }
+    // 複製檔案：確認副本資訊
+    case "copy": {
+      const cp = rawData as any;
+      return `Copied: ${cp.name}\nID: ${cp.id}\nURL: ${cp.webViewLink ?? "N/A"}`;
+    }
+    // 移動檔案：確認新位置
+    case "move": {
+      const mv = rawData as any;
+      return `Moved: ${mv.name}\nID: ${mv.id}\nNew parents: ${(mv.parents ?? []).join(", ")}`;
+    }
+    // 建立資料夾：確認資料夾資訊
+    case "create_folder": {
+      const cf = rawData as any;
+      return `Folder created: ${cf.name}\nID: ${cf.id}\nURL: ${cf.webViewLink ?? "N/A"}`;
+    }
+    // 匯出檔案：回傳匯出結果
+    case "export": {
+      const ex = rawData as any;
+      if (ex.content) return ex.content;
+      return ex.message ?? `Export completed (${ex.format}).`;
+    }
+    // 列出權限：權限清單
+    case "list_permissions": {
+      const lp = rawData as any;
+      const perms = lp.permissions ?? [];
+      if (perms.length === 0) return "No permissions found.";
+      return perms
+        .map((p: any) => `- ${p.emailAddress ?? p.type} (${p.role}) id:${p.id}`)
+        .join("\n");
+    }
+    // 新增留言：確認留言
+    case "add_comment": {
+      const ac = rawData as any;
+      return `Comment added by ${ac.author?.displayName ?? "unknown"}: "${ac.content}"`;
     }
     default:
       return JSON.stringify(rawData, null, 2);
@@ -379,6 +475,67 @@ const tools: ToolDefinition[] = [
         .string()
         .optional()
         .describe("Recipient email address (required when type is 'user')"),
+    },
+  },
+  // 複製檔案
+  {
+    name: "gdrive_copy",
+    description:
+      "Copy a file in Google Drive, optionally giving the copy a new name.",
+    inputSchema: {
+      file_id: z.string().describe("Google Drive file ID"),
+      name: z.string().optional().describe("New name for the copied file"),
+    },
+  },
+  // 移動檔案到其他資料夾
+  {
+    name: "gdrive_move",
+    description:
+      "Move a file to a different folder in Google Drive by updating its parents.",
+    inputSchema: {
+      file_id: z.string().describe("Google Drive file ID"),
+      new_parent_id: z.string().describe("Destination folder ID"),
+    },
+  },
+  // 建立資料夾
+  {
+    name: "gdrive_create_folder",
+    description:
+      "Create a new folder in Google Drive.",
+    inputSchema: {
+      name: z.string().describe("Folder name"),
+      parent_id: z.string().optional().describe("Parent folder ID (default: root)"),
+    },
+  },
+  // 匯出 Google Workspace 檔案
+  {
+    name: "gdrive_export",
+    description:
+      "Export a Google Workspace file (Doc, Sheet, Slides) to a specified format (pdf, docx, txt, csv). Returns content for text formats or a confirmation for binary formats.",
+    inputSchema: {
+      file_id: z.string().describe("Google Drive file ID"),
+      format: z
+        .enum(["pdf", "docx", "txt", "csv"])
+        .describe("Export format: pdf, docx, txt, or csv"),
+    },
+  },
+  // 列出檔案權限
+  {
+    name: "gdrive_list_permissions",
+    description:
+      "List all permissions (sharing settings) for a file in Google Drive, including role, type, and email.",
+    inputSchema: {
+      file_id: z.string().describe("Google Drive file ID"),
+    },
+  },
+  // 新增留言
+  {
+    name: "gdrive_add_comment",
+    description:
+      "Add a comment to a file in Google Drive.",
+    inputSchema: {
+      file_id: z.string().describe("Google Drive file ID"),
+      content: z.string().describe("Comment text"),
     },
   },
 ];
@@ -528,6 +685,132 @@ async function execute(
         {
           method: "POST",
           body: JSON.stringify(permission),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 複製檔案：POST /files/{fileId}/copy
+    case "gdrive_copy": {
+      const body: Record<string, unknown> = {};
+      if (params.name) body.name = params.name;
+
+      const result = await driveFetch(
+        `/files/${params.file_id}/copy?fields=id,name,mimeType,webViewLink`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 移動檔案：先取得目前父資料夾，再 PATCH 搬移
+    case "gdrive_move": {
+      // 取得檔案目前的 parents
+      const file = (await driveFetch(
+        `/files/${params.file_id}?fields=parents`,
+        token,
+      )) as { parents?: string[] };
+      const oldParents = (file.parents ?? []).join(",");
+
+      const result = await driveFetch(
+        `/files/${params.file_id}?addParents=${encodeURIComponent(params.new_parent_id as string)}&removeParents=${encodeURIComponent(oldParents)}&fields=id,name,parents`,
+        token,
+        {
+          method: "PATCH",
+          body: JSON.stringify({}),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立資料夾：POST /files，mimeType 為 folder
+    case "gdrive_create_folder": {
+      const metadata: Record<string, unknown> = {
+        name: params.name,
+        mimeType: "application/vnd.google-apps.folder",
+      };
+      if (params.parent_id) {
+        metadata.parents = [params.parent_id];
+      }
+
+      const result = await driveFetch(
+        "/files?fields=id,name,mimeType,webViewLink",
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify(metadata),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 匯出檔案：GET /files/{fileId}/export，將 Google Workspace 檔案轉為指定格式
+    case "gdrive_export": {
+      const formatMimeMap: Record<string, string> = {
+        pdf: "application/pdf",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        txt: "text/plain",
+        csv: "text/csv",
+      };
+      const format = params.format as string;
+      const exportMime = formatMimeMap[format];
+
+      const res = await fetch(
+        `${DRIVE_API}/files/${params.file_id}/export?mimeType=${encodeURIComponent(exportMime)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: { message: res.statusText } }));
+        throw new Error(
+          `Google Drive export error: ${(error as { error: { message: string } }).error.message} (GDRIVE_EXPORT_ERROR)`,
+        );
+      }
+
+      // 文字格式直接回傳內容，二進位格式回傳完成訊息
+      if (format === "txt" || format === "csv") {
+        const textContent = await res.text();
+        return {
+          content: [{ type: "text", text: JSON.stringify({ file_id: params.file_id, format, content: textContent }, null, 2) }],
+        };
+      }
+
+      return {
+        content: [{ type: "text", text: JSON.stringify({ file_id: params.file_id, format, message: `Done. Export completed as ${format}.` }, null, 2) }],
+      };
+    }
+
+    // 列出檔案權限：GET /files/{fileId}/permissions
+    case "gdrive_list_permissions": {
+      const result = await driveFetch(
+        `/files/${params.file_id}/permissions?fields=permissions(id,type,role,emailAddress)`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 新增留言：POST /files/{fileId}/comments
+    case "gdrive_add_comment": {
+      const result = await driveFetch(
+        `/files/${params.file_id}/comments?fields=*`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({ content: params.content }),
         },
       );
       return {

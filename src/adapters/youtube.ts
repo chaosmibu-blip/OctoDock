@@ -1,6 +1,6 @@
 /**
  * YouTube Adapter
- * 提供 YouTube 影片搜尋、播放清單管理、留言查看、頻道資訊功能
+ * 提供 YouTube 影片搜尋、播放清單管理、留言管理、頻道資訊、影片管理、訂閱功能
  * YouTube Data API v3 — 每日配額 10,000 單位
  */
 import { z } from "zod";
@@ -43,6 +43,9 @@ async function ytFetch(
       ...(options.headers as object),
     },
   });
+  // 204 No Content（like_video、delete_video、delete_playlist 等）
+  if (res.status === 204) return { success: true };
+
   if (!res.ok) {
     const error = await res
       .json()
@@ -73,6 +76,15 @@ const actionMap: Record<string, string> = {
   add_to_playlist: "youtube_add_to_playlist",
   get_comments: "youtube_get_comments",
   get_channel: "youtube_get_channel",
+  upload_video: "youtube_upload_video",
+  update_video: "youtube_update_video",
+  delete_video: "youtube_delete_video",
+  like_video: "youtube_like_video",
+  subscribe: "youtube_subscribe",
+  create_playlist: "youtube_create_playlist",
+  delete_playlist: "youtube_delete_playlist",
+  reply_comment: "youtube_reply_comment",
+  post_comment: "youtube_post_comment",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -130,13 +142,86 @@ Get the authenticated user's channel info (name, subscribers, video count). Cost
   (none)
 ### Example
 octodock_do(app:"youtube", action:"get_channel", params:{})`,
+
+  upload_video: `## youtube.upload_video
+Create video metadata on YouTube (metadata only — does not upload a video file). Costs 1600 quota units.
+### Parameters
+  title: Video title
+  description: Video description
+  tags (optional): Array of tags
+  privacy_status (optional): "public" | "private" | "unlisted" (default "private")
+### Example
+octodock_do(app:"youtube", action:"upload_video", params:{title:"My Video", description:"A cool video", tags:["tutorial","coding"], privacy_status:"private"})`,
+
+  update_video: `## youtube.update_video
+Update an existing video's metadata (title, description, tags). Costs 50 quota units.
+### Parameters
+  video_id: YouTube video ID
+  title (optional): New title
+  description (optional): New description
+  tags (optional): New tags array
+### Example
+octodock_do(app:"youtube", action:"update_video", params:{video_id:"dQw4w9WgXcQ", title:"Updated Title", description:"New description"})`,
+
+  delete_video: `## youtube.delete_video
+Delete a video from YouTube. Costs 50 quota units. This action is irreversible.
+### Parameters
+  video_id: YouTube video ID to delete
+### Example
+octodock_do(app:"youtube", action:"delete_video", params:{video_id:"dQw4w9WgXcQ"})`,
+
+  like_video: `## youtube.like_video
+Like a YouTube video. Costs 50 quota units.
+### Parameters
+  video_id: YouTube video ID to like
+### Example
+octodock_do(app:"youtube", action:"like_video", params:{video_id:"dQw4w9WgXcQ"})`,
+
+  subscribe: `## youtube.subscribe
+Subscribe to a YouTube channel. Costs 50 quota units.
+### Parameters
+  channel_id: YouTube channel ID to subscribe to
+### Example
+octodock_do(app:"youtube", action:"subscribe", params:{channel_id:"UC_x5XG1OV2P6uZZ5FSM9Ttw"})`,
+
+  create_playlist: `## youtube.create_playlist
+Create a new YouTube playlist. Costs 50 quota units.
+### Parameters
+  title: Playlist title
+  description (optional): Playlist description
+  privacy_status (optional): "public" | "private" | "unlisted" (default "private")
+### Example
+octodock_do(app:"youtube", action:"create_playlist", params:{title:"My Favorites", description:"Best videos", privacy_status:"private"})`,
+
+  delete_playlist: `## youtube.delete_playlist
+Delete a YouTube playlist. Costs 50 quota units. This action is irreversible.
+### Parameters
+  playlist_id: YouTube playlist ID to delete
+### Example
+octodock_do(app:"youtube", action:"delete_playlist", params:{playlist_id:"PLrAXtmErZgOe..."})`,
+
+  reply_comment: `## youtube.reply_comment
+Reply to an existing YouTube comment. Costs 50 quota units.
+### Parameters
+  parent_id: Comment ID to reply to
+  text: Reply text
+### Example
+octodock_do(app:"youtube", action:"reply_comment", params:{parent_id:"UgxABC123", text:"Thanks for your comment!"})`,
+
+  post_comment: `## youtube.post_comment
+Post a new top-level comment on a YouTube video. Costs 50 quota units.
+### Parameters
+  video_id: YouTube video ID to comment on
+  text: Comment text
+### Example
+octodock_do(app:"youtube", action:"post_comment", params:{video_id:"dQw4w9WgXcQ", text:"Great video!"})`,
 };
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action)
     return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `youtube actions:
+  return `youtube actions (16 total):
   search(query, max_results?) — search videos (⚠️ 100 quota units per call)
   get_video(video_id) — get video details + stats (1 unit)
   list_playlists(max_results?) — list your playlists (1 unit)
@@ -144,6 +229,15 @@ function getSkill(action?: string): string {
   add_to_playlist(playlist_id, video_id) — add video to playlist (50 units)
   get_comments(video_id, max_results?) — get video comments (1 unit)
   get_channel() — get your channel info (1 unit)
+  upload_video(title, description, tags?, privacy_status?) — create video metadata (1600 units)
+  update_video(video_id, title?, description?, tags?) — update video metadata (50 units)
+  delete_video(video_id) — delete a video (50 units)
+  like_video(video_id) — like a video (50 units)
+  subscribe(channel_id) — subscribe to a channel (50 units)
+  create_playlist(title, description?, privacy_status?) — create playlist (50 units)
+  delete_playlist(playlist_id) — delete a playlist (50 units)
+  reply_comment(parent_id, text) — reply to a comment (50 units)
+  post_comment(video_id, text) — post a top-level comment (50 units)
 ⚠️ YouTube Data API daily quota: 10,000 units. search costs 100 units — use sparingly.
 Use octodock_help(app:"youtube", action:"ACTION") for detailed params + example.`;
 }
@@ -257,6 +351,66 @@ function formatResponse(action: string, rawData: unknown): string {
         .join("\n");
     }
 
+    // 建立影片中繼資料
+    case "upload_video": {
+      const data = rawData as any;
+      const s = data.snippet;
+      if (!s) return "已建立影片中繼資料。";
+      return `已建立影片中繼資料：**${s.title}**\nID: ${data.id}\n隱私狀態：${data.status?.privacyStatus ?? "unknown"}`;
+    }
+
+    // 更新影片中繼資料
+    case "update_video": {
+      const data = rawData as any;
+      const s = data.snippet;
+      if (!s) return "已更新影片中繼資料。";
+      return `已更新影片：**${s.title}**\nID: ${data.id}`;
+    }
+
+    // 刪除影片
+    case "delete_video": {
+      return "已成功刪除影片。";
+    }
+
+    // 喜歡影片
+    case "like_video": {
+      return "已對影片按讚。";
+    }
+
+    // 訂閱頻道
+    case "subscribe": {
+      const data = rawData as any;
+      const title = data.snippet?.title ?? data.snippet?.resourceId?.channelId ?? "";
+      return title ? `已訂閱頻道：**${title}**` : "已成功訂閱頻道。";
+    }
+
+    // 建立播放清單
+    case "create_playlist": {
+      const data = rawData as any;
+      const s = data.snippet;
+      if (!s) return "已建立播放清單。";
+      return `已建立播放清單：**${s.title}**\nID: ${data.id}\n隱私狀態：${data.status?.privacyStatus ?? "unknown"}`;
+    }
+
+    // 刪除播放清單
+    case "delete_playlist": {
+      return "已成功刪除播放清單。";
+    }
+
+    // 回覆留言
+    case "reply_comment": {
+      const data = rawData as any;
+      const text = data.snippet?.textOriginal ?? data.snippet?.textDisplay ?? "";
+      return text ? `已回覆留言：「${text.slice(0, 100)}」` : "已成功回覆留言。";
+    }
+
+    // 發表留言
+    case "post_comment": {
+      const data = rawData as any;
+      const text = data.snippet?.topLevelComment?.snippet?.textOriginal ?? "";
+      return text ? `已發表留言：「${text.slice(0, 100)}」` : "已成功發表留言。";
+    }
+
     default:
       return JSON.stringify(rawData, null, 2);
   }
@@ -368,6 +522,100 @@ const tools: ToolDefinition[] = [
       "Get the authenticated user's YouTube channel info including name, subscriber count, and total views.",
     inputSchema: {},
   },
+  {
+    name: "youtube_upload_video",
+    description:
+      "Create video metadata on YouTube (metadata only — does not upload a video file). Sets title, description, tags, and privacy status.",
+    inputSchema: {
+      title: z.string().describe("Video title"),
+      description: z.string().describe("Video description"),
+      tags: z
+        .array(z.string())
+        .optional()
+        .describe("Array of video tags"),
+      privacy_status: z
+        .enum(["public", "private", "unlisted"])
+        .optional()
+        .describe('Privacy status (default "private")'),
+    },
+  },
+  {
+    name: "youtube_update_video",
+    description:
+      "Update an existing YouTube video's metadata (title, description, tags).",
+    inputSchema: {
+      video_id: z.string().describe("YouTube video ID to update"),
+      title: z.string().optional().describe("New video title"),
+      description: z.string().optional().describe("New video description"),
+      tags: z
+        .array(z.string())
+        .optional()
+        .describe("New tags array"),
+    },
+  },
+  {
+    name: "youtube_delete_video",
+    description:
+      "Delete a video from YouTube. This action is irreversible.",
+    inputSchema: {
+      video_id: z.string().describe("YouTube video ID to delete"),
+    },
+  },
+  {
+    name: "youtube_like_video",
+    description:
+      "Like a YouTube video (add a 'like' rating).",
+    inputSchema: {
+      video_id: z.string().describe("YouTube video ID to like"),
+    },
+  },
+  {
+    name: "youtube_subscribe",
+    description:
+      "Subscribe to a YouTube channel.",
+    inputSchema: {
+      channel_id: z.string().describe("YouTube channel ID to subscribe to"),
+    },
+  },
+  {
+    name: "youtube_create_playlist",
+    description:
+      "Create a new YouTube playlist with a title, optional description, and privacy status.",
+    inputSchema: {
+      title: z.string().describe("Playlist title"),
+      description: z.string().optional().describe("Playlist description"),
+      privacy_status: z
+        .enum(["public", "private", "unlisted"])
+        .optional()
+        .describe('Privacy status (default "private")'),
+    },
+  },
+  {
+    name: "youtube_delete_playlist",
+    description:
+      "Delete a YouTube playlist. This action is irreversible.",
+    inputSchema: {
+      playlist_id: z.string().describe("YouTube playlist ID to delete"),
+    },
+  },
+  {
+    name: "youtube_reply_comment",
+    description:
+      "Reply to an existing YouTube comment.",
+    inputSchema: {
+      parent_id: z.string().describe("Comment ID to reply to"),
+      text: z.string().describe("Reply text"),
+    },
+  },
+  {
+    name: "youtube_post_comment",
+    description:
+      "Post a new top-level comment on a YouTube video.",
+    inputSchema: {
+      video_id: z.string().describe("YouTube video ID to comment on"),
+      text: z.string().describe("Comment text"),
+    },
+  },
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
@@ -464,6 +712,158 @@ async function execute(
         `/channels?part=snippet,statistics&mine=true`,
         token,
       );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立影片中繼資料（不含實際檔案上傳）
+    case "youtube_upload_video": {
+      const body: Record<string, unknown> = {
+        snippet: {
+          title: params.title,
+          description: params.description,
+          ...(params.tags ? { tags: params.tags } : {}),
+        },
+        status: {
+          privacyStatus: (params.privacy_status as string) || "private",
+        },
+      };
+      const result = await ytFetch("/videos?part=snippet,status", token, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 更新影片中繼資料
+    case "youtube_update_video": {
+      const snippet: Record<string, unknown> = {};
+      if (params.title !== undefined) snippet.title = params.title;
+      if (params.description !== undefined) snippet.description = params.description;
+      if (params.tags !== undefined) snippet.tags = params.tags;
+      const body = {
+        id: params.video_id,
+        snippet,
+      };
+      const result = await ytFetch("/videos?part=snippet", token, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 刪除影片
+    case "youtube_delete_video": {
+      const videoId = encodeURIComponent(params.video_id as string);
+      const result = await ytFetch(`/videos?id=${videoId}`, token, {
+        method: "DELETE",
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 對影片按讚
+    case "youtube_like_video": {
+      const videoId = encodeURIComponent(params.video_id as string);
+      const result = await ytFetch(
+        `/videos/rate?id=${videoId}&rating=like`,
+        token,
+        { method: "POST" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 訂閱頻道
+    case "youtube_subscribe": {
+      const body = {
+        snippet: {
+          resourceId: {
+            kind: "youtube#channel",
+            channelId: params.channel_id,
+          },
+        },
+      };
+      const result = await ytFetch("/subscriptions?part=snippet", token, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立播放清單
+    case "youtube_create_playlist": {
+      const body = {
+        snippet: {
+          title: params.title,
+          ...(params.description ? { description: params.description } : {}),
+        },
+        status: {
+          privacyStatus: (params.privacy_status as string) || "private",
+        },
+      };
+      const result = await ytFetch("/playlists?part=snippet,status", token, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 刪除播放清單
+    case "youtube_delete_playlist": {
+      const playlistId = encodeURIComponent(params.playlist_id as string);
+      const result = await ytFetch(`/playlists?id=${playlistId}`, token, {
+        method: "DELETE",
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 回覆留言
+    case "youtube_reply_comment": {
+      const body = {
+        snippet: {
+          parentId: params.parent_id,
+          textOriginal: params.text,
+        },
+      };
+      const result = await ytFetch("/comments?part=snippet", token, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 發表頂層留言
+    case "youtube_post_comment": {
+      const body = {
+        snippet: {
+          videoId: params.video_id,
+          topLevelComment: {
+            snippet: {
+              textOriginal: params.text,
+            },
+          },
+        },
+      };
+      const result = await ytFetch("/commentThreads?part=snippet", token, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };

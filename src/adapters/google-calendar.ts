@@ -1,6 +1,6 @@
 /**
  * Google Calendar Adapter
- * 提供 Google Calendar 日曆查詢、事件管理、快速新增、空閒查詢功能
+ * 提供 Google Calendar 日曆查詢、事件管理、快速新增、空閒查詢、日曆建立刪除、週期事件功能
  */
 import { z } from "zod";
 import type {
@@ -119,6 +119,9 @@ const actionMap: Record<string, string> = {
   delete_event: "gcal_delete_event",
   quick_add: "gcal_quick_add",
   freebusy: "gcal_freebusy",
+  list_recurring: "gcal_list_recurring",
+  create_calendar: "gcal_create_calendar",
+  delete_calendar: "gcal_delete_calendar",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -214,12 +217,36 @@ octodock_do(app:"google_calendar", action:"freebusy", params:{
   time_min:"2026-03-15T09:00:00+08:00",
   time_max:"2026-03-15T18:00:00+08:00"
 })`,
+
+  list_recurring: `## google_calendar.list_recurring
+List all instances of a recurring event.
+### Parameters
+  calendar_id (optional): Calendar ID (default "primary")
+  event_id: The recurring event ID
+### Example
+octodock_do(app:"google_calendar", action:"list_recurring", params:{event_id:"abc123def456"})`,
+
+  create_calendar: `## google_calendar.create_calendar
+Create a new Google Calendar.
+### Parameters
+  summary: Calendar name
+  description (optional): Calendar description
+  timezone (optional): Timezone (e.g. "Asia/Taipei")
+### Example
+octodock_do(app:"google_calendar", action:"create_calendar", params:{summary:"Work Calendar", description:"For work events", timezone:"Asia/Taipei"})`,
+
+  delete_calendar: `## google_calendar.delete_calendar
+Delete a Google Calendar. This action is irreversible. Cannot delete the primary calendar.
+### Parameters
+  calendar_id: Calendar ID to delete
+### Example
+octodock_do(app:"google_calendar", action:"delete_calendar", params:{calendar_id:"abc123@group.calendar.google.com"})`,
 };
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `google_calendar actions:
+  return `google_calendar actions (11 total):
   list_calendars() — list all user's calendars
   get_events(calendar_id?, time_min?, time_max?, max_results?) — list events in a time range
   get_event(event_id, calendar_id?) — get single event details
@@ -228,6 +255,9 @@ function getSkill(action?: string): string {
   delete_event(event_id, calendar_id?) — delete event
   quick_add(text, calendar_id?) — create event from natural language
   freebusy(time_min, time_max, calendar_ids?) — check availability
+  list_recurring(event_id, calendar_id?) — list instances of a recurring event
+  create_calendar(summary, description?, timezone?) — create a new calendar
+  delete_calendar(calendar_id) — delete a calendar
 Use octodock_help(app:"google_calendar", action:"ACTION") for detailed params + example.`;
 }
 
@@ -280,6 +310,25 @@ function formatResponse(action: string, rawData: unknown): string {
       const event = rawData as Record<string, unknown>;
       const link = event.htmlLink ? `\nLink: ${event.htmlLink}` : "";
       return `Quick-added event: **${event.summary || "(No title)"}**\nTime: ${formatEventTime(event)}\nID: ${event.id}${link}`;
+    }
+
+    // 週期事件實例列表
+    case "list_recurring": {
+      const data = rawData as { items?: Array<Record<string, unknown>> };
+      if (!data.items?.length) return "此週期事件沒有實例。";
+      return `Found ${data.items.length} instance(s):\n\n` +
+        data.items.map(formatSingleEvent).join("\n\n");
+    }
+
+    // 建立日曆
+    case "create_calendar": {
+      const data = rawData as Record<string, unknown>;
+      return `已建立日曆：**${data.summary || "(No name)"}**\nID: ${data.id}`;
+    }
+
+    // 刪除日曆
+    case "delete_calendar": {
+      return "已成功刪除日曆。";
     }
 
     // 空閒/忙碌查詢結果
@@ -475,6 +524,39 @@ const tools: ToolDefinition[] = [
         .describe('Calendar IDs to check (default ["primary"])'),
     },
   },
+  {
+    name: "gcal_list_recurring",
+    description:
+      "List all instances of a recurring calendar event.",
+    inputSchema: {
+      calendar_id: z
+        .string()
+        .optional()
+        .describe('Calendar ID (default "primary")'),
+      event_id: z.string().describe("The recurring event ID"),
+    },
+  },
+  {
+    name: "gcal_create_calendar",
+    description:
+      "Create a new Google Calendar with a name, optional description, and timezone.",
+    inputSchema: {
+      summary: z.string().describe("Calendar name"),
+      description: z.string().optional().describe("Calendar description"),
+      timezone: z
+        .string()
+        .optional()
+        .describe('Timezone, e.g. "Asia/Taipei"'),
+    },
+  },
+  {
+    name: "gcal_delete_calendar",
+    description:
+      "Delete a Google Calendar. This action is irreversible. Cannot delete the primary calendar.",
+    inputSchema: {
+      calendar_id: z.string().describe("Calendar ID to delete"),
+    },
+  },
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
@@ -611,6 +693,49 @@ async function execute(
       );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 列出週期事件的所有實例
+    case "gcal_list_recurring": {
+      const calendarId = encodeURIComponent((params.calendar_id as string) || "primary");
+      const eventId = encodeURIComponent(params.event_id as string);
+
+      const result = await gcalFetch(
+        `/calendars/${calendarId}/events/${eventId}/instances`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立新日曆
+    case "gcal_create_calendar": {
+      const body: Record<string, unknown> = {
+        summary: params.summary,
+      };
+      if (params.description) body.description = params.description;
+      if (params.timezone) body.timeZone = params.timezone;
+
+      const result = await gcalFetch("/calendars", token, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 刪除日曆
+    case "gcal_delete_calendar": {
+      const calendarId = encodeURIComponent(params.calendar_id as string);
+
+      await gcalFetch(`/calendars/${calendarId}`, token, {
+        method: "DELETE",
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify({ deleted: true }, null, 2) }],
       };
     }
 

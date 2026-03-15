@@ -1,6 +1,6 @@
 /**
  * Google Docs Adapter
- * 提供 Google Docs 文件的建立、讀取、插入文字、取代文字、追加文字功能
+ * 提供 Google Docs 文件的建立、讀取、插入文字、取代文字、追加文字、刪除文字、插入表格功能
  */
 import { z } from "zod";
 import type {
@@ -54,6 +54,8 @@ const actionMap: Record<string, string> = {
   insert_text: "gdocs_insert_text",
   replace_text: "gdocs_replace_text",
   append_text: "gdocs_append_text",
+  delete_text: "gdocs_delete_text",
+  insert_table: "gdocs_insert_table",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -98,17 +100,38 @@ Append text at the end of the document.
   text: Text to append
 ### Example
 octodock_do(app:"google_docs", action:"append_text", params:{documentId:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", text:"\\nAppended paragraph."})`,
+
+  delete_text: `## google_docs.delete_text
+Delete text in a range specified by start and end index.
+### Parameters
+  document_id: Google Document ID
+  start_index: Start position index
+  end_index: End position index
+### Example
+octodock_do(app:"google_docs", action:"delete_text", params:{document_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", start_index:1, end_index:10})`,
+
+  insert_table: `## google_docs.insert_table
+Insert a table at a specific position in the document.
+### Parameters
+  document_id: Google Document ID
+  rows: Number of rows
+  columns: Number of columns
+  index: Position index where to insert the table
+### Example
+octodock_do(app:"google_docs", action:"insert_table", params:{document_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", rows:3, columns:4, index:1})`,
 };
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `google_docs actions (5):
+  return `google_docs actions (7):
   create(title) — create new document
   get(documentId) — get document content as plain text
   insert_text(documentId, text, index) — insert text at position
   replace_text(documentId, findText, replaceText, matchCase) — find and replace text
   append_text(documentId, text) — append text at end of document
+  delete_text(document_id, start_index, end_index) — delete text in range
+  insert_table(document_id, rows, columns, index) — insert table at position
 Use octodock_help(app:"google_docs", action:"ACTION") for detailed params + example.`;
 }
 
@@ -153,10 +176,12 @@ function formatResponse(action: string, rawData: unknown): string {
       return `**${title ?? "Untitled"}**\n\n${text}`;
     }
 
-    // 插入文字 / 取代文字 / 追加文字：簡潔確認
+    // 插入文字 / 取代文字 / 追加文字 / 刪除文字 / 插入表格：簡潔確認
     case "insert_text":
     case "replace_text":
     case "append_text":
+    case "delete_text":
+    case "insert_table":
       return "Done.";
 
     default:
@@ -242,6 +267,29 @@ const tools: ToolDefinition[] = [
     inputSchema: {
       documentId: z.string().describe("Google Document ID"),
       text: z.string().describe("Text to append"),
+    },
+  },
+  // 刪除文字
+  {
+    name: "gdocs_delete_text",
+    description:
+      "Delete text in a specified range (by start and end index) from the document.",
+    inputSchema: {
+      document_id: z.string().describe("Google Document ID"),
+      start_index: z.number().describe("Start position index"),
+      end_index: z.number().describe("End position index"),
+    },
+  },
+  // 插入表格
+  {
+    name: "gdocs_insert_table",
+    description:
+      "Insert a table with specified rows and columns at a given position in the document.",
+    inputSchema: {
+      document_id: z.string().describe("Google Document ID"),
+      rows: z.number().describe("Number of rows"),
+      columns: z.number().describe("Number of columns"),
+      index: z.number().describe("Position index where to insert the table"),
     },
   },
 ];
@@ -353,6 +401,53 @@ async function execute(
               insertText: {
                 text,
                 location: { index: endIndex },
+              },
+            },
+          ],
+        }),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 刪除指定範圍的文字
+    case "gdocs_delete_text": {
+      const documentId = params.document_id as string;
+      const startIndex = params.start_index as number;
+      const endIndex = params.end_index as number;
+      const result = await docsFetch(`/${documentId}:batchUpdate`, token, {
+        method: "POST",
+        body: JSON.stringify({
+          requests: [
+            {
+              deleteContentRange: {
+                range: { startIndex, endIndex },
+              },
+            },
+          ],
+        }),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 插入表格
+    case "gdocs_insert_table": {
+      const documentId = params.document_id as string;
+      const rows = params.rows as number;
+      const columns = params.columns as number;
+      const index = params.index as number;
+      const result = await docsFetch(`/${documentId}:batchUpdate`, token, {
+        method: "POST",
+        body: JSON.stringify({
+          requests: [
+            {
+              insertTable: {
+                rows,
+                columns,
+                location: { index },
               },
             },
           ],
