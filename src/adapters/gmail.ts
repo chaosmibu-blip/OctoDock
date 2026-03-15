@@ -57,6 +57,15 @@ function decodeBody(body: string): string {
   return Buffer.from(body, "base64url").toString("utf8");
 }
 
+// ── 輔助函式：RFC 2047 編碼（非 ASCII 字元的 Subject 需要） ──
+// Gmail API 要求 Subject header 用 RFC 2047 編碼，否則中文等非 ASCII 字元會亂碼
+function encodeRfc2047(text: string): string {
+  // 純 ASCII 不需要編碼
+  if (/^[\x20-\x7E]*$/.test(text)) return text;
+  // Base64 編碼：=?charset?encoding?encoded_text?=
+  return `=?UTF-8?B?${Buffer.from(text, "utf-8").toString("base64")}?=`;
+}
+
 // ── 輔助函式：建構 RFC 2822 格式郵件 ─────────────────────
 function buildRawEmail(
   to: string,
@@ -66,11 +75,13 @@ function buildRawEmail(
 ): string {
   const lines = [
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeRfc2047(subject)}`,
+    "MIME-Version: 1.0",
     ...Object.entries(headers ?? {}).map(([k, v]) => `${k}: ${v}`),
     "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
     "",
-    body,
+    Buffer.from(body, "utf-8").toString("base64"),
   ];
   return Buffer.from(lines.join("\r\n")).toString("base64url");
 }
