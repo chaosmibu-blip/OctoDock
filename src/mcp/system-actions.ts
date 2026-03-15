@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { conversations } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { conversations, storedResults } from "@/db/schema";
+import { eq, and, desc, lt } from "drizzle-orm";
 import {
   queryMemory,
   storeMemory,
@@ -39,6 +39,8 @@ export const systemActionMap: Record<string, string> = {
   import_memory: "system_import_memory",
   // 工具搜尋
   find_tool: "system_find_tool",
+  // 回傳壓縮：取得暫存的完整回傳
+  get_stored: "system_get_stored",
   // 通用 HTTP 請求（混合模式）
   http_request: "system_http_request",
   // 排程引擎（Phase 5）
@@ -71,6 +73,7 @@ export function getSystemSkill(): string {
     cron: standard 5-field cron expression (min hour day month weekday)
   schedule_toggle(schedule_id, is_active) — enable/disable schedule
   schedule_delete(schedule_id) — delete schedule
+  get_stored(ref, lines?) — retrieve full content of a truncated response (e.g. ref:"abc123", lines:"50-100")
   find_tool(task) — find the right app and action for a task (e.g. "send an email", "create a note")
   http_request(url, method?, headers?, body?) — make a generic HTTP request to any API (requires user's connected app token)
 SOPs and schedules persist across agents and sessions.`;
@@ -337,6 +340,54 @@ export async function executeSystemAction(
       ).join("\n");
 
       return { ok: true, data: `Found ${matches.length} matching tools:\n\n${result}\n\nUse octodock_do(app:"APP", action:"ACTION", params:{...}) to execute.` };
+    }
+
+    // ============================================================
+    // 回傳壓縮：取得暫存的完整回傳內容
+    // AI 收到 truncated response 時，用 ref ID 取回完整內容
+    // 支援行範圍查詢（lines:"50-100"），避免一次拉太多
+    // ============================================================
+    case "get_stored": {
+      const ref = params.ref as string;
+      if (!ref) {
+        return { ok: false, error: "ref parameter is required." };
+      }
+
+      const rows = await db
+        .select()
+        .from(storedResults)
+        .where(and(eq(storedResults.id, ref), eq(storedResults.userId, userId)))
+        .limit(1);
+
+      if (rows.length === 0) {
+        return { ok: false, error: "Stored result not found or expired." };
+      }
+
+      const content = rows[0].content;
+      const linesParam = params.lines as string | undefined;
+
+      // 沒指定行範圍 → 回傳全部
+      if (!linesParam) {
+        return { ok: true, data: content };
+      }
+
+      // 解析行範圍（格式："50-100" 或 "50-" 或 "-20"）
+      const allLines = content.split("\n");
+      const [startStr, endStr] = linesParam.split("-");
+      const start = startStr ? parseInt(startStr) - 1 : 0;
+      const end = endStr ? parseInt(endStr) : allLines.length;
+
+      const sliced = allLines.slice(
+        Math.max(0, start),
+        Math.min(end, allLines.length),
+      );
+
+      return {
+        ok: true,
+        data:
+          sliced.join("\n") +
+          `\n\n(showing lines ${Math.max(0, start) + 1}-${Math.min(end, allLines.length)} of ${allLines.length} total)`,
+      };
     }
 
     // ============================================================
