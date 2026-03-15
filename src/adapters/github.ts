@@ -187,8 +187,9 @@ Get the content of a file from a repository (automatically decoded from base64).
   owner: Repository owner (username or org)
   repo: Repository name
   path: File path within the repository (e.g. "src/index.ts")
+  branch (optional): Branch name (default: repo's default branch)
 ### Example
-octodock_do(app:"github", action:"get_file", params:{owner:"octocat", repo:"Hello-World", path:"README.md"})`,
+octodock_do(app:"github", action:"get_file", params:{owner:"octocat", repo:"Hello-World", path:"README.md", branch:"feature-x"})`,
 
   create_file: `## github.create_file
 Create a new file in a repository with a commit message.
@@ -198,8 +199,9 @@ Create a new file in a repository with a commit message.
   path: File path to create (e.g. "docs/guide.md")
   content: File content in plain text (will be base64 encoded automatically)
   message: Commit message
+  branch (optional): Branch to commit to (default: repo's default branch)
 ### Example
-octodock_do(app:"github", action:"create_file", params:{owner:"octocat", repo:"Hello-World", path:"docs/guide.md", content:"# Guide", message:"Add guide"})`,
+octodock_do(app:"github", action:"create_file", params:{owner:"octocat", repo:"Hello-World", path:"docs/guide.md", content:"# Guide", message:"Add guide", branch:"feature-x"})`,
 
   update_file: `## github.update_file
 Update an existing file in a repository. Requires the file's current SHA (get from get_file).
@@ -210,8 +212,9 @@ Update an existing file in a repository. Requires the file's current SHA (get fr
   content: New file content in plain text
   message: Commit message
   sha: Current file SHA (required, obtain via get_file)
+  branch (optional): Branch to commit to (default: repo's default branch)
 ### Example
-octodock_do(app:"github", action:"update_file", params:{owner:"octocat", repo:"Hello-World", path:"README.md", content:"# Updated", message:"Update readme", sha:"abc123"})`,
+octodock_do(app:"github", action:"update_file", params:{owner:"octocat", repo:"Hello-World", path:"README.md", content:"# Updated", message:"Update readme", sha:"abc123", branch:"feature-x"})`,
 
   delete_file: `## github.delete_file
 Delete a file from a repository. Requires the file's current SHA.
@@ -221,8 +224,9 @@ Delete a file from a repository. Requires the file's current SHA.
   path: File path to delete
   message: Commit message
   sha: Current file SHA (required, obtain via get_file)
+  branch (optional): Branch to delete from (default: repo's default branch)
 ### Example
-octodock_do(app:"github", action:"delete_file", params:{owner:"octocat", repo:"Hello-World", path:"old-file.txt", message:"Remove old file", sha:"abc123"})`,
+octodock_do(app:"github", action:"delete_file", params:{owner:"octocat", repo:"Hello-World", path:"old-file.txt", message:"Remove old file", sha:"abc123", branch:"feature-x"})`,
 
   list_branches: `## github.list_branches
 List branches for a repository.
@@ -384,10 +388,10 @@ function getSkill(action?: string): string {
   list_prs(owner, repo) — list open pull requests
   get_pr(owner, repo, pull_number) — get PR details + diff stats
   create_comment(owner, repo, issue_number, body) — comment on issue/PR
-  get_file(owner, repo, path) — get file content (includes SHA for update/delete)
-  create_file(owner, repo, path, content, message) — create a file with commit
-  update_file(owner, repo, path, content, message, sha) — update a file with commit
-  delete_file(owner, repo, path, message, sha) — delete a file with commit
+  get_file(owner, repo, path, branch?) — get file content (includes SHA for update/delete)
+  create_file(owner, repo, path, content, message, branch?) — create a file with commit
+  update_file(owner, repo, path, content, message, sha, branch?) — update a file with commit
+  delete_file(owner, repo, path, message, sha, branch?) — delete a file with commit
   list_branches(owner, repo) — list branches
   create_branch(owner, repo, branch, from?) — create a new branch
   create_pr(owner, repo, title, body, head, base?) — create pull request
@@ -750,6 +754,7 @@ const tools: ToolDefinition[] = [
       owner: z.string().describe("Repository owner (username or organization)"),
       repo: z.string().describe("Repository name"),
       path: z.string().describe("File path within the repository (e.g., 'src/index.ts')"),
+      branch: z.string().optional().describe("Branch name (default: repo's default branch)"),
     },
   },
   // ── 新增 18 個工具定義 ──────────────────────────────────
@@ -763,6 +768,7 @@ const tools: ToolDefinition[] = [
       path: z.string().describe("File path to create (e.g., 'docs/guide.md')"),
       content: z.string().describe("File content in plain text"),
       message: z.string().describe("Commit message"),
+      branch: z.string().optional().describe("Branch to commit to (default: repo's default branch)"),
     },
   },
   {
@@ -776,6 +782,7 @@ const tools: ToolDefinition[] = [
       content: z.string().describe("New file content in plain text"),
       message: z.string().describe("Commit message"),
       sha: z.string().describe("Current file SHA (required, obtain via get_file)"),
+      branch: z.string().optional().describe("Branch to commit to (default: repo's default branch)"),
     },
   },
   {
@@ -788,6 +795,7 @@ const tools: ToolDefinition[] = [
       path: z.string().describe("File path to delete"),
       message: z.string().describe("Commit message"),
       sha: z.string().describe("Current file SHA (required, obtain via get_file)"),
+      branch: z.string().optional().describe("Branch to delete from (default: repo's default branch)"),
     },
   },
   {
@@ -1083,10 +1091,11 @@ async function execute(
       };
     }
 
-    // 取得檔案內容（base64 解碼為純文字）
+    // 取得檔案內容（base64 解碼為純文字，支援指定分支）
     case "github_get_file": {
+      const ref = params.branch ? `?ref=${params.branch}` : "";
       const result = await githubFetch(
-        `/repos/${params.owner}/${params.repo}/contents/${params.path}`,
+        `/repos/${params.owner}/${params.repo}/contents/${params.path}${ref}`,
         token,
       );
       return {
@@ -1096,17 +1105,19 @@ async function execute(
 
     // ── 新增 18 個動作 ──────────────────────────────────────
 
-    // 建立檔案（內容自動 base64 編碼）
+    // 建立檔案（內容自動 base64 編碼，支援指定分支）
     case "github_create_file": {
+      const createBody: Record<string, unknown> = {
+        message: params.message,
+        content: Buffer.from(params.content as string).toString("base64"),
+      };
+      if (params.branch) createBody.branch = params.branch;
       const result = await githubFetch(
         `/repos/${params.owner}/${params.repo}/contents/${params.path}`,
         token,
         {
           method: "PUT",
-          body: JSON.stringify({
-            message: params.message,
-            content: Buffer.from(params.content as string).toString("base64"),
-          }),
+          body: JSON.stringify(createBody),
         },
       );
       return {
@@ -1114,18 +1125,20 @@ async function execute(
       };
     }
 
-    // 更新檔案（需要提供目前的 SHA）
+    // 更新檔案（需要提供目前的 SHA，支援指定分支）
     case "github_update_file": {
+      const updateBody: Record<string, unknown> = {
+        message: params.message,
+        content: Buffer.from(params.content as string).toString("base64"),
+        sha: params.sha,
+      };
+      if (params.branch) updateBody.branch = params.branch;
       const result = await githubFetch(
         `/repos/${params.owner}/${params.repo}/contents/${params.path}`,
         token,
         {
           method: "PUT",
-          body: JSON.stringify({
-            message: params.message,
-            content: Buffer.from(params.content as string).toString("base64"),
-            sha: params.sha,
-          }),
+          body: JSON.stringify(updateBody),
         },
       );
       return {
@@ -1133,17 +1146,19 @@ async function execute(
       };
     }
 
-    // 刪除檔案（需要提供目前的 SHA）
+    // 刪除檔案（需要提供目前的 SHA，支援指定分支）
     case "github_delete_file": {
+      const deleteBody: Record<string, unknown> = {
+        message: params.message,
+        sha: params.sha,
+      };
+      if (params.branch) deleteBody.branch = params.branch;
       const result = await githubFetch(
         `/repos/${params.owner}/${params.repo}/contents/${params.path}`,
         token,
         {
           method: "DELETE",
-          body: JSON.stringify({
-            message: params.message,
-            sha: params.sha,
-          }),
+          body: JSON.stringify(deleteBody),
         },
       );
       return {
