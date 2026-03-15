@@ -160,7 +160,7 @@ octodock_do(app:"google_sheets", action:"batch_update", params:{
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `google_sheets actions (10):
+  return `google_sheets actions (${Object.keys(actionMap).length}):
   create(title) — create new spreadsheet
   get(spreadsheetId) — get spreadsheet metadata (sheet names)
   read(spreadsheetId, range) — read cell values (returns markdown table)

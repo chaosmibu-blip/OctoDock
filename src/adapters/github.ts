@@ -378,7 +378,7 @@ octodock_do(app:"github", action:"create_branch", params:{owner:"octocat", repo:
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `github actions (29 total):
+  return `github actions (${Object.keys(actionMap).length}):
   list_repos() — list your repositories
   get_repo(owner, repo) — get repo details (stars, forks, description)
   search_code(query) — search code across repos
@@ -613,7 +613,7 @@ function formatResponse(action: string, rawData: unknown): string {
     case "search_code": {
       const data = rawData as any;
       const items = data.items ?? [];
-      if (items.length === 0) return "No code results found.";
+      if (items.length === 0) return "No code results found.\nTip: GitHub code search may miss results due to indexing delay. Use get_file to read the file directly if you know the path.";
       return items.map((item: any) =>
         `- **${item.repository?.full_name}** ${item.path}\n  ${item.html_url}`
       ).join("\n");

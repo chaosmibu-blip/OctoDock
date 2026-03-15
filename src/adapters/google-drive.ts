@@ -263,7 +263,7 @@ octodock_do(app:"google_drive", action:"add_comment", params:{file_id:"1Bxi...",
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `google_drive actions (13 total):
+  return `google_drive actions (${Object.keys(actionMap).length}):
   search(query, max_results?) — search files by name/type (Drive query syntax)
   get_file(file_id) — get file metadata
   download(file_id) — download text file content

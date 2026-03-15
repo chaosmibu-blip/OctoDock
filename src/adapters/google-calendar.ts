@@ -247,7 +247,7 @@ octodock_do(app:"google_calendar", action:"delete_calendar", params:{calendar_id
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `google_calendar actions (11 total):
+  return `google_calendar actions (${Object.keys(actionMap).length}):
   list_calendars() — list all user's calendars
   get_events(calendar_id?, time_min?, time_max?, max_results?) — list events in a time range
   get_event(event_id, calendar_id?) — get single event details

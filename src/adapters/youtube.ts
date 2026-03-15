@@ -222,7 +222,7 @@ function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action)
     return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `youtube actions (16 total):
+  return `youtube actions (${Object.keys(actionMap).length}):
   search(query, max_results?) — search videos (⚠️ 100 quota units per call)
   get_video(video_id) — get video details + stats (1 unit)
   list_playlists(max_results?) — list your playlists (1 unit)

@@ -434,22 +434,27 @@ export async function executeSystemAction(
         return { ok: true, data: content };
       }
 
-      // 解析行範圍（格式："50-100" 或 "50-" 或 "-20"）
+      // 解析行範圍，支援多範圍語法（如 "1-50,200-250"）
       const allLines = content.split("\n");
-      const [startStr, endStr] = linesParam.split("-");
-      const start = startStr ? parseInt(startStr) - 1 : 0;
-      const end = endStr ? parseInt(endStr) : allLines.length;
+      const ranges = linesParam.split(",").map((r) => r.trim());
+      const segments: string[] = [];
+      const rangeLabels: string[] = [];
 
-      const sliced = allLines.slice(
-        Math.max(0, start),
-        Math.min(end, allLines.length),
-      );
+      for (const range of ranges) {
+        const [startStr, endStr] = range.split("-");
+        const start = startStr ? parseInt(startStr) - 1 : 0;
+        const end = endStr ? parseInt(endStr) : allLines.length;
+        const s = Math.max(0, start);
+        const e = Math.min(end, allLines.length);
+        segments.push(allLines.slice(s, e).join("\n"));
+        rangeLabels.push(`${s + 1}-${e}`);
+      }
 
       return {
         ok: true,
         data:
-          sliced.join("\n") +
-          `\n\n(showing lines ${Math.max(0, start) + 1}-${Math.min(end, allLines.length)} of ${allLines.length} total)`,
+          segments.join("\n\n...\n\n") +
+          `\n\n(showing lines ${rangeLabels.join(", ")} of ${allLines.length} total)`,
       };
     }
 

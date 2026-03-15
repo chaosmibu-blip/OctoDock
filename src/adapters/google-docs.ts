@@ -125,7 +125,7 @@ octodock_do(app:"google_docs", action:"insert_table", params:{document_id:"1BxiM
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `google_docs actions (7):
+  return `google_docs actions (${Object.keys(actionMap).length}):
   create(title) — create new document
   get(documentId) — get document content as plain text
   insert_text(documentId, text, index) — insert text at position

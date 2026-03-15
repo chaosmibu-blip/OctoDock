@@ -247,7 +247,7 @@ function getSkill(action?: string): string {
     return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   }
   // app 級別：全部 21 個 action
-  return `notion actions (21):
+  return `notion actions (${Object.keys(actionMap).length}):
   search(query, filter?) — search pages/databases
   create_page(title, content?, folder?) — create page (markdown)
   get_page(page) — get page content (returns markdown)
@@ -1127,7 +1127,7 @@ async function execute(
       };
     }
 
-    // ── 建立頁面 ──
+    // ── 建立頁面（自動分批：超過 100 blocks 時先建頁再 append 剩餘）──
     case "notion_create_page": {
       const parentType = (params.parent_type as string) ?? "page_id";
       const body: Record<string, unknown> = {
@@ -1146,14 +1146,34 @@ async function execute(
       }
 
       // 如果有內容，轉換 Markdown 為 Notion blocks
+      let allBlocks: Array<Record<string, unknown>> = [];
       if (params.content) {
-        body.children = markdownToBlocks(params.content as string);
+        allBlocks = markdownToBlocks(params.content as string);
       }
+
+      // Notion API 限制每次最多 100 個 blocks
+      const BLOCK_LIMIT = 100;
+      body.children = allBlocks.slice(0, BLOCK_LIMIT);
 
       const result = await notionFetch("/pages", token, {
         method: "POST",
         body: JSON.stringify(body),
-      });
+      }) as Record<string, unknown>;
+
+      // 超過 100 blocks：用 append_blocks 補剩下的（對呼叫者透明）
+      if (allBlocks.length > BLOCK_LIMIT) {
+        const pageId = result.id as string;
+        const remaining = allBlocks.slice(BLOCK_LIMIT);
+        // 每次 append 100 個，直到全部寫完
+        for (let i = 0; i < remaining.length; i += BLOCK_LIMIT) {
+          const batch = remaining.slice(i, i + BLOCK_LIMIT);
+          await notionFetch(`/blocks/${pageId}/children`, token, {
+            method: "PATCH",
+            body: JSON.stringify({ children: batch }),
+          });
+        }
+      }
+
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };

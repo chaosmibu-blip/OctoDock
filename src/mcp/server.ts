@@ -6,7 +6,7 @@ import { eq, lt, or, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware } from "./middleware/logger";
-import { learnIdentifier, resolveIdentifier, listMemory } from "@/services/memory-engine";
+import { learnIdentifier, resolveIdentifier, listMemory, queryMemory } from "@/services/memory-engine";
 import { detectSopCandidate } from "@/services/sop-detector";
 import {
   systemActionMap,
@@ -268,12 +268,23 @@ function registerDoTool(
         }
       }
 
-      // ── 智慧錯誤引導（B3）──
+      // ── 智慧錯誤引導（B3 + 記憶層缺口 5）──
       // 如果操作失敗且 adapter 有 formatError，嘗試提供更有用的提示
+      // 額外查記憶層，找最近成功的同類操作，提供參數範例
       if (!result.ok && result.error && adapter.formatError) {
         const betterError = adapter.formatError(action, result.error);
         if (betterError) {
           result.error = betterError;
+        }
+        // 記憶層輔助：查最近成功的同類操作，提供參數參考
+        try {
+          const recentMemory = await queryMemory(userId, `${app} ${action}`, "context");
+          if (recentMemory.length > 0) {
+            const hints = recentMemory.slice(0, 3).map((m) => `- ${m.key}: ${m.value}`).join("\n");
+            result.error += `\n\nRecent successful operations:\n${hints}`;
+          }
+        } catch {
+          // 記憶查詢失敗不影響錯誤回傳
         }
       }
 
@@ -378,7 +389,10 @@ function registerHelpTool(
           .filter((a) => !connectedAppNames.includes(a.name))
           .map((a) => a.name);
 
-        let text = `## Connected Apps\n\n${appList.join("\n")}`;
+        // 版本資訊（build time 注入的 git SHA + 日期）
+        const version = process.env.NEXT_PUBLIC_GIT_SHA ?? "dev";
+        const buildDate = process.env.NEXT_PUBLIC_BUILD_TIME ?? "unknown";
+        let text = `**OctoDock** v:${version} (${buildDate})\n\n## Connected Apps\n\n${appList.join("\n")}`;
         if (disconnected.length > 0) {
           text += `\n\n## Available (not connected)\n\n${disconnected.join(", ")}`;
         }

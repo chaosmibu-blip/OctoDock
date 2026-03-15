@@ -106,6 +106,30 @@ function extractText(payload: Record<string, unknown>): string {
   return "";
 }
 
+// ── 輔助函式：提取附件資訊（名稱、大小、ID）──────────────
+// 讓 AI 知道郵件有附件，可接續呼叫 get_attachment 下載
+function extractAttachments(payload: Record<string, unknown>): Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> {
+  const attachments: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> = [];
+  const parts = (payload as { parts?: Array<Record<string, unknown>> }).parts;
+  if (!parts) return attachments;
+  for (const part of parts) {
+    const filename = part.filename as string | undefined;
+    const body = part.body as { attachmentId?: string; size?: number } | undefined;
+    if (filename && body?.attachmentId) {
+      attachments.push({
+        filename,
+        mimeType: (part.mimeType as string) ?? "application/octet-stream",
+        size: body.size ?? 0,
+        attachmentId: body.attachmentId,
+      });
+    }
+    // 遞迴檢查巢狀 parts
+    const nested = extractAttachments(part);
+    attachments.push(...nested);
+  }
+  return attachments;
+}
+
 // ── 輔助函式：提取郵件標頭值 ──────────────────────────────
 function getHeader(
   headers: Array<{ name: string; value: string }>,
@@ -273,10 +297,15 @@ function formatResponse(action: string, rawData: unknown): string {
       }
       return String(rawData);
     }
-    // 閱讀結果：完整郵件格式
+    // 閱讀結果：完整郵件格式（含附件列表）
     case "read": {
-      const { subject, from, to, date, body, id, threadId } = data as any;
-      return `From: ${from}\nTo: ${to}\nDate: ${date}\nSubject: ${subject}\nThread: ${threadId}\n\n${body}`;
+      const { subject, from, to, date, body, id, threadId, attachments } = data as any;
+      let text = `From: ${from}\nTo: ${to}\nDate: ${date}\nSubject: ${subject}\nThread: ${threadId}\n\n${body}`;
+      if (attachments && attachments.length > 0) {
+        text += `\n\n--- Attachments (${attachments.length}) ---\n`;
+        text += attachments.map((a: any) => `- ${a.filename} (${a.mimeType}, ${a.size} bytes)\n  Use get_attachment(message_id:"${id}", attachment_id:"${a.attachmentId}") to download`).join("\n");
+      }
+      return text;
     }
     // 發送/回覆/草稿：完成確認
     case "send":
@@ -488,6 +517,9 @@ async function execute(
       const headers = msg.payload.headers;
       const body = extractText(msg.payload);
 
+      // 提取附件資訊（讓 AI 知道有附件可下載）
+      const attachments = extractAttachments(msg.payload);
+
       return {
         content: [
           {
@@ -501,6 +533,7 @@ async function execute(
                 to: getHeader(headers, "To"),
                 date: getHeader(headers, "Date"),
                 body,
+                ...(attachments.length > 0 ? { attachments } : {}),
               },
               null,
               2,

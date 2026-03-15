@@ -177,7 +177,7 @@ function getSkill(action?: string): string {
     return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
   }
   // app 級別：全部 10 個 action
-  return `google_tasks actions (10):
+  return `google_tasks actions (${Object.keys(actionMap).length}):
   list_tasklists() — list all task lists
   list_tasks(tasklist, show_completed?, max_results?) — list tasks in a list
   get_task(tasklist, task) — get single task details
