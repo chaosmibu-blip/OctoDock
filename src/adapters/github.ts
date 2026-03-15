@@ -46,6 +46,8 @@ async function githubFetch(
       JSON.stringify({ status, message: (error as { message: string }).message }),
     );
   }
+  // 處理 204 No Content（例如 star_repo）
+  if (res.status === 204) return { _status: 204 };
   return res.json();
 }
 
@@ -62,6 +64,24 @@ const actionMap: Record<string, string> = {
   get_pr: "github_get_pr",
   create_comment: "github_create_comment",
   get_file: "github_get_file",
+  create_file: "github_create_file",
+  update_file: "github_update_file",
+  delete_file: "github_delete_file",
+  list_branches: "github_list_branches",
+  create_pr: "github_create_pr",
+  merge_pr: "github_merge_pr",
+  list_commits: "github_list_commits",
+  create_repo: "github_create_repo",
+  list_releases: "github_list_releases",
+  create_release: "github_create_release",
+  list_workflows: "github_list_workflows",
+  trigger_workflow: "github_trigger_workflow",
+  list_gists: "github_list_gists",
+  create_gist: "github_create_gist",
+  search_repos: "github_search_repos",
+  search_issues: "github_search_issues",
+  star_repo: "github_star_repo",
+  fork_repo: "github_fork_repo",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -168,13 +188,181 @@ Get the content of a file from a repository (automatically decoded from base64).
   path: File path within the repository (e.g. "src/index.ts")
 ### Example
 octodock_do(app:"github", action:"get_file", params:{owner:"octocat", repo:"Hello-World", path:"README.md"})`,
+
+  create_file: `## github.create_file
+Create a new file in a repository with a commit message.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  path: File path to create (e.g. "docs/guide.md")
+  content: File content in plain text (will be base64 encoded automatically)
+  message: Commit message
+### Example
+octodock_do(app:"github", action:"create_file", params:{owner:"octocat", repo:"Hello-World", path:"docs/guide.md", content:"# Guide", message:"Add guide"})`,
+
+  update_file: `## github.update_file
+Update an existing file in a repository. Requires the file's current SHA (get from get_file).
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  path: File path to update
+  content: New file content in plain text
+  message: Commit message
+  sha: Current file SHA (required, obtain via get_file)
+### Example
+octodock_do(app:"github", action:"update_file", params:{owner:"octocat", repo:"Hello-World", path:"README.md", content:"# Updated", message:"Update readme", sha:"abc123"})`,
+
+  delete_file: `## github.delete_file
+Delete a file from a repository. Requires the file's current SHA.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  path: File path to delete
+  message: Commit message
+  sha: Current file SHA (required, obtain via get_file)
+### Example
+octodock_do(app:"github", action:"delete_file", params:{owner:"octocat", repo:"Hello-World", path:"old-file.txt", message:"Remove old file", sha:"abc123"})`,
+
+  list_branches: `## github.list_branches
+List branches for a repository.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+### Example
+octodock_do(app:"github", action:"list_branches", params:{owner:"octocat", repo:"Hello-World"})`,
+
+  create_pr: `## github.create_pr
+Create a new pull request.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  title: PR title
+  body: PR description
+  head: Source branch name
+  base (optional): Target branch name (default "main")
+### Example
+octodock_do(app:"github", action:"create_pr", params:{owner:"octocat", repo:"Hello-World", title:"Add feature", body:"Implements feature X", head:"feature-branch", base:"main"})`,
+
+  merge_pr: `## github.merge_pr
+Merge a pull request.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  pull_number: Pull request number
+  merge_method (optional): "merge", "squash", or "rebase" (default "merge")
+### Example
+octodock_do(app:"github", action:"merge_pr", params:{owner:"octocat", repo:"Hello-World", pull_number:123})`,
+
+  list_commits: `## github.list_commits
+List recent commits for a repository.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  per_page (optional): Number of commits to return (default 20)
+### Example
+octodock_do(app:"github", action:"list_commits", params:{owner:"octocat", repo:"Hello-World"})`,
+
+  create_repo: `## github.create_repo
+Create a new repository for the authenticated user.
+### Parameters
+  name: Repository name
+  description (optional): Repository description
+  private (optional): Whether the repo is private (default false)
+### Example
+octodock_do(app:"github", action:"create_repo", params:{name:"my-new-repo", description:"A cool project", private:true})`,
+
+  list_releases: `## github.list_releases
+List releases for a repository.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+### Example
+octodock_do(app:"github", action:"list_releases", params:{owner:"octocat", repo:"Hello-World"})`,
+
+  create_release: `## github.create_release
+Create a new release for a repository.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  tag_name: Tag name for the release (e.g. "v1.0.0")
+  name: Release title
+  body (optional): Release notes
+  draft (optional): Whether this is a draft release (default false)
+### Example
+octodock_do(app:"github", action:"create_release", params:{owner:"octocat", repo:"Hello-World", tag_name:"v1.0.0", name:"Version 1.0", body:"First stable release"})`,
+
+  list_workflows: `## github.list_workflows
+List GitHub Actions workflows for a repository.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+### Example
+octodock_do(app:"github", action:"list_workflows", params:{owner:"octocat", repo:"Hello-World"})`,
+
+  trigger_workflow: `## github.trigger_workflow
+Trigger a GitHub Actions workflow dispatch event.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  workflow_id: Workflow ID or filename (e.g. "deploy.yml")
+  ref (optional): Branch to run the workflow on (default "main")
+### Example
+octodock_do(app:"github", action:"trigger_workflow", params:{owner:"octocat", repo:"Hello-World", workflow_id:"deploy.yml", ref:"main"})`,
+
+  list_gists: `## github.list_gists
+List the authenticated user's gists.
+### Parameters
+  per_page (optional): Number of gists to return (default 20)
+### Example
+octodock_do(app:"github", action:"list_gists", params:{})`,
+
+  create_gist: `## github.create_gist
+Create a new gist.
+### Parameters
+  description: Gist description
+  files: Object mapping filename to {content: string}
+  public (optional): Whether the gist is public (default false)
+### Example
+octodock_do(app:"github", action:"create_gist", params:{description:"My snippet", files:{"hello.js":{content:"console.log('hello')"}}, public:false})`,
+
+  search_repos: `## github.search_repos
+Search GitHub repositories by keyword.
+### Parameters
+  query: Search query
+  per_page (optional): Number of results (default 10)
+### Example
+octodock_do(app:"github", action:"search_repos", params:{query:"react framework"})`,
+
+  search_issues: `## github.search_issues
+Search issues and pull requests across GitHub.
+### Parameters
+  query: Search query (supports GitHub search syntax)
+  per_page (optional): Number of results (default 10)
+### Example
+octodock_do(app:"github", action:"search_issues", params:{query:"bug label:bug repo:octocat/Hello-World"})`,
+
+  star_repo: `## github.star_repo
+Star a repository for the authenticated user.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+### Example
+octodock_do(app:"github", action:"star_repo", params:{owner:"octocat", repo:"Hello-World"})`,
+
+  fork_repo: `## github.fork_repo
+Fork a repository to the authenticated user's account.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+### Example
+octodock_do(app:"github", action:"fork_repo", params:{owner:"octocat", repo:"Hello-World"})`,
 };
 
 // ── do+help 架構：取得技能說明 ────────────────────────────
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  return `github actions:
+  return `github actions (28 total):
   list_repos() — list your repositories
   get_repo(owner, repo) — get repo details (stars, forks, description)
   search_code(query) — search code across repos
@@ -185,6 +373,24 @@ function getSkill(action?: string): string {
   get_pr(owner, repo, pull_number) — get PR details + diff stats
   create_comment(owner, repo, issue_number, body) — comment on issue/PR
   get_file(owner, repo, path) — get file content
+  create_file(owner, repo, path, content, message) — create a file with commit
+  update_file(owner, repo, path, content, message, sha) — update a file with commit
+  delete_file(owner, repo, path, message, sha) — delete a file with commit
+  list_branches(owner, repo) — list branches
+  create_pr(owner, repo, title, body, head, base?) — create pull request
+  merge_pr(owner, repo, pull_number, merge_method?) — merge pull request
+  list_commits(owner, repo, per_page?) — list recent commits
+  create_repo(name, description?, private?) — create new repository
+  list_releases(owner, repo) — list releases
+  create_release(owner, repo, tag_name, name, body?, draft?) — create release
+  list_workflows(owner, repo) — list GitHub Actions workflows
+  trigger_workflow(owner, repo, workflow_id, ref?) — trigger workflow dispatch
+  list_gists(per_page?) — list your gists
+  create_gist(description, files, public?) — create a gist
+  search_repos(query, per_page?) — search repositories
+  search_issues(query, per_page?) — search issues & PRs
+  star_repo(owner, repo) — star a repository
+  fork_repo(owner, repo) — fork a repository
 Use octodock_help(app:"github", action:"ACTION") for detailed params + example.`;
 }
 
@@ -240,9 +446,120 @@ function formatResponse(action: string, rawData: unknown): string {
     // 建立/更新操作：完成確認 + URL
     case "create_issue":
     case "update_issue":
-    case "create_comment": {
+    case "create_comment":
+    case "create_pr":
+    case "create_repo":
+    case "create_release":
+    case "create_gist":
+    case "fork_repo": {
       const data = rawData as any;
       return `Done. URL: ${data.html_url}`;
+    }
+
+    // 檔案建立/更新/刪除：完成確認 + commit URL
+    case "create_file":
+    case "update_file":
+    case "delete_file": {
+      const data = rawData as any;
+      return `Done. URL: ${data.content?.html_url ?? data.commit?.html_url ?? "N/A"}`;
+    }
+
+    // 合併 PR：完成確認
+    case "merge_pr": {
+      const data = rawData as any;
+      return `Done. ${data.message ?? "Pull request merged."}`;
+    }
+
+    // Star 倉庫：204 No Content 成功
+    case "star_repo": {
+      return "Done. Repository starred successfully.";
+    }
+
+    // 觸發工作流程：204 No Content 成功
+    case "trigger_workflow": {
+      return "Done. Workflow dispatch triggered successfully.";
+    }
+
+    // 列出分支
+    case "list_branches": {
+      if (Array.isArray(rawData)) {
+        if (rawData.length === 0) return "No branches found.";
+        return rawData.map((b: any) =>
+          `- **${b.name}**${b.protected ? " (protected)" : ""}`
+        ).join("\n");
+      }
+      return String(rawData);
+    }
+
+    // 列出提交紀錄
+    case "list_commits": {
+      if (Array.isArray(rawData)) {
+        if (rawData.length === 0) return "No commits found.";
+        return rawData.map((c: any) => {
+          const sha = c.sha?.substring(0, 7) ?? "???????";
+          const msg = c.commit?.message?.split("\n")[0] ?? "";
+          const author = c.commit?.author?.name ?? "unknown";
+          const date = c.commit?.author?.date?.substring(0, 10) ?? "";
+          return `- **${sha}** ${msg} (${author}, ${date})`;
+        }).join("\n");
+      }
+      return String(rawData);
+    }
+
+    // 列出發佈版本
+    case "list_releases": {
+      if (Array.isArray(rawData)) {
+        if (rawData.length === 0) return "No releases found.";
+        return rawData.map((r: any) => {
+          const date = r.published_at?.substring(0, 10) ?? "";
+          return `- **${r.tag_name}** ${r.name ?? ""} (${date})`;
+        }).join("\n");
+      }
+      return String(rawData);
+    }
+
+    // 列出工作流程
+    case "list_workflows": {
+      const data = rawData as any;
+      const workflows = data.workflows ?? [];
+      if (workflows.length === 0) return "No workflows found.";
+      return workflows.map((w: any) =>
+        `- **${w.name}** (id: ${w.id}, ${w.state})`
+      ).join("\n");
+    }
+
+    // 列出 Gist
+    case "list_gists": {
+      if (Array.isArray(rawData)) {
+        if (rawData.length === 0) return "No gists found.";
+        return rawData.map((g: any) => {
+          const desc = g.description || "No description";
+          const fileCount = Object.keys(g.files ?? {}).length;
+          return `- **${desc}** (files: ${fileCount}, ${g.html_url})`;
+        }).join("\n");
+      }
+      return String(rawData);
+    }
+
+    // 搜尋倉庫
+    case "search_repos": {
+      const data = rawData as any;
+      const items = data.items ?? [];
+      if (items.length === 0) return "No repositories found.";
+      return items.map((r: any) =>
+        `- **${r.full_name}** ⭐ ${r.stargazers_count} | ${r.description || "No description"}`
+      ).join("\n");
+    }
+
+    // 搜尋 Issue
+    case "search_issues": {
+      const data = rawData as any;
+      const items = data.items ?? [];
+      if (items.length === 0) return "No issues found.";
+      return items.map((i: any) => {
+        const repo = i.repository_url?.split("/").slice(-2).join("/") ?? "";
+        return `- #${i.number} **${i.title}** (${i.state}, ${repo})`;
+      }).join("\n");
     }
 
     // 倉庫詳情
@@ -415,6 +732,193 @@ const tools: ToolDefinition[] = [
       path: z.string().describe("File path within the repository (e.g., 'src/index.ts')"),
     },
   },
+  // ── 新增 18 個工具定義 ──────────────────────────────────
+  {
+    name: "github_create_file",
+    description:
+      "Create a new file in a repository with a commit. Content is provided as plain text and automatically base64-encoded.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      path: z.string().describe("File path to create (e.g., 'docs/guide.md')"),
+      content: z.string().describe("File content in plain text"),
+      message: z.string().describe("Commit message"),
+    },
+  },
+  {
+    name: "github_update_file",
+    description:
+      "Update an existing file in a repository. Requires the file's current SHA (obtain via get_file). Content is plain text, automatically base64-encoded.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      path: z.string().describe("File path to update"),
+      content: z.string().describe("New file content in plain text"),
+      message: z.string().describe("Commit message"),
+      sha: z.string().describe("Current file SHA (required, obtain via get_file)"),
+    },
+  },
+  {
+    name: "github_delete_file",
+    description:
+      "Delete a file from a repository. Requires the file's current SHA (obtain via get_file).",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      path: z.string().describe("File path to delete"),
+      message: z.string().describe("Commit message"),
+      sha: z.string().describe("Current file SHA (required, obtain via get_file)"),
+    },
+  },
+  {
+    name: "github_list_branches",
+    description:
+      "List branches for a repository. Shows branch name and whether it is the default branch.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+    },
+  },
+  {
+    name: "github_create_pr",
+    description:
+      "Create a new pull request from a head branch to a base branch.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      title: z.string().describe("Pull request title"),
+      body: z.string().describe("Pull request description"),
+      head: z.string().describe("Source branch name"),
+      base: z.string().optional().describe("Target branch name (default 'main')"),
+    },
+  },
+  {
+    name: "github_merge_pr",
+    description:
+      "Merge a pull request using the specified merge method.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      pull_number: z.number().describe("Pull request number"),
+      merge_method: z.enum(["merge", "squash", "rebase"]).optional().describe("Merge method (default 'merge')"),
+    },
+  },
+  {
+    name: "github_list_commits",
+    description:
+      "List recent commits for a repository, showing SHA, message, author, and date.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      per_page: z.number().optional().describe("Number of commits to return (default 20)"),
+    },
+  },
+  {
+    name: "github_create_repo",
+    description:
+      "Create a new repository for the authenticated user.",
+    inputSchema: {
+      name: z.string().describe("Repository name"),
+      description: z.string().optional().describe("Repository description"),
+      private: z.boolean().optional().describe("Whether the repo is private (default false)"),
+    },
+  },
+  {
+    name: "github_list_releases",
+    description:
+      "List releases for a repository, showing tag, name, and publish date.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+    },
+  },
+  {
+    name: "github_create_release",
+    description:
+      "Create a new release for a repository with a tag, title, and optional release notes.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      tag_name: z.string().describe("Tag name for the release (e.g., 'v1.0.0')"),
+      name: z.string().describe("Release title"),
+      body: z.string().optional().describe("Release notes in Markdown"),
+      draft: z.boolean().optional().describe("Whether this is a draft release (default false)"),
+    },
+  },
+  {
+    name: "github_list_workflows",
+    description:
+      "List GitHub Actions workflows for a repository, showing name, ID, and state.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+    },
+  },
+  {
+    name: "github_trigger_workflow",
+    description:
+      "Trigger a GitHub Actions workflow dispatch event on a specified branch.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      workflow_id: z.union([z.string(), z.number()]).describe("Workflow ID or filename (e.g., 'deploy.yml')"),
+      ref: z.string().optional().describe("Branch to run the workflow on (default 'main')"),
+    },
+  },
+  {
+    name: "github_list_gists",
+    description:
+      "List the authenticated user's gists, showing description, file count, and URL.",
+    inputSchema: {
+      per_page: z.number().optional().describe("Number of gists to return (default 20)"),
+    },
+  },
+  {
+    name: "github_create_gist",
+    description:
+      "Create a new gist with one or more files.",
+    inputSchema: {
+      description: z.string().describe("Gist description"),
+      files: z.record(z.string(), z.object({ content: z.string() })).describe("Object mapping filename to {content: string}"),
+      public: z.boolean().optional().describe("Whether the gist is public (default false)"),
+    },
+  },
+  {
+    name: "github_search_repos",
+    description:
+      "Search GitHub repositories by keyword. Returns repo name, stars, and description.",
+    inputSchema: {
+      query: z.string().describe("Search query"),
+      per_page: z.number().optional().describe("Number of results (default 10)"),
+    },
+  },
+  {
+    name: "github_search_issues",
+    description:
+      "Search issues and pull requests across GitHub repositories.",
+    inputSchema: {
+      query: z.string().describe("Search query (supports GitHub search syntax)"),
+      per_page: z.number().optional().describe("Number of results (default 10)"),
+    },
+  },
+  {
+    name: "github_star_repo",
+    description:
+      "Star a repository for the authenticated user.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+    },
+  },
+  {
+    name: "github_fork_repo",
+    description:
+      "Fork a repository to the authenticated user's account.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+    },
+  },
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
@@ -552,6 +1056,274 @@ async function execute(
       const result = await githubFetch(
         `/repos/${params.owner}/${params.repo}/contents/${params.path}`,
         token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // ── 新增 18 個動作 ──────────────────────────────────────
+
+    // 建立檔案（內容自動 base64 編碼）
+    case "github_create_file": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/contents/${params.path}`,
+        token,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            message: params.message,
+            content: Buffer.from(params.content as string).toString("base64"),
+          }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 更新檔案（需要提供目前的 SHA）
+    case "github_update_file": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/contents/${params.path}`,
+        token,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            message: params.message,
+            content: Buffer.from(params.content as string).toString("base64"),
+            sha: params.sha,
+          }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 刪除檔案（需要提供目前的 SHA）
+    case "github_delete_file": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/contents/${params.path}`,
+        token,
+        {
+          method: "DELETE",
+          body: JSON.stringify({
+            message: params.message,
+            sha: params.sha,
+          }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 列出倉庫分支
+    case "github_list_branches": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/branches`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立 Pull Request
+    case "github_create_pr": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/pulls`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            title: params.title,
+            body: params.body,
+            head: params.head,
+            base: (params.base as string) || "main",
+          }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 合併 Pull Request
+    case "github_merge_pr": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/pulls/${params.pull_number}/merge`,
+        token,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            merge_method: (params.merge_method as string) || "merge",
+          }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 列出倉庫提交紀錄
+    case "github_list_commits": {
+      const perPage = (params.per_page as number) || 20;
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/commits?per_page=${perPage}`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立新倉庫
+    case "github_create_repo": {
+      const body: Record<string, unknown> = { name: params.name };
+      if (params.description) body.description = params.description;
+      body.private = params.private ?? false;
+
+      const result = await githubFetch("/user/repos", token, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 列出倉庫發佈版本
+    case "github_list_releases": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/releases`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立新發佈版本
+    case "github_create_release": {
+      const body: Record<string, unknown> = {
+        tag_name: params.tag_name,
+        name: params.name,
+      };
+      if (params.body) body.body = params.body;
+      body.draft = params.draft ?? false;
+
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/releases`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 列出 GitHub Actions 工作流程
+    case "github_list_workflows": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/actions/workflows`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 觸發 GitHub Actions 工作流程
+    case "github_trigger_workflow": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/actions/workflows/${params.workflow_id}/dispatches`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ref: (params.ref as string) || "main",
+          }),
+        },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 列出用戶的 Gist
+    case "github_list_gists": {
+      const perPage = (params.per_page as number) || 20;
+      const result = await githubFetch(
+        `/gists?per_page=${perPage}`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立新 Gist
+    case "github_create_gist": {
+      const result = await githubFetch("/gists", token, {
+        method: "POST",
+        body: JSON.stringify({
+          description: params.description,
+          files: params.files,
+          public: params.public ?? false,
+        }),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 搜尋倉庫
+    case "github_search_repos": {
+      const perPage = (params.per_page as number) || 10;
+      const result = await githubFetch(
+        `/search/repositories?q=${encodeURIComponent(params.query as string)}&per_page=${perPage}`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 搜尋 Issue 與 PR
+    case "github_search_issues": {
+      const perPage = (params.per_page as number) || 10;
+      const result = await githubFetch(
+        `/search/issues?q=${encodeURIComponent(params.query as string)}&per_page=${perPage}`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 為倉庫加星（回傳 204 No Content）
+    case "github_star_repo": {
+      const result = await githubFetch(
+        `/user/starred/${params.owner}/${params.repo}`,
+        token,
+        { method: "PUT" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // Fork 倉庫
+    case "github_fork_repo": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/forks`,
+        token,
+        { method: "POST" },
       );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
