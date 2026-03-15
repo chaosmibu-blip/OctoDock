@@ -19,12 +19,12 @@
 | Icon | `public/icon-512.png` | 512x512 PNG，專案內已有 |
 | Associated workspace | 用戶自己的工作區 | 僅影響開發/測試，其他用戶透過 OAuth 連自己的工作區 |
 | Company name | `OctoDock` | |
-| Website | `https://agent-dock.replit.app` | OctoDock 部署網址 |
+| Website | `https://octo-dock.com` | OctoDock 部署網址 |
 | Tagline | `One MCP URL for all your apps` | |
-| Privacy Policy URL | `https://agent-dock.replit.app` | MVP 先填首頁 |
-| Terms of Use URL | `https://agent-dock.replit.app` | MVP 先填首頁 |
+| Privacy Policy URL | `https://octo-dock.com` | MVP 先填首頁 |
+| Terms of Use URL | `https://octo-dock.com` | MVP 先填首頁 |
 | Email | 用戶的 email | 開發者聯絡信箱 |
-| Redirect URIs | `https://agent-dock.replit.app/callback/notion` | **必須完全一致**，含 https 協定 |
+| Redirect URIs | `https://octo-dock.com/callback/notion` | **必須完全一致**，含 https 協定 |
 | Notion URL for optional template | （留空） | |
 
 點 **Create** 建立。
@@ -62,7 +62,7 @@ npm run build
 
 ### Step 6: 測試連結
 
-1. 前往 Dashboard（`https://agent-dock.replit.app/dashboard`）
+1. 前往 Dashboard（`https://octo-dock.com/dashboard`）
 2. 點 Notion 的 **「連結」** 按鈕
 3. 跳轉到 Notion 授權頁面
 4. 選擇要分享的頁面
@@ -72,7 +72,7 @@ npm run build
 ### 常見問題
 
 **Q: 按連結後出現錯誤？**
-- 確認 Redirect URI 完全一致：`https://agent-dock.replit.app/callback/notion`
+- 確認 Redirect URI 完全一致：`https://octo-dock.com/callback/notion`
 - 確認 `NOTION_OAUTH_CLIENT_ID` 和 `NOTION_OAUTH_CLIENT_SECRET` 已設定且正確
 - 確認已重新部署
 

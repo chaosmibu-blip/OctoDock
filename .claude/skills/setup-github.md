@@ -13,8 +13,8 @@ description: GitHub App 的設定、維護、更新指南，以及幫助外部 A
 2. 點 **New OAuth App**
 3. 填寫：
    - Application name: `OctoDock`
-   - Homepage URL: `https://agent-dock.replit.app`
-   - Authorization callback URL: `https://agent-dock.replit.app/callback/github`
+   - Homepage URL: `https://octo-dock.com`
+   - Authorization callback URL: `https://octo-dock.com/callback/github`
 4. 點 **Register application**
 5. 複製 **Client ID**
 6. 點 **Generate a new client secret**，複製 **Client Secret**
