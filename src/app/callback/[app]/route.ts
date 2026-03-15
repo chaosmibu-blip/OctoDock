@@ -69,7 +69,10 @@ async function exchangeCode(
 
   const response = await fetch(config.tokenUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json", // GitHub 需要這個才會回傳 JSON
+    },
     body: body.toString(),
   });
 
