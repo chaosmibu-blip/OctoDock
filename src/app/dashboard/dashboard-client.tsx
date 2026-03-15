@@ -113,6 +113,14 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
             >
               {t("nav.memory")}
             </Link>
+            <button
+              onClick={() => {
+                window.location.href = "/api/auth/signout";
+              }}
+              className="px-4 py-2 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50 transition-colors"
+            >
+              {t("common.logout")}
+            </button>
           </div>
         </div>
         <div>

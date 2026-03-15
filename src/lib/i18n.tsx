@@ -25,6 +25,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.back": "返回主控台",
     "common.loading": "載入中...",
     "common.login": "使用 Google 登入",
+    "common.logout": "登出",
 
     // Dashboard
     "dashboard.mcp_url": "MCP URL",
@@ -119,6 +120,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.back": "Back to Dashboard",
     "common.loading": "Loading...",
     "common.login": "Sign in with Google",
+    "common.logout": "Sign out",
 
     // Dashboard
     "dashboard.mcp_url": "MCP URL",
