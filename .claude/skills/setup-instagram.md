@@ -44,7 +44,7 @@ Instagram API 需要：
 1. 在 App Dashboard 前往 **Facebook Login → Settings**
 2. 在 **Valid OAuth Redirect URIs** 加入：
    ```
-   https://agent-dock.replit.app/callback/instagram
+   https://octo-dock.com/callback/instagram
    ```
 3. 儲存設定
 
@@ -76,7 +76,7 @@ npm run build
 
 ### Step 7: 測試連結
 
-1. 前往 Dashboard（`https://agent-dock.replit.app/dashboard`）
+1. 前往 Dashboard（`https://octo-dock.com/dashboard`）
 2. 點 Instagram 的 **「連結」** 按鈕
 3. 跳轉到 Facebook 授權頁面（Instagram 透過 Facebook OAuth）
 4. 選擇要連結的 Facebook 粉絲專頁和 Instagram 帳號
@@ -93,7 +93,7 @@ npm run build
 ### 常見問題
 
 **Q: 按連結後出現 redirect_uri 錯誤？**
-- 確認 Facebook Login Settings 中 Valid OAuth Redirect URI 包含：`https://agent-dock.replit.app/callback/instagram`
+- 確認 Facebook Login Settings 中 Valid OAuth Redirect URI 包含：`https://octo-dock.com/callback/instagram`
 
 **Q: 授權後出現「No Facebook Pages found」？**
 - Instagram API 需要 Facebook 粉絲專頁

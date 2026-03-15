@@ -27,7 +27,7 @@ description: Gmail 的連結設定流程，包含 OAuth 申請和環境變數設
 |------|--------|------|
 | Application type | Web application | |
 | Name | `OctoDock Gmail` | 方便辨識用途 |
-| Authorized redirect URIs | `https://agent-dock.replit.app/callback/gmail` | **必須完全一致** |
+| Authorized redirect URIs | `https://octo-dock.com/callback/gmail` | **必須完全一致** |
 
 點 **Create** 建立。
 
@@ -62,7 +62,7 @@ npm run build
 
 ### Step 6: 測試連結
 
-1. 前往 Dashboard（`https://agent-dock.replit.app/dashboard`）
+1. 前往 Dashboard（`https://octo-dock.com/dashboard`）
 2. 點 Gmail 的 **「連結」** 按鈕
 3. 跳轉到 Google 授權頁面
 4. 允許 Gmail 存取權限
@@ -71,7 +71,7 @@ npm run build
 ### 常見問題
 
 **Q: 按連結後出現 redirect_uri_mismatch 錯誤？**
-- 確認 Redirect URI 完全一致：`https://agent-dock.replit.app/callback/gmail`
+- 確認 Redirect URI 完全一致：`https://octo-dock.com/callback/gmail`
 - 注意不要有尾端斜線或多餘空格
 
 **Q: 授權時顯示「This app isn't verified」？**

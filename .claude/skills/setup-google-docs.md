@@ -27,7 +27,7 @@ description: Google Docs 的連結設定流程，包含 OAuth 申請和環境變
 |------|--------|------|
 | Application type | Web application | |
 | Name | `OctoDock Google Docs` | 方便辨識用途 |
-| Authorized redirect URIs | `https://agent-dock.replit.app/callback/google_docs` | **必須完全一致** |
+| Authorized redirect URIs | `https://octo-dock.com/callback/google_docs` | **必須完全一致** |
 
 點 **Create** 建立。
 
@@ -59,7 +59,7 @@ npm run build
 
 ### Step 6: 測試連結
 
-1. 前往 Dashboard（`https://agent-dock.replit.app/dashboard`）
+1. 前往 Dashboard（`https://octo-dock.com/dashboard`）
 2. 點 Google 文件的 **「連結」** 按鈕
 3. 跳轉到 Google 授權頁面
 4. 允許文件存取權限
@@ -69,7 +69,7 @@ npm run build
 ### 常見問題
 
 **Q: 按連結後出現 redirect_uri_mismatch 錯誤？**
-- 確認 Redirect URI 完全一致：`https://agent-dock.replit.app/callback/google_docs`
+- 確認 Redirect URI 完全一致：`https://octo-dock.com/callback/google_docs`
 
 **Q: 讀取文件時內容為空？**
 - 確認 documentId 正確（可從文件 URL 中取得）

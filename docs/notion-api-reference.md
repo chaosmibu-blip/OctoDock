@@ -440,7 +440,7 @@ POST /v1/comments
 2. 點 **New Integration** → 類型選 **Public**
 3. 填入：
    - Integration name: `AgentDock`
-   - Redirect URI: `https://agent-dock.replit.app/callback/notion`
+   - Redirect URI: `https://octo-dock.com/callback/notion`
    - 勾選需要的 Capabilities（Read content, Update content, Insert content）
 4. 建立後取得 **Client ID** 和 **Client Secret**
 

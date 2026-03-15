@@ -106,12 +106,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 | **Icon** | 上傳 512x512 PNG | 專案內有 `public/icon-512.png` 可用 |
 | **Associated workspace** | 選你的工作區 | 這是你的開發/測試用工作區，其他用戶會透過 OAuth 連自己的工作區 |
 | **Company name** | `AgentDock` | |
-| **Website** | `https://agent-dock.replit.app` | 部署網址 |
+| **Website** | `https://octo-dock.com` | 部署網址 |
 | **Tagline** | `One MCP URL for all your apps` | |
-| **Privacy Policy URL** | `https://agent-dock.replit.app` | MVP 先填首頁 |
-| **Terms of Use URL** | `https://agent-dock.replit.app` | MVP 先填首頁 |
+| **Privacy Policy URL** | `https://octo-dock.com` | MVP 先填首頁 |
+| **Terms of Use URL** | `https://octo-dock.com` | MVP 先填首頁 |
 | **Email** | 你的 email | 開發者聯絡信箱 |
-| **Redirect URIs** | `https://agent-dock.replit.app/callback/notion` | OAuth 回調地址，必須包含協定（https） |
+| **Redirect URIs** | `https://octo-dock.com/callback/notion` | OAuth 回調地址，必須包含協定（https） |
 | **Notion URL for optional template** | （留空） | |
 
 4. 點 **Create**
