@@ -1,7 +1,7 @@
 /**
  * LINE Messaging API Adapter
  *
- * 完整覆蓋 LINE Messaging API ~70 個端點
+ * 完整覆蓋 LINE Messaging API ~49 個 action
  * 認證方式：API Key（Channel Access Token），從 LINE Developers Console 取得。
  * 支援文字、圖片、貼圖、Flex Message、Rich Menu、群組、受眾、洞察等。
  */
@@ -182,6 +182,35 @@ Create a rich menu (bottom panel with tap areas).
 ### Example
 octodock_do(app:"line", action:"create_rich_menu", params:{size:{width:2500,height:843}, selected:true, name:"main", chat_bar_text:"選單", areas:[{bounds:{x:0,y:0,width:1250,height:843}, action:{type:"message", text:"help"}}]})`,
 
+  reply: `## line.reply
+Reply to a user message using webhook reply token (must reply within 1 minute).
+### Parameters
+  reply_token: Reply token from webhook event
+  message: Text message
+### Example
+octodock_do(app:"line", action:"reply", params:{reply_token:"nHuyW...", message:"收到！"})`,
+
+  get_profile: `## line.get_profile
+Get user's display name, picture, and status.
+### Parameters
+  user_id: LINE user ID
+### Example
+octodock_do(app:"line", action:"get_profile", params:{user_id:"U1234..."})`,
+
+  get_group_summary: `## line.get_group_summary
+Get group info (name, icon, member count).
+### Parameters
+  group_id: Group ID
+### Example
+octodock_do(app:"line", action:"get_group_summary", params:{group_id:"C1234..."})`,
+
+  get_quota: `## line.get_quota
+Get monthly message quota and current usage.
+### Parameters
+  (none)
+### Example
+octodock_do(app:"line", action:"get_quota", params:{})`,
+
   create_audience: `## line.create_audience
 Create an audience group from user IDs for narrowcast.
 ### Parameters
@@ -357,8 +386,9 @@ function formatResponse(action: string, rawData: unknown): string {
       return coupons.map((c) => `- **${c.couponId}** ${c.status}`).join("\n");
     }
 
+    // 格式化 coupon 詳情，避免回傳 raw JSON（G1）
     case "get_coupon":
-      return JSON.stringify(rawData, null, 2);
+      return [`**Coupon ${data.couponId ?? "N/A"}**`, `Status: ${data.status ?? "N/A"}`, data.couponName ? `Name: ${data.couponName}` : null, data.description ? `> ${data.description}` : null, data.redemptionCount !== undefined ? `Redeemed: ${data.redemptionCount}` : null].filter(Boolean).join("\n");
 
     case "get_membership_plans": {
       const plans = data.membershipPlans as Array<Record<string, unknown>> | undefined;
@@ -398,8 +428,12 @@ function formatResponse(action: string, rawData: unknown): string {
     case "get_content_url":
       return `Download URL: ${LINE_DATA_API}/bot/message/${data._messageId}/content`;
 
-    default:
-      return JSON.stringify(rawData, null, 2);
+    // 未列舉的 action 回傳簡潔的 key-value 格式，避免 raw JSON
+    default: {
+      const entries = Object.entries(data).filter(([_, v]) => v !== null && v !== undefined);
+      if (entries.length === 0) return "Done.";
+      return entries.slice(0, 10).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
+    }
   }
 }
 
@@ -571,7 +605,7 @@ function formatError(action: string, errorMessage: string): string | null {
   if (msg.includes("401") || msg.includes("invalid token") || msg.includes("authentication"))
     return "「LINE token 無效 (LINE_AUTH_ERROR)」\nChannel Access Token 無效或已過期。請到 LINE Developers Console 重新產生 token。";
   if (msg.includes("404") || msg.includes("not found")) {
-    if (action.includes("group")) return "「找不到群組 (LINE_GROUP_NOT_FOUND)」\n請確認 group_id 且 Bot 仍在群組中。";
+    if (action.includes("group")) return "「找不到群組 (LINE_GROUP_NOT_FOUND)」\n請確認 group_id 是否正確，以及 Bot 是否已加入該群組。";
     if (action.includes("room")) return "「找不到聊天室 (LINE_ROOM_NOT_FOUND)」\n請確認 room_id 且 Bot 仍在聊天室中。";
     if (action.includes("rich_menu")) return "「找不到 Rich Menu (LINE_MENU_NOT_FOUND)」\n請用 list_rich_menus 確認 ID。";
     return "「找不到用戶 (LINE_USER_NOT_FOUND)」\n請確認 user_id 且對方已加 Bot 為好友。";

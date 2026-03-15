@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { conversations, storedResults } from "@/db/schema";
-import { eq, and, desc, lt } from "drizzle-orm";
+import { eq, and, desc, lt, gt, or, isNull } from "drizzle-orm";
 import {
   queryMemory,
   storeMemory,
@@ -408,10 +408,18 @@ export async function executeSystemAction(
         return { ok: false, error: "ref parameter is required." };
       }
 
+      // 查詢時檢查過期時間，避免回傳已過期的資料
       const rows = await db
         .select()
         .from(storedResults)
-        .where(and(eq(storedResults.id, ref), eq(storedResults.userId, userId)))
+        .where(and(
+          eq(storedResults.id, ref),
+          eq(storedResults.userId, userId),
+          or(
+            isNull(storedResults.expiresAt),
+            gt(storedResults.expiresAt, new Date()),
+          ),
+        ))
         .limit(1);
 
       if (rows.length === 0) {

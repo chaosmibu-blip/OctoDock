@@ -107,6 +107,10 @@ const actionMap: Record<string, string> = {
   get_webhooks: "discord_get_webhooks",
   execute_webhook: "discord_execute_webhook",
   delete_webhook: "discord_delete_webhook",
+  // Webhook 修改（1）
+  modify_webhook: "discord_modify_webhook",
+  // 討論串修改（1）
+  edit_thread: "discord_edit_thread",
   // 其他（3）
   get_user: "discord_get_user",
   create_dm: "discord_create_dm",
@@ -145,6 +149,62 @@ Create a new channel in a server.
 ### Example
 octodock_do(app:"discord", action:"create_channel", params:{guild_id:"123", name:"general", type:0})`,
 
+  get_messages: `## discord.get_messages
+Get recent messages from a channel.
+### Parameters
+  channel_id: Channel ID
+  limit (optional): Number of messages (1-100, default 50)
+### Example
+octodock_do(app:"discord", action:"get_messages", params:{channel_id:"123456789", limit:20})`,
+
+  edit_message: `## discord.edit_message
+Edit a message sent by the bot.
+### Parameters
+  channel_id: Channel ID
+  message_id: Message ID
+  content (optional): New text
+  embeds (optional): New embed objects
+### Example
+octodock_do(app:"discord", action:"edit_message", params:{channel_id:"123", message_id:"456", content:"Updated!"})`,
+
+  bulk_delete: `## discord.bulk_delete
+Bulk delete messages (must be <14 days old).
+### Parameters
+  channel_id: Channel ID
+  message_ids: Array of message IDs (2-100)
+### Example
+octodock_do(app:"discord", action:"bulk_delete", params:{channel_id:"123", message_ids:["456","789"]})`,
+
+  get_member: `## discord.get_member
+Get info about a server member.
+### Parameters
+  guild_id: Server ID
+  user_id: User ID
+### Example
+octodock_do(app:"discord", action:"get_member", params:{guild_id:"123", user_id:"456"})`,
+
+  create_role: `## discord.create_role
+Create a new role in a server.
+### Parameters
+  guild_id: Server ID
+  name: Role name
+  color (optional): Color as integer (e.g. 0xFF0000 for red)
+  permissions (optional): Permission bitfield string
+  mentionable (optional): Whether role can be mentioned
+### Example
+octodock_do(app:"discord", action:"create_role", params:{guild_id:"123", name:"Moderator", color:3447003, mentionable:true})`,
+
+  modify_member: `## discord.modify_member
+Edit a server member's nickname, mute, or deafen status.
+### Parameters
+  guild_id: Server ID
+  user_id: User ID
+  nick (optional): Nickname
+  mute (optional): Server mute
+  deaf (optional): Server deafen
+### Example
+octodock_do(app:"discord", action:"modify_member", params:{guild_id:"123", user_id:"456", nick:"New Name"})`,
+
   execute_webhook: `## discord.execute_webhook
 Send a message through a webhook (no bot required).
 ### Parameters
@@ -182,6 +242,7 @@ function getSkill(action?: string): string {
 ## Threads
   start_thread(channel_id, message_id, name) — thread from message
   start_thread_no_message(channel_id, name, type?) — standalone thread
+  edit_thread(channel_id, name?, archived?, auto_archive_duration?) — edit thread
   join_thread(channel_id) — join thread
   leave_thread(channel_id) — leave thread
   list_thread_members(channel_id) — list members
@@ -212,6 +273,7 @@ function getSkill(action?: string): string {
   create_webhook(channel_id, name) — create webhook
   get_webhooks(channel_id) — list webhooks
   execute_webhook(webhook_id, webhook_token, content) — send via webhook
+  modify_webhook(webhook_id, name?, channel_id?) — edit webhook
   delete_webhook(webhook_id) — delete webhook
 ## Other
   get_user(user_id) — user info
@@ -314,8 +376,9 @@ function formatResponse(action: string, rawData: unknown): string {
       return `Done. Role **${data.name}** (${data.id})`;
 
     // Webhook
+    // 注意：不回傳 webhook token，避免敏感資訊洩漏到對話紀錄
     case "create_webhook":
-      return `Done. Webhook **${data.name}** created.\nID: ${data.id}\nToken: ${data.token}`;
+      return `Done. Webhook **${data.name}** created.\nID: ${data.id}`;
 
     case "get_webhooks": {
       if (!Array.isArray(rawData) || rawData.length === 0) return "No webhooks.";
@@ -358,13 +421,19 @@ function formatResponse(action: string, rawData: unknown): string {
     case "unban_member":
     case "delete_role":
     case "execute_webhook":
+    case "modify_webhook":
     case "delete_webhook":
+    case "edit_thread":
     case "edit_channel":
     case "modify_guild":
       return "Done.";
 
-    default:
-      return JSON.stringify(rawData, null, 2);
+    // 未列舉的 action 回傳簡潔的 key-value 格式，避免 raw JSON
+    default: {
+      const entries = Object.entries(data).filter(([_, v]) => v !== null && v !== undefined);
+      if (entries.length === 0) return "Done.";
+      return entries.slice(0, 10).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
+    }
   }
 }
 
@@ -429,7 +498,10 @@ const tools: ToolDefinition[] = [
   { name: "discord_create_webhook", description: "Create a webhook for a channel.", inputSchema: { channel_id: snowflake, name: z.string().describe("Webhook name") } },
   { name: "discord_get_webhooks", description: "List channel webhooks.", inputSchema: { channel_id: snowflake } },
   { name: "discord_execute_webhook", description: "Send message via webhook.", inputSchema: { webhook_id: snowflake, webhook_token: z.string().describe("Webhook token"), content: z.string().optional().describe("Message text"), username: z.string().optional().describe("Override username"), embeds: z.array(z.record(z.string(), z.unknown())).optional() } },
+  { name: "discord_modify_webhook", description: "Edit a webhook (name, channel).", inputSchema: { webhook_id: snowflake, name: z.string().optional().describe("New name"), channel_id: z.string().optional().describe("Move to channel") } },
   { name: "discord_delete_webhook", description: "Delete a webhook.", inputSchema: { webhook_id: snowflake } },
+  // ── 討論串修改 ──
+  { name: "discord_edit_thread", description: "Edit thread settings.", inputSchema: { channel_id: snowflake, name: z.string().optional().describe("New name"), archived: z.boolean().optional().describe("Archive/unarchive"), auto_archive_duration: z.number().optional().describe("Minutes: 60, 1440, 4320, 10080") } },
   // ── 其他 ──
   { name: "discord_get_user", description: "Get user info.", inputSchema: { user_id: snowflake } },
   { name: "discord_create_dm", description: "Open a DM channel with a user.", inputSchema: { user_id: snowflake } },
@@ -521,7 +593,11 @@ async function execute(
       if (res.status === 204) return json({ _status: 204 });
       return json(await res.json());
     }
+    case "discord_modify_webhook": { const b: Record<string, unknown> = {}; if (params.name) b.name = params.name; if (params.channel_id) b.channel_id = params.channel_id; return json(await patch(`/webhooks/${params.webhook_id}`, b)); }
     case "discord_delete_webhook": return json(await del(`/webhooks/${params.webhook_id}`));
+
+    // ── 討論串修改 ──
+    case "discord_edit_thread": { const b: Record<string, unknown> = {}; if (params.name) b.name = params.name; if (params.archived !== undefined) b.archived = params.archived; if (params.auto_archive_duration) b.auto_archive_duration = params.auto_archive_duration; return json(await patch(`/channels/${params.channel_id}`, b)); }
 
     // ── 其他 ──
     case "discord_get_user": return json(await get(`/users/${params.user_id}`));

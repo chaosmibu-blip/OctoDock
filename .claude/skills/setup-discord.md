@@ -66,7 +66,7 @@ Discord 使用 **Bot Token 認證**，從 Discord Developer Portal 取得。
 - 右鍵頻道/伺服器 → 複製 ID
 
 ## 相關文件
-- Discord Adapter 原始碼：`src/adapters/discord.ts`（48 個工具）
+- Discord Adapter 原始碼：`src/adapters/discord.ts`（50 個工具）
 
 ## OctoDock Discord 工具清單
 

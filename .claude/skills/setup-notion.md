@@ -87,7 +87,7 @@ npm run build
 ## 相關文件
 - 完整 API 參考：`docs/notion-api-reference.md`
 - 環境設定指南：`docs/setup-guide.md`
-- Notion Adapter 原始碼：`src/adapters/notion.ts`（18 個工具）
+- Notion Adapter 原始碼：`src/adapters/notion.ts`（21 個工具）
 
 ## OctoDock Notion 工具清單
 

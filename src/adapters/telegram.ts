@@ -140,6 +140,57 @@ Send a poll to a chat.
 ### Example
 octodock_do(app:"telegram", action:"send_poll", params:{chat_id:"123456789", question:"午餐吃什麼？", options:["便當","麵","火鍋"]})`,
 
+  edit_message: `## telegram.edit_message
+Edit a sent message.
+### Parameters
+  chat_id: Chat ID
+  message_id: Message ID
+  text: New message text
+  parse_mode (optional): "Markdown", "MarkdownV2", or "HTML"
+### Example
+octodock_do(app:"telegram", action:"edit_message", params:{chat_id:"123456789", message_id:42, text:"Updated text"})`,
+
+  get_chat: `## telegram.get_chat
+Get chat info (title, type, members, description).
+### Parameters
+  chat_id: Chat ID (user, group, or channel)
+### Example
+octodock_do(app:"telegram", action:"get_chat", params:{chat_id:"-1001234567890"})`,
+
+  promote_member: `## telegram.promote_member
+Promote a user to admin. Without permissions param, grants default admin rights.
+### Parameters
+  chat_id: Group/channel ID
+  user_id: User ID to promote
+  permissions (optional): {can_manage_chat, can_delete_messages, can_restrict_members, can_promote_members, can_change_info, can_invite_users, can_pin_messages, can_manage_topics}
+### Example
+octodock_do(app:"telegram", action:"promote_member", params:{chat_id:"-1001234567890", user_id:123456})`,
+
+  restrict_member: `## telegram.restrict_member
+Restrict a user's permissions in a group.
+### Parameters
+  chat_id: Group ID
+  user_id: User ID
+  permissions: {can_send_messages, can_send_media_messages, can_send_polls, can_send_other_messages, can_add_web_page_previews, can_change_info, can_invite_users, can_pin_messages}
+### Example
+octodock_do(app:"telegram", action:"restrict_member", params:{chat_id:"-100123", user_id:456, permissions:{can_send_messages:false}})`,
+
+  set_my_commands: `## telegram.set_my_commands
+Set bot command menu visible to users.
+### Parameters
+  commands: Array of {command, description}
+### Example
+octodock_do(app:"telegram", action:"set_my_commands", params:{commands:[{command:"help", description:"Show help"}, {command:"start", description:"Start bot"}]})`,
+
+  forward_message: `## telegram.forward_message
+Forward a message from one chat to another.
+### Parameters
+  chat_id: Target chat ID
+  from_chat_id: Source chat ID
+  message_id: Message ID to forward
+### Example
+octodock_do(app:"telegram", action:"forward_message", params:{chat_id:"123", from_chat_id:"456", message_id:42})`,
+
   create_forum_topic: `## telegram.create_forum_topic
 Create a topic in a forum-enabled group.
 ### Parameters
@@ -232,7 +283,8 @@ function formatResponse(action: string, rawData: unknown): string {
     case "send_poll":
     case "forward_message":
     case "copy_message":
-      return `Done. Message ID: ${data.message_id ?? (data as any).result?.message_id ?? "N/A"}`;
+      // tgFetch() 已經 extract result，直接用 data.message_id
+      return `Done. Message ID: ${data.message_id ?? "N/A"}`;
 
     // 訊息管理
     case "edit_message":
@@ -261,7 +313,9 @@ function formatResponse(action: string, rawData: unknown): string {
       return `Member count: ${rawData}`;
 
     case "get_chat_admins": {
-      if (!Array.isArray(rawData)) return "No admins.";
+      // 加上 null/undefined guard，避免非 array 時 crash
+      if (!rawData || !Array.isArray(rawData)) return "No admins.";
+      if (rawData.length === 0) return "No admins.";
       return rawData.map((a: any) => `- **${a.user?.first_name || "?"}** (${a.status})${a.custom_title ? ` "${a.custom_title}"` : ""}`).join("\n");
     }
 
@@ -329,8 +383,12 @@ function formatResponse(action: string, rawData: unknown): string {
     case "answer_callback":
       return "Done.";
 
-    default:
-      return JSON.stringify(rawData, null, 2);
+    // 未列舉的 action 回傳簡潔的 key-value 格式，避免 raw JSON
+    default: {
+      const entries = Object.entries(data).filter(([_, v]) => v !== null && v !== undefined);
+      if (entries.length === 0) return "Done.";
+      return entries.slice(0, 10).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
+    }
   }
 }
 
@@ -447,7 +505,15 @@ async function execute(
     case "tg_ban_member": return json(await call("banChatMember", { chat_id: params.chat_id, user_id: params.user_id }));
     case "tg_unban_member": return json(await call("unbanChatMember", { chat_id: params.chat_id, user_id: params.user_id, only_if_banned: true }));
     case "tg_restrict_member": return json(await call("restrictChatMember", { chat_id: params.chat_id, user_id: params.user_id, permissions: params.permissions }));
-    case "tg_promote_member": { const b: Record<string, unknown> = { chat_id: params.chat_id, user_id: params.user_id, ...(params.permissions as object || {}) }; return json(await call("promoteChatMember", b)); }
+    // 當 permissions 未提供時，給予預設管理員權限（避免靜默降權）
+    case "tg_promote_member": {
+      const defaultPerms = { can_manage_chat: true, can_delete_messages: true, can_manage_video_chats: true, can_restrict_members: true, can_promote_members: false, can_change_info: true, can_invite_users: true, can_pin_messages: true, can_manage_topics: true };
+      const perms = params.permissions && typeof params.permissions === "object" && Object.keys(params.permissions as object).length > 0
+        ? params.permissions as object
+        : defaultPerms;
+      const b: Record<string, unknown> = { chat_id: params.chat_id, user_id: params.user_id, ...perms };
+      return json(await call("promoteChatMember", b));
+    }
     case "tg_set_chat_title": return json(await call("setChatTitle", { chat_id: params.chat_id, title: params.title }));
     case "tg_set_chat_description": return json(await call("setChatDescription", { chat_id: params.chat_id, description: params.description }));
     case "tg_leave_chat": return json(await call("leaveChat", { chat_id: params.chat_id }));

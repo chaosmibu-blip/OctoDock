@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/db";
 import { connectedApps, storedResults } from "@/db/schema";
-import { eq, lt } from "drizzle-orm";
+import { eq, lt, or, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware } from "./middleware/logger";
@@ -129,8 +129,14 @@ function buildSummary(text: string, headLines: number, tailLines: number): strin
 /**
  * 清理過期的暫存回傳結果
  */
+/** 清理過期或無期限的暫存結果，防止 DB 膨脹 */
 async function cleanExpiredResults(): Promise<void> {
-  await db.delete(storedResults).where(lt(storedResults.expiresAt, new Date()));
+  await db.delete(storedResults).where(
+    or(
+      lt(storedResults.expiresAt, new Date()),
+      isNull(storedResults.expiresAt),
+    ),
+  );
 }
 
 // ============================================================
