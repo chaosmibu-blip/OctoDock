@@ -39,7 +39,9 @@
       "Bash(gh auth:*)",
       "Bash(git:*)",
       "WebFetch(domain:support.google.com)",
-      "WebFetch(domain:developers.google.com)"
+      "WebFetch(domain:developers.google.com)",
+      "WebFetch(domain:notion.so)",
+      "WebFetch(domain:www.notion.so)"
     ]
   }
 }
