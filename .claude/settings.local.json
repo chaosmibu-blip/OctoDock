@@ -35,7 +35,11 @@
       "Bash(ls:*)",
       "Bash(find:*)",
       "WebFetch(domain:octo-dock.com)",
-      "WebFetch(domain:developers.line.biz)"
+      "WebFetch(domain:developers.line.biz)",
+      "Bash(gh auth:*)",
+      "Bash(git:*)",
+      "WebFetch(domain:support.google.com)",
+      "WebFetch(domain:developers.google.com)"
     ]
   }
 }

@@ -58,8 +58,9 @@ export async function GET(
       authUrl.searchParams.set("scope", config.scopes.join(" "));
     }
 
-    // Gmail-specific: need offline access for refresh token
-    if (appName === "gmail") {
+    // Google 系全部需要 offline access 才能拿到 refresh token
+    const googleApps = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
+    if (googleApps.includes(appName)) {
       authUrl.searchParams.set("access_type", "offline");
       authUrl.searchParams.set("prompt", "consent");
     }
