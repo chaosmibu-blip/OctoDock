@@ -29,10 +29,10 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // Landing 痛點
     "landing.pain_title": "你是不是也遇到這些問題？",
-    "landing.pain1": "每個 App 都要個別設定 MCP，光連線就花半天",
-    "landing.pain2": "API Key 散落各處，安全性堪憂",
-    "landing.pain3": "換一個 AI agent 就要重新設定所有工具",
-    "landing.pain4": "AI 不記得你的偏好，每次都要從頭教起",
+    "landing.pain1": "還在 AI 焦慮嗎？使用 OctoDock，你的 AI 能直接幫你處理大小事",
+    "landing.pain2": "API 或額度花很兇？OctoDock 幫你減少 context 佔用問題",
+    "landing.pain3": "裝 Open Claw 的建置太複雜、成本太高還怕被鎖帳號？使用 OctoDock 直接在你的訂閱 AI 上跑",
+    "landing.pain4": "多元 App 串接功能遠超原生 MCP，跨 App 記憶層，讓你越用越順手",
 
     // Footer
     "footer.privacy": "隱私權政策",
@@ -415,10 +415,10 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // Landing pain points
     "landing.pain_title": "Sound familiar?",
-    "landing.pain1": "Setting up MCP for each app takes forever",
-    "landing.pain2": "API keys scattered everywhere — security nightmare",
-    "landing.pain3": "Switch AI agents? Reconfigure everything from scratch",
-    "landing.pain4": "AI never remembers your preferences — you teach it every time",
+    "landing.pain1": "Still anxious about AI? With OctoDock, your AI can handle everything for you",
+    "landing.pain2": "API costs or token limits burning through your budget? OctoDock reduces context usage",
+    "landing.pain3": "Self-hosted MCP too complex, too costly, and risking account bans? OctoDock runs on top of your existing AI subscription",
+    "landing.pain4": "App integrations far beyond native MCP, with cross-app memory that gets smarter over time",
 
     // Footer
     "footer.privacy": "Privacy Policy",
