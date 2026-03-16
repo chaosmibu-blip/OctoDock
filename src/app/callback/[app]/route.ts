@@ -7,6 +7,9 @@ import { APP_URL } from "@/lib/constants";
 import type { OAuthConfig, TokenSet } from "@/adapters/types";
 import { getOAuthClientId, getOAuthClientSecret } from "@/lib/oauth-env";
 
+// Google 系列 App 名稱（用於一鍵連接 callback）
+const GOOGLE_APPS = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
+
 // Verify and decode OAuth state parameter
 function verifyState(state: string | null): string | null {
   if (!state) return null;
@@ -100,6 +103,58 @@ export async function GET(
     return NextResponse.redirect(
       new URL("/dashboard?error=invalid_state", APP_URL),
     );
+  }
+
+  // ── Google 一鍵連接：一組 token 寫入 7 筆 connectedApps ──
+  if (appName === "google_all") {
+    try {
+      // 用 gmail adapter 的 config 來交換 token（Google 系共用同一組 OAuth）
+      const gmailAdapter = getAdapter("gmail");
+      if (!gmailAdapter) throw new Error("Gmail adapter not found");
+
+      const tokens = await exchangeCode(
+        gmailAdapter.authConfig as OAuthConfig,
+        code!,
+        "google_all", // redirect_uri 要對應 /callback/google_all
+      );
+
+      // 同一組 token 寫入 7 個 Google App
+      for (const gApp of GOOGLE_APPS) {
+        const adapter = getAdapter(gApp);
+        if (!adapter) continue;
+        await db
+          .insert(connectedApps)
+          .values({
+            userId,
+            appName: gApp,
+            authType: "oauth2",
+            accessToken: encrypt(tokens.access_token),
+            refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : null,
+            tokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
+            scopes: (adapter.authConfig as OAuthConfig).scopes,
+            status: "active",
+          })
+          .onConflictDoUpdate({
+            target: [connectedApps.userId, connectedApps.appName],
+            set: {
+              accessToken: encrypt(tokens.access_token),
+              refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined,
+              tokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
+              status: "active",
+              updatedAt: new Date(),
+            },
+          });
+      }
+
+      return NextResponse.redirect(
+        new URL("/dashboard?connected=google_all", APP_URL),
+      );
+    } catch (error) {
+      console.error("Google All OAuth callback error:", error);
+      return NextResponse.redirect(
+        new URL("/dashboard?error=oauth_failed&app=google_all", APP_URL),
+      );
+    }
   }
 
   const adapter = getAdapter(appName);

@@ -3,11 +3,14 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { connectedApps } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { getAdapter, loadAdapters } from "@/mcp/registry";
+import { getAdapter, getAllAdapters, loadAdapters } from "@/mcp/registry";
 import { APP_URL } from "@/lib/constants";
 import type { OAuthConfig, ApiKeyConfig } from "@/adapters/types";
 import { encrypt } from "@/lib/crypto";
 import { getOAuthClientId } from "@/lib/oauth-env";
+
+// Google 系列 App 名稱（用於一鍵連接）
+const GOOGLE_APPS = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
 
 let adaptersLoaded = false;
 
@@ -37,6 +40,34 @@ export async function GET(
   const { app: appName } = await params;
   await ensureAdapters();
 
+  // ── Google 一鍵連接：合併所有 Google App 的 scope，一次授權 ──
+  if (appName === "google_all") {
+    const allScopes = new Set<string>();
+    for (const gApp of GOOGLE_APPS) {
+      const adapter = getAdapter(gApp);
+      if (adapter?.authConfig.type === "oauth2") {
+        for (const scope of (adapter.authConfig as OAuthConfig).scopes) {
+          allScopes.add(scope);
+        }
+      }
+    }
+
+    const state = generateState(session.user.id);
+    const clientId = getOAuthClientId("gmail"); // Google 系共用同一組
+    const redirectUri = `${APP_URL}/callback/google_all`;
+
+    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    authUrl.searchParams.set("client_id", clientId);
+    authUrl.searchParams.set("redirect_uri", redirectUri);
+    authUrl.searchParams.set("response_type", "code");
+    authUrl.searchParams.set("state", state);
+    authUrl.searchParams.set("scope", [...allScopes].join(" "));
+    authUrl.searchParams.set("access_type", "offline");
+    authUrl.searchParams.set("prompt", "consent");
+
+    return NextResponse.redirect(authUrl.toString());
+  }
+
   const adapter = getAdapter(appName);
   if (!adapter) {
     return NextResponse.json({ error: "Unknown app" }, { status: 404 });
@@ -59,7 +90,6 @@ export async function GET(
     }
 
     // 讓 adapter 自己聲明需要的額外 OAuth 參數（access_type, prompt, owner 等）
-    // 不再硬編碼 app 名稱，新增 App 時只需在 adapter 的 authConfig.extraParams 設定
     if (config.extraParams) {
       for (const [key, value] of Object.entries(config.extraParams)) {
         authUrl.searchParams.set(key, value);

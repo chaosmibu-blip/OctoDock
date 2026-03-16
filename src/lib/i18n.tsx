@@ -56,6 +56,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.guide_copied": "已複製！",
     "dashboard.connected_section": "已連結",
     "dashboard.available_section": "可連結",
+    "dashboard.google_all": "一鍵連接 Google 全系列",
+    "dashboard.google_remaining": "連接剩餘 Google 服務",
+    "dashboard.google_all_btn": "一鍵連接",
     "dashboard.apps_count": "個應用程式",
     "dashboard.tools_count": "個功能",
 
@@ -450,6 +453,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.guide_copied": "Copied!",
     "dashboard.connected_section": "Connected",
     "dashboard.available_section": "Available",
+    "dashboard.google_all": "Connect All Google Apps",
+    "dashboard.google_remaining": "Connect Remaining Google Apps",
+    "dashboard.google_all_btn": "Connect All",
     "dashboard.apps_count": "apps",
     "dashboard.tools_count": "tools",
 

@@ -250,6 +250,32 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           </div>
         )}
 
+        {/* ── Google 一鍵連接 ── */}
+        {(() => {
+          const googleApps = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
+          const googleConnected = googleApps.filter((a) => isConnected(a)).length;
+          const googleTotal = googleApps.length;
+          // 全部已連接就不顯示
+          if (googleConnected >= googleTotal) return null;
+          const label = googleConnected === 0
+            ? t("dashboard.google_all")
+            : t("dashboard.google_remaining");
+          return (
+            <div className="bg-[#E1F5EE] border border-[#1D9E75]/20 rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <span className="text-sm font-medium text-[#0F6E56]">{label}</span>
+                <span className="text-xs text-gray-500 ml-2">({googleConnected}/{googleTotal})</span>
+              </div>
+              <button
+                onClick={() => connectApp("google_all")}
+                className="px-4 py-1.5 bg-[#0F6E56] text-white text-xs font-medium rounded-md hover:bg-[#0d5e49] transition-colors"
+              >
+                {t("dashboard.google_all_btn")}
+              </button>
+            </div>
+          );
+        })()}
+
         {/* ── 可連結 App ── */}
         {available.length > 0 && (
           <div>
