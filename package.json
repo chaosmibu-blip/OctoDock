@@ -12,14 +12,12 @@
     "@auth/drizzle-adapter": "^1.11.1",
     "@imgly/background-removal-node": "^1.4.5",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@playzone/youtube-transcript": "^1.0.0",
     "drizzle-orm": "^0.45.1",
     "next": "^15.5.12",
     "next-auth": "^5.0.0-beta.30",
     "pg": "^8.20.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "youtubei.js": "^16.0.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
