@@ -112,6 +112,25 @@ cron-based 排程，三種類型：
    - `execute()` — 實際 API 呼叫
 3. 不用改核心系統，Registry 自動掃描
 
+## 踩過的坑（血淚教訓）
+
+### Google 系 adapter 的 refreshToken 環境變數
+
+Google 系 adapter 全部共用 `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`（由 `oauth-env.ts` 統一管理）。每個 adapter 的 `refreshToken()` 函式也必須用這兩個變數，**不可以**用 `YOUTUBE_OAUTH_CLIENT_ID`、`GMAIL_OAUTH_CLIENT_ID` 等不存在的變數名。
+
+**教訓**：架構層（`oauth-env.ts`）統一了環境變數映射，但各 adapter 的 `refreshToken()` 是獨立實作的，沒跟上架構的統一。連結時走 `oauth-env.ts` 正常，refresh 時走 adapter 自己的函式就壞了。**改架構時要 grep 所有 adapter 確認沒有殘留舊邏輯。**
+
+### youtube-transcript 套件 CJS export bug
+
+`youtube-transcript@1.3.0` 的 CJS bundle 有 export bug，`import { YoutubeTranscript }` 會拿到 undefined。解法是用 dynamic import：
+```ts
+async function getYoutubeTranscript() {
+  const mod = await import("youtube-transcript");
+  return mod.YoutubeTranscript;
+}
+```
+不能降版到 1.2.x，因為 1.3.0 的 InnerTube API（模擬 Android app）才能繞過 Replit IP 被 YouTube reCAPTCHA 擋的問題。
+
 ## 名稱解析機制
 
 AI 可以用名稱（不用 ID）操作：

@@ -954,8 +954,8 @@ async function refreshYouTubeToken(
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: process.env.YOUTUBE_OAUTH_CLIENT_ID!,
-      client_secret: process.env.YOUTUBE_OAUTH_CLIENT_SECRET!,
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
     }).toString(),
   });
 

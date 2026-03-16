@@ -779,8 +779,8 @@ async function refreshGcalToken(refreshToken: string): Promise<TokenSet> {
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: process.env.GCAL_OAUTH_CLIENT_ID!,
-      client_secret: process.env.GCAL_OAUTH_CLIENT_SECRET!,
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
     }).toString(),
   });
 
