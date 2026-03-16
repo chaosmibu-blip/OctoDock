@@ -131,6 +131,12 @@ async function getYoutubeTranscript() {
 ```
 不能降版到 1.2.x，因為 1.3.0 的 InnerTube API（模擬 Android app）才能繞過 Replit IP 被 YouTube reCAPTCHA 擋的問題。
 
+### formatResponse 收到的是物件不是字串
+
+`server.ts` 的 `toolResultToDoResult` 會把 adapter 回傳的 JSON 字串 `JSON.parse` 成物件，再傳給 `formatResponse(action, data)`。所以 **`formatResponse` 收到的 `rawData` 永遠是已解析的 JS 物件**，不是 JSON 字串。
+
+**教訓**：`String(物件)` 會變成 `[object Object]`。所有 adapter 的 `formatResponse` 都不能用 `String(rawData)` 當 fallback，必須用 `JSON.stringify(rawData, null, 2)`。新增 action 的 formatResponse case 時，記得 rawData 是物件，要從屬性取值或用 `JSON.stringify`。
+
 ## 名稱解析機制
 
 AI 可以用名稱（不用 ID）操作：
