@@ -114,15 +114,25 @@ export async function GET(
   // ── Google 一鍵連接：一組 token 寫入 7 筆 connectedApps ──
   if (appName === "google_all") {
     try {
-      // 用 gmail adapter 的 config 來交換 token（Google 系共用同一組 OAuth）
-      const gmailAdapter = getAdapter("gmail");
-      if (!gmailAdapter) throw new Error("Gmail adapter not found");
-
-      const tokens = await exchangeCode(
-        gmailAdapter.authConfig as OAuthConfig,
-        code!,
-        "google_all", // redirect_uri 要對應 /callback/google_all
-      );
+      // 手動做 token exchange（不走 exchangeCode，因為 appName="google_all" 不在 oauth-env 映射裡）
+      const redirectUri = `${APP_URL}/callback/google_all`;
+      const body = new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code!,
+        redirect_uri: redirectUri,
+        client_id: getOAuthClientId("gmail"),       // Google 系共用 gmail 的 credentials
+        client_secret: getOAuthClientSecret("gmail"),
+      });
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+      if (!tokenRes.ok) {
+        const err = await tokenRes.text();
+        throw new Error(`Token exchange failed for google_all: ${tokenRes.status} ${err}`);
+      }
+      const tokens = await tokenRes.json();
 
       // 同一組 token 寫入 7 個 Google App
       for (const gApp of GOOGLE_APPS) {
