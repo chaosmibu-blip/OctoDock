@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { connectedApps } from "@/db/schema";
-import { getAdapter } from "@/mcp/registry";
+import { getAdapter, loadAdapters } from "@/mcp/registry";
+
+let adaptersLoaded = false;
+async function ensureAdapters() {
+  if (!adaptersLoaded) { await loadAdapters(); adaptersLoaded = true; }
+}
 import { encrypt } from "@/lib/crypto";
 import { APP_URL } from "@/lib/constants";
 import type { OAuthConfig, TokenSet } from "@/adapters/types";
@@ -94,6 +99,7 @@ export async function GET(
   { params }: { params: Promise<{ app: string }> },
 ) {
   const { app: appName } = await params;
+  await ensureAdapters();
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
