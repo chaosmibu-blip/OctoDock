@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useI18n, LanguageSwitcher } from "@/lib/i18n";
 
 export function HomeClient() {
@@ -12,6 +13,14 @@ export function HomeClient() {
         <LanguageSwitcher />
       </div>
       <main className="flex flex-col items-center gap-8 py-32 px-16">
+        {/* OctoDock 章魚 Logo */}
+        <Image
+          src="/octopus-logo.png"
+          alt="OctoDock Octopus"
+          width={180}
+          height={130}
+          priority
+        />
         <h1 className="text-4xl font-bold tracking-tight text-black dark:text-zinc-50">
           {t("app.title")}
         </h1>
