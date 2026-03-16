@@ -27,6 +27,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.login": "使用 Google 登入",
     "common.logout": "登出",
 
+    // Landing 痛點
+    "landing.pain_title": "你是不是也遇到這些問題？",
+    "landing.pain1": "每個 App 都要個別設定 MCP，光連線就花半天",
+    "landing.pain2": "API Key 散落各處，安全性堪憂",
+    "landing.pain3": "換一個 AI agent 就要重新設定所有工具",
+    "landing.pain4": "AI 不記得你的偏好，每次都要從頭教起",
+
+    // Footer
+    "footer.privacy": "隱私權政策",
+    "footer.terms": "服務條款",
+
     // Dashboard
     "dashboard.mcp_url": "MCP URL",
     "dashboard.mcp_desc": "複製此 URL，貼到你的 AI agent 的 MCP 設定中。",
@@ -401,6 +412,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.loading": "Loading...",
     "common.login": "Sign in with Google",
     "common.logout": "Sign out",
+
+    // Landing pain points
+    "landing.pain_title": "Sound familiar?",
+    "landing.pain1": "Setting up MCP for each app takes forever",
+    "landing.pain2": "API keys scattered everywhere — security nightmare",
+    "landing.pain3": "Switch AI agents? Reconfigure everything from scratch",
+    "landing.pain4": "AI never remembers your preferences — you teach it every time",
+
+    // Footer
+    "footer.privacy": "Privacy Policy",
+    "footer.terms": "Terms of Service",
 
     // Dashboard
     "dashboard.mcp_url": "MCP URL",

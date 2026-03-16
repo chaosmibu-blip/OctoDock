@@ -33,15 +33,15 @@ const APP_KEYS = [
   { name: "google_drive", displayName: "Google Drive", descKey: "app.google_drive.desc" },
   { name: "google_sheets", displayName: "Google Sheets", descKey: "app.google_sheets.desc" },
   // 社群
-  { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
-  { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
+  // { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },  // 暫時隱藏
+  // { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },  // 暫時隱藏
   { name: "youtube", displayName: "YouTube", descKey: "app.youtube.desc" },
   // 開發
   { name: "github", displayName: "GitHub", descKey: "app.github.desc" },
-  // 通訊
-  { name: "line", displayName: "LINE", descKey: "app.line.desc" },
-  { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc" },
-  { name: "discord", displayName: "Discord", descKey: "app.discord.desc" },
+  // 通訊（暫時隱藏）
+  // { name: "line", displayName: "LINE", descKey: "app.line.desc" },
+  // { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc" },
+  // { name: "discord", displayName: "Discord", descKey: "app.discord.desc" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {
@@ -102,12 +102,14 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           <h1 className="text-2xl font-bold text-gray-900">{t("app.title")}</h1>
           <div className="flex gap-2 items-center">
             <LanguageSwitcher />
+            {/* Bot 設定暫時隱藏
             <Link
               href="/bots"
               className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
             >
               {t("nav.bots")}
             </Link>
+            */}
             <Link
               href="/preferences"
               className="px-4 py-2 text-sm border rounded hover:bg-gray-100 transition-colors"
