@@ -4,12 +4,7 @@
  * YouTube Data API v3 — 每日配額 10,000 單位
  */
 import { z } from "zod";
-// youtube-transcript@1.3.0 的 CJS bundle 有 export bug，
-// 改用 dynamic import 確保 Next.js server runtime 正確載入 ESM 版本
-async function getYoutubeTranscript() {
-  const mod = await import("youtube-transcript");
-  return mod.YoutubeTranscript;
-}
+import { YouTubeTranscriptApi } from "@playzone/youtube-transcript/dist/api";
 import type {
   AppAdapter,
   OAuthConfig,
@@ -911,30 +906,90 @@ async function execute(
     }
 
     // 影片逐字稿：三層 fallback 策略
-    // 1. youtube-transcript library（InnerTube API，免費不吃 quota）
-    // 2. YouTube Data API captions（用 OAuth token，吃少量 quota 但不被 IP 限流）
-    // 3. 回傳錯誤提示
+    // 1. @playzone/youtube-transcript（web scraping，免費不吃 quota）
+    // 2. Invidious API（公開 API，免費不吃 quota）
+    // 3. YouTube Data API captions（用 OAuth token，吃少量 quota 但不被 IP 限流）
     case "youtube_get_transcript": {
       const videoId = params.video_id as string;
       const lang = params.language as string | undefined;
 
-      // ── 策略 1：youtube-transcript library（InnerTube） ──
+      // ── 策略 1：@playzone/youtube-transcript ──
       try {
-        const YoutubeTranscript = await getYoutubeTranscript();
-        const config: { lang?: string } = {};
-        if (lang) config.lang = lang;
-        const transcript = await YoutubeTranscript.fetchTranscript(videoId, config);
-        if (transcript.length > 0) {
-          const text = transcript.map((t: { text: string }) => t.text).join(" ");
+        const api = new YouTubeTranscriptApi();
+        const languages = lang ? [lang] : ["en", "zh-TW", "zh-Hant", "zh", "ja"];
+        const transcript = await api.fetch(videoId, languages);
+        const snippets = transcript.snippets ?? transcript;
+        if (Array.isArray(snippets) && snippets.length > 0) {
+          const text = snippets.map((t: { text: string }) => t.text).join(" ");
           return {
-            content: [{ type: "text", text: JSON.stringify({ video_id: videoId, language: lang ?? "auto", length: transcript.length, text }, null, 2) }],
+            content: [{ type: "text", text: JSON.stringify({ video_id: videoId, language: lang ?? "auto", method: "playzone", length: snippets.length, text }, null, 2) }],
           };
         }
       } catch {
-        // InnerTube 失敗（IP 限流、captcha 等），fallback 到策略 2
+        // library 失敗（IP 限流、captcha 等），fallback 到策略 2
       }
 
-      // ── 策略 2：YouTube Data API captions（用 OAuth token） ──
+      // ── 策略 2：Invidious API（多實例輪詢） ──
+      const INVIDIOUS_INSTANCES = [
+        "https://inv.nadeko.net",
+        "https://invidious.materialio.us",
+        "https://invidious.privacyredirect.com",
+      ];
+      for (const instance of INVIDIOUS_INSTANCES) {
+        try {
+          // 取得字幕軌列表
+          const captionsRes = await fetch(
+            `${instance}/api/v1/captions/${encodeURIComponent(videoId)}`,
+            { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) },
+          );
+          if (!captionsRes.ok) continue;
+          const captionsData = await captionsRes.json() as { captions?: Array<{ label: string; language_code: string; url: string }> };
+          if (!captionsData.captions?.length) continue;
+
+          // 選擇字幕軌
+          const track = lang
+            ? captionsData.captions.find((c) => c.language_code === lang) ?? captionsData.captions[0]
+            : captionsData.captions[0];
+
+          // 下載字幕（加 format=json3 取 JSON 格式）
+          const subUrl = track.url.startsWith("http") ? track.url : `${instance}${track.url}`;
+          const subRes = await fetch(subUrl, { signal: AbortSignal.timeout(5000) });
+          if (!subRes.ok) continue;
+          const subText = await subRes.text();
+
+          // 嘗試解析 JSON3 格式，否則當 XML/SRT 處理
+          let text = "";
+          try {
+            const json3 = JSON.parse(subText) as { events?: Array<{ segs?: Array<{ utf8: string }> }> };
+            if (json3.events) {
+              text = json3.events
+                .flatMap((e) => e.segs?.map((s) => s.utf8) ?? [])
+                .join("")
+                .replace(/\n/g, " ")
+                .trim();
+            }
+          } catch {
+            // 非 JSON，從 XML/SRT 提取純文字
+            text = subText
+              .replace(/<[^>]+>/g, "")
+              .split("\n")
+              .filter((line) => line.trim() && !/^\d+$/.test(line.trim()) && !/^\d{2}:\d{2}/.test(line.trim()))
+              .join(" ")
+              .trim();
+          }
+
+          if (text) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ video_id: videoId, language: track.language_code, method: "invidious", text }, null, 2) }],
+            };
+          }
+        } catch {
+          // 這個 instance 失敗，試下一個
+          continue;
+        }
+      }
+
+      // ── 策略 3：YouTube Data API captions（用 OAuth token） ──
       try {
         // 取得影片的字幕軌列表（1 quota unit）
         const captionList = await ytFetch(
@@ -951,9 +1006,7 @@ async function execute(
           // 下載字幕內容（SRT 格式）
           const captionRes = await fetch(
             `${YOUTUBE_API}/captions/${track.id}?tfmt=srt`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            },
+            { headers: { Authorization: `Bearer ${token}` } },
           );
 
           if (captionRes.ok) {
@@ -973,10 +1026,10 @@ async function execute(
           }
         }
       } catch {
-        // Captions API 也失敗，回傳錯誤
+        // Captions API 也失敗
       }
 
-      // ── 策略 3：全部失敗，回傳錯誤提示 ──
+      // ── 全部失敗，回傳錯誤提示 ──
       return {
         content: [{ type: "text", text: "此影片無法取得逐字稿。可能原因：影片無字幕、IP 被 YouTube 限流、或字幕已停用。(TRANSCRIPT_NOT_AVAILABLE)" }],
         isError: true,
