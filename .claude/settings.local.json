@@ -51,7 +51,8 @@
       "Bash(SRC=\"/home/runner/workspace/截圖/octodock-icon-final.png\" && PUB=\"/home/runner/workspace/public\" && magick \"$SRC\" -resize 512x512 -strip \"$PUB/icon-512.png\" && magick \"$SRC\" -resize 192x192 -strip \"$PUB/icon-192.png\" && magick \"$SRC\" -resize 180x180 -strip \"$PUB/apple-touch-icon.png\" && magick \"$SRC\" -resize 32x32 -strip \"/tmp/favicon-32.png\" && magick \"$SRC\" -resize 16x16 -strip \"/tmp/favicon-16.png\" && magick \"/tmp/favicon-32.png\" \"/tmp/favicon-16.png\" \"$PUB/../src/app/favicon.ico\" && echo \"Done\")",
       "Bash(lsof:*)",
       "Bash(fuser -k 3000/tcp)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "mcp__claude_ai_OctoDock__octodock_do"
     ]
   }
 }
