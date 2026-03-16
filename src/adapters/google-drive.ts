@@ -111,6 +111,14 @@ async function driveMultipartUpload(
   return res.json();
 }
 
+// ── 輔助函式：檔案大小格式化（bytes → KB/MB/GB）──────────
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
+}
+
 // ── 輔助函式：MIME 類型轉可讀名稱 ─────────────────────────
 function mimeToLabel(mimeType: string): string {
   const map: Record<string, string> = {
@@ -306,7 +314,8 @@ function formatResponse(action: string, rawData: unknown): string {
         `Name: ${f.name}`,
         `Type: ${mimeToLabel(f.mimeType)}`,
         `ID: ${f.id}`,
-        `Size: ${f.size ? `${Math.round(Number(f.size) / 1024)}KB` : "N/A"}`,
+        // Google 原生檔案（Docs/Sheets/Slides）不回傳 size；一般檔案 size 是字串
+        `Size: ${f.size && Number(f.size) > 0 ? formatFileSize(Number(f.size)) : f.mimeType?.startsWith("application/vnd.google-apps") ? "(Google native)" : "N/A"}`,
         `Created: ${f.createdTime ?? "N/A"}`,
         `Modified: ${f.modifiedTime ?? "N/A"}`,
         `URL: ${f.webViewLink ?? "N/A"}`,
