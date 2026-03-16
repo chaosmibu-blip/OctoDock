@@ -4,7 +4,12 @@
  * YouTube Data API v3 — 每日配額 10,000 單位
  */
 import { z } from "zod";
-import { YoutubeTranscript } from "youtube-transcript";
+// youtube-transcript@1.3.0 的 CJS bundle 有 export bug，
+// 改用 dynamic import 確保 Next.js server runtime 正確載入 ESM 版本
+async function getYoutubeTranscript() {
+  const mod = await import("youtube-transcript");
+  return mod.YoutubeTranscript;
+}
 import type {
   AppAdapter,
   OAuthConfig,
@@ -907,16 +912,9 @@ async function execute(
       try {
         const videoId = params.video_id as string;
         const lang = params.language as string | undefined;
-        const browserFetch: typeof fetch = (url, init) => {
-          const headers = {
-            ...(init?.headers as Record<string, string>),
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "Accept-Language": lang ?? "en-US,en;q=0.9",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          };
-          return fetch(url, { ...init, headers });
-        };
-        const config: { lang?: string; fetch?: typeof fetch } = { fetch: browserFetch };
+        // 動態載入 YoutubeTranscript（繞過 CJS export bug）
+        const YoutubeTranscript = await getYoutubeTranscript();
+        const config: { lang?: string } = {};
         if (lang) config.lang = lang;
         const transcript = await YoutubeTranscript.fetchTranscript(videoId, config);
         // 將逐字稿拼成純文字
