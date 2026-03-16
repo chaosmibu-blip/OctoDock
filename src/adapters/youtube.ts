@@ -902,21 +902,37 @@ async function execute(
     }
 
     // 影片逐字稿（不需 OAuth、不吃 YouTube API quota）
+    // 使用自定義 fetch 加上瀏覽器 headers，避免 Replit IP 被 YouTube bot 偵測擋掉
     case "youtube_get_transcript": {
       try {
         const videoId = params.video_id as string;
         const lang = params.language as string | undefined;
-        const config: { lang?: string } = {};
+        const browserFetch: typeof fetch = (url, init) => {
+          const headers = {
+            ...(init?.headers as Record<string, string>),
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept-Language": lang ?? "en-US,en;q=0.9",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          };
+          return fetch(url, { ...init, headers });
+        };
+        const config: { lang?: string; fetch?: typeof fetch } = { fetch: browserFetch };
         if (lang) config.lang = lang;
         const transcript = await YoutubeTranscript.fetchTranscript(videoId, config);
         // 將逐字稿拼成純文字
-        const text = transcript.map((t) => t.text).join(" ");
+        const text = transcript.map((t: { text: string }) => t.text).join(" ");
         return {
-          content: [{ type: "text", text: JSON.stringify({ video_id: videoId, language: lang ?? "auto", text }, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify({ video_id: videoId, language: lang ?? "auto", length: transcript.length, text }, null, 2) }],
         };
       } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        // 區分不同錯誤類型給出更精準的提示
+        let hint = "此影片無可用字幕。";
+        if (msg.includes("captcha")) hint = "YouTube 要求驗證碼，伺服器 IP 可能被限流。請稍後再試。";
+        else if (msg.includes("no longer available")) hint = "此影片已下架或不存在。";
+        else if (msg.includes("No transcripts are available in")) hint = msg.replace("[YoutubeTranscript] 🚨 ", "");
         return {
-          content: [{ type: "text", text: `此影片無可用字幕。(TRANSCRIPT_NOT_AVAILABLE)\n${err instanceof Error ? err.message : "Unknown error"}` }],
+          content: [{ type: "text", text: `${hint} (TRANSCRIPT_NOT_AVAILABLE)\n${msg}` }],
           isError: true,
         };
       }
