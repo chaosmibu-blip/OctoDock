@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+.cache/
+.claude/settings.local.json
 
 # debug
 npm-debug.log*

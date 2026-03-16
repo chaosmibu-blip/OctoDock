@@ -41,7 +41,7 @@ Switch from Claude to ChatGPT? Your memory follows you.
 ### Self-host
 
 ```bash
-git clone https://github.com/user/octodock.git
+git clone https://github.com/chaosmibu-blip/OctoDock.git
 cd octodock
 cp .env.example .env    # Edit with your OAuth credentials
 docker compose up       # PostgreSQL + pgvector + OctoDock
