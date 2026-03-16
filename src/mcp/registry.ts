@@ -17,13 +17,11 @@ const adapters = new Map<string, AppAdapter>();
  * 新增 App 時在這裡加一行 import
  */
 async function importAllAdapters(): Promise<void> {
+  // 暫時隱藏的 App（尚未開放或缺少用戶測試）：
+  // line, telegram, threads, instagram, discord
   const modules = await Promise.allSettled([
     import("@/adapters/notion"),
     import("@/adapters/gmail"),
-    import("@/adapters/line"),
-    import("@/adapters/telegram"),
-    import("@/adapters/threads"),
-    import("@/adapters/instagram"),
     import("@/adapters/google-calendar"),
     import("@/adapters/google-drive"),
     import("@/adapters/google-sheets"),
@@ -59,8 +57,10 @@ export async function loadAdapters(): Promise<void> {
   try {
     const adapterDir = join(process.cwd(), "src", "adapters");
     if (existsSync(adapterDir)) {
+      // 暫時隱藏的 adapter 不自動載入
+      const HIDDEN_ADAPTERS = ["line", "telegram", "threads", "instagram", "discord"];
       const files = readdirSync(adapterDir).filter(
-        (f) => f !== "types.ts" && f.endsWith(".ts"),
+        (f) => f !== "types.ts" && f.endsWith(".ts") && !HIDDEN_ADAPTERS.some((h) => f.startsWith(h)),
       );
 
       for (const file of files) {
