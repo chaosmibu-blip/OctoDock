@@ -1218,12 +1218,13 @@ async function execute(
       );
       await Promise.all(deletePromises);
 
-      // Step 3: 用新的 Markdown 內容建立新 blocks
+      // Step 3: 用新的 Markdown 內容建立新 blocks（自動分批 100 個）
       const newBlocks = markdownToBlocks(newContent);
-      if (newBlocks.length > 0) {
+      for (let i = 0; i < newBlocks.length; i += 100) {
+        const batch = newBlocks.slice(i, i + 100);
         await notionFetch(`/blocks/${pageId}/children`, token, {
           method: "PATCH",
-          body: JSON.stringify({ children: newBlocks }),
+          body: JSON.stringify({ children: batch }),
         });
       }
 
@@ -1234,17 +1235,18 @@ async function execute(
       };
     }
 
-    // ── 尾部追加內容（不覆蓋） ──
+    // ── 尾部追加內容（不覆蓋，自動分批 100 blocks） ──
     case "notion_append_content": {
       const pageId = params.page_id as string;
       const content = params.content as string;
 
-      // 將 Markdown 轉成 Notion blocks 並追加到頁面尾部
+      // 將 Markdown 轉成 Notion blocks，分批追加（每次最多 100 個）
       const blocks = markdownToBlocks(content);
-      if (blocks.length > 0) {
+      for (let i = 0; i < blocks.length; i += 100) {
+        const batch = blocks.slice(i, i + 100);
         await notionFetch(`/blocks/${pageId}/children`, token, {
           method: "PATCH",
-          body: JSON.stringify({ children: blocks }),
+          body: JSON.stringify({ children: batch }),
         });
       }
 
