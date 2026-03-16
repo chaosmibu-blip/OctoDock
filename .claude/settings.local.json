@@ -41,7 +41,11 @@
       "WebFetch(domain:support.google.com)",
       "WebFetch(domain:developers.google.com)",
       "WebFetch(domain:notion.so)",
-      "WebFetch(domain:www.notion.so)"
+      "WebFetch(domain:www.notion.so)",
+      "Bash(pip list:*)",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(npm list:*)"
     ]
   }
 }
