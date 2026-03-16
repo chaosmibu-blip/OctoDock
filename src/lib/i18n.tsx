@@ -27,12 +27,13 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.login": "使用 Google 登入",
     "common.logout": "登出",
 
-    // Landing 痛點
-    "landing.pain_title": "你是不是也遇到這些問題？",
-    "landing.pain1": "還在 AI 焦慮嗎？使用 OctoDock，你的 AI 能直接幫你處理大小事",
-    "landing.pain2": "API 或額度花很兇？OctoDock 幫你減少 context 佔用問題",
-    "landing.pain3": "裝 Open Claw 的建置太複雜、成本太高還怕被鎖帳號？使用 OctoDock 直接在你的訂閱 AI 上跑",
-    "landing.pain4": "多元 App 串接功能遠超原生 MCP，跨 App 記憶層，讓你越用越順手",
+    // Landing
+    "landing.kicker": "AI 不該只會聊天",
+    "landing.headline": "讓 AI 走出對話框，直接幫你做事。",
+    "landing.sell1": "看別人用龍蝦羨慕嗎？不用羨慕，OctoDock 讓你的 AI 直接能幫你做事",
+    "landing.sell2": "能接 MCP 的都適用，即點即連，複製貼上，30 秒完成串接",
+    "landing.sell3": "100+ 工具只佔不到原生 MCP 1% 的 context",
+    "landing.sell4": "不在你的電腦上跑程式，OAuth 授權隨時可撤銷，比本地 Agent 更安全",
 
     // Footer
     "footer.privacy": "隱私權政策",
@@ -49,6 +50,14 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.hide_tools": "收起工具清單",
     "dashboard.tool_count": "個工具，AI agent 可透過 MCP 使用：",
     "dashboard.no_tools": "尚未建立工具（此 App 的 Adapter 尚未實作）",
+    "dashboard.guide_title": "✅ 設定完成！複製以下文字，貼到你的 AI 對話中：",
+    "dashboard.guide_prompt": "試試 OctoDock",
+    "dashboard.guide_copy": "一鍵複製",
+    "dashboard.guide_copied": "已複製！",
+    "dashboard.connected_section": "已連結",
+    "dashboard.available_section": "可連結",
+    "dashboard.apps_count": "個應用程式",
+    "dashboard.tools_count": "個功能",
 
     // Nav
     "nav.bots": "Bot 設定",
@@ -198,7 +207,6 @@ const translations: Record<Locale, Record<string, string>> = {
     "tool.youtube_delete_playlist": "刪除播放清單",
     "tool.youtube_reply_comment": "回覆影片留言",
     "tool.youtube_post_comment": "在影片上發表留言",
-    "tool.youtube_get_transcript": "取得影片逐字稿/字幕",
     // Google Tasks 補充
     "tool.gtasks_delete_tasklist": "永久刪除任務清單",
     // GitHub
@@ -413,12 +421,13 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.login": "Sign in with Google",
     "common.logout": "Sign out",
 
-    // Landing pain points
-    "landing.pain_title": "Sound familiar?",
-    "landing.pain1": "Still anxious about AI? With OctoDock, your AI can handle everything for you",
-    "landing.pain2": "API costs or token limits burning through your budget? OctoDock reduces context usage",
-    "landing.pain3": "Self-hosted MCP too complex, too costly, and risking account bans? OctoDock runs on top of your existing AI subscription",
-    "landing.pain4": "App integrations far beyond native MCP, with cross-app memory that gets smarter over time",
+    // Landing
+    "landing.kicker": "AI shouldn't just chat",
+    "landing.headline": "Let AI step out of the chat box and get things done.",
+    "landing.sell1": "Jealous of others using AI agents? OctoDock lets your AI do real work for you",
+    "landing.sell2": "Works with any MCP-compatible AI — copy, paste, connected in 30 seconds",
+    "landing.sell3": "100+ tools using less than 1% of native MCP context",
+    "landing.sell4": "Nothing runs on your computer — OAuth authorization, revokable anytime, safer than local agents",
 
     // Footer
     "footer.privacy": "Privacy Policy",
@@ -435,6 +444,14 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.hide_tools": "Hide tools",
     "dashboard.tool_count": " tools available to AI agents via MCP:",
     "dashboard.no_tools": "No tools yet (Adapter not implemented)",
+    "dashboard.guide_title": "✅ All set! Copy the text below and paste it into your AI chat:",
+    "dashboard.guide_prompt": "Try OctoDock",
+    "dashboard.guide_copy": "Copy",
+    "dashboard.guide_copied": "Copied!",
+    "dashboard.connected_section": "Connected",
+    "dashboard.available_section": "Available",
+    "dashboard.apps_count": "apps",
+    "dashboard.tools_count": "tools",
 
     // Nav
     "nav.bots": "Bots",
@@ -584,7 +601,6 @@ const translations: Record<Locale, Record<string, string>> = {
     "tool.youtube_delete_playlist": "Delete a playlist",
     "tool.youtube_reply_comment": "Reply to a video comment",
     "tool.youtube_post_comment": "Post a comment on a video",
-    "tool.youtube_get_transcript": "Get video transcript/subtitles",
     // Google Tasks supplement
     "tool.gtasks_delete_tasklist": "Delete a task list permanently",
     // GitHub
