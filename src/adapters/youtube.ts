@@ -910,34 +910,77 @@ async function execute(
       };
     }
 
-    // 影片逐字稿（不需 OAuth、不吃 YouTube API quota）
-    // 使用自定義 fetch 加上瀏覽器 headers，避免 Replit IP 被 YouTube bot 偵測擋掉
+    // 影片逐字稿：三層 fallback 策略
+    // 1. youtube-transcript library（InnerTube API，免費不吃 quota）
+    // 2. YouTube Data API captions（用 OAuth token，吃少量 quota 但不被 IP 限流）
+    // 3. 回傳錯誤提示
     case "youtube_get_transcript": {
+      const videoId = params.video_id as string;
+      const lang = params.language as string | undefined;
+
+      // ── 策略 1：youtube-transcript library（InnerTube） ──
       try {
-        const videoId = params.video_id as string;
-        const lang = params.language as string | undefined;
-        // 動態載入 YoutubeTranscript（繞過 CJS export bug）
         const YoutubeTranscript = await getYoutubeTranscript();
         const config: { lang?: string } = {};
         if (lang) config.lang = lang;
         const transcript = await YoutubeTranscript.fetchTranscript(videoId, config);
-        // 將逐字稿拼成純文字
-        const text = transcript.map((t: { text: string }) => t.text).join(" ");
-        return {
-          content: [{ type: "text", text: JSON.stringify({ video_id: videoId, language: lang ?? "auto", length: transcript.length, text }, null, 2) }],
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        // 區分不同錯誤類型給出更精準的提示
-        let hint = "此影片無可用字幕。";
-        if (msg.includes("captcha")) hint = "YouTube 要求驗證碼，伺服器 IP 可能被限流。請稍後再試。";
-        else if (msg.includes("no longer available")) hint = "此影片已下架或不存在。";
-        else if (msg.includes("No transcripts are available in")) hint = msg.replace("[YoutubeTranscript] 🚨 ", "");
-        return {
-          content: [{ type: "text", text: `${hint} (TRANSCRIPT_NOT_AVAILABLE)\n${msg}` }],
-          isError: true,
-        };
+        if (transcript.length > 0) {
+          const text = transcript.map((t: { text: string }) => t.text).join(" ");
+          return {
+            content: [{ type: "text", text: JSON.stringify({ video_id: videoId, language: lang ?? "auto", length: transcript.length, text }, null, 2) }],
+          };
+        }
+      } catch {
+        // InnerTube 失敗（IP 限流、captcha 等），fallback 到策略 2
       }
+
+      // ── 策略 2：YouTube Data API captions（用 OAuth token） ──
+      try {
+        // 取得影片的字幕軌列表（1 quota unit）
+        const captionList = await ytFetch(
+          `/captions?part=snippet&videoId=${encodeURIComponent(videoId)}`,
+          token,
+        ) as { items?: Array<{ id: string; snippet: { language: string; trackKind: string; name: string } }> };
+
+        if (captionList.items && captionList.items.length > 0) {
+          // 選擇字幕軌：優先用指定語言，否則用第一個
+          const track = lang
+            ? captionList.items.find((t) => t.snippet.language === lang) ?? captionList.items[0]
+            : captionList.items[0];
+
+          // 下載字幕內容（SRT 格式）
+          const captionRes = await fetch(
+            `${YOUTUBE_API}/captions/${track.id}?tfmt=srt`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
+
+          if (captionRes.ok) {
+            const srtText = await captionRes.text();
+            // 從 SRT 提取純文字（去掉時間碼和序號）
+            const text = srtText
+              .split("\n")
+              .filter((line) => line.trim() && !/^\d+$/.test(line.trim()) && !/^\d{2}:\d{2}/.test(line.trim()))
+              .join(" ")
+              .trim();
+
+            if (text) {
+              return {
+                content: [{ type: "text", text: JSON.stringify({ video_id: videoId, language: track.snippet.language, method: "captions_api", text }, null, 2) }],
+              };
+            }
+          }
+        }
+      } catch {
+        // Captions API 也失敗，回傳錯誤
+      }
+
+      // ── 策略 3：全部失敗，回傳錯誤提示 ──
+      return {
+        content: [{ type: "text", text: "此影片無法取得逐字稿。可能原因：影片無字幕、IP 被 YouTube 限流、或字幕已停用。(TRANSCRIPT_NOT_AVAILABLE)" }],
+        isError: true,
+      };
     }
 
     default:
