@@ -187,6 +187,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "tool.youtube_delete_playlist": "刪除播放清單",
     "tool.youtube_reply_comment": "回覆影片留言",
     "tool.youtube_post_comment": "在影片上發表留言",
+    "tool.youtube_get_transcript": "取得影片逐字稿/字幕（免費，不消耗配額）",
+    // Google Tasks 補充
+    "tool.gtasks_delete_tasklist": "永久刪除任務清單",
     // GitHub
     "tool.github_list_repos": "列出用戶的所有 Repo",
     "tool.github_get_repo": "取得 Repo 的詳細資訊",
@@ -559,6 +562,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "tool.youtube_delete_playlist": "Delete a playlist",
     "tool.youtube_reply_comment": "Reply to a video comment",
     "tool.youtube_post_comment": "Post a comment on a video",
+    "tool.youtube_get_transcript": "Get video transcript/subtitles (free, no quota)",
+    // Google Tasks supplement
+    "tool.gtasks_delete_tasklist": "Delete a task list permanently",
     // GitHub
     "tool.github_list_repos": "List user's repositories",
     "tool.github_get_repo": "Get repository details",

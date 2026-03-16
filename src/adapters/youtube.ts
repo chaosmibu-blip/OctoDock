@@ -4,6 +4,7 @@
  * YouTube Data API v3 — 每日配額 10,000 單位
  */
 import { z } from "zod";
+import { YoutubeTranscript } from "youtube-transcript";
 import type {
   AppAdapter,
   OAuthConfig,
@@ -86,6 +87,7 @@ const actionMap: Record<string, string> = {
   delete_playlist: "youtube_delete_playlist",
   reply_comment: "youtube_reply_comment",
   post_comment: "youtube_post_comment",
+  get_transcript: "youtube_get_transcript",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -216,6 +218,16 @@ Post a new top-level comment on a YouTube video. Costs 50 quota units.
   text: Comment text
 ### Example
 octodock_do(app:"youtube", action:"post_comment", params:{video_id:"dQw4w9WgXcQ", text:"Great video!"})`,
+
+  get_transcript: `## youtube.get_transcript
+Get video transcript/subtitles as plain text. FREE — does not use YouTube API quota.
+Works with auto-generated and manually uploaded captions. Other people's videos are supported.
+### Parameters
+  video_id: YouTube video ID
+  language (optional): Language code (e.g. "en", "zh-TW", default: auto)
+### Example
+octodock_do(app:"youtube", action:"get_transcript", params:{video_id:"dQw4w9WgXcQ"})
+octodock_do(app:"youtube", action:"get_transcript", params:{video_id:"dQw4w9WgXcQ", language:"zh-TW"})`,
 };
 
 function getSkill(action?: string): string {
@@ -239,6 +251,7 @@ function getSkill(action?: string): string {
   delete_playlist(playlist_id) — delete a playlist (50 units)
   reply_comment(parent_id, text) — reply to a comment (50 units)
   post_comment(video_id, text) — post a top-level comment (50 units)
+  get_transcript(video_id, language?) — get video transcript/subtitles (FREE, no quota)
 ⚠️ YouTube Data API daily quota: 10,000 units. search costs 100 units — use sparingly.
 Use octodock_help(app:"youtube", action:"ACTION") for detailed params + example.`;
 }
@@ -304,7 +317,9 @@ function formatResponse(action: string, rawData: unknown): string {
         .map((item: any, i: number) => {
           const s = item.snippet;
           const videoId = s.resourceId?.videoId ?? "";
-          return `${i + 1}. **${s.title}** by ${s.channelTitle} | https://youtu.be/${videoId}`;
+          // videoOwnerChannelTitle 才是影片原頻道名（channelTitle 是加入者）
+          const author = s.videoOwnerChannelTitle ?? s.channelTitle ?? "?";
+          return `${i + 1}. **${s.title}** by ${author} | https://youtu.be/${videoId}`;
         })
         .join("\n");
     }
@@ -410,6 +425,12 @@ function formatResponse(action: string, rawData: unknown): string {
       const data = rawData as any;
       const text = data.snippet?.topLevelComment?.snippet?.textOriginal ?? "";
       return text ? `已發表留言：「${text.slice(0, 100)}」` : "已成功發表留言。";
+    }
+
+    // 影片逐字稿
+    case "get_transcript": {
+      if (typeof rawData === "string") return rawData;
+      return String(rawData);
     }
 
     default:
@@ -615,6 +636,16 @@ const tools: ToolDefinition[] = [
     inputSchema: {
       video_id: z.string().describe("YouTube video ID to comment on"),
       text: z.string().describe("Comment text"),
+    },
+  },
+  // 影片逐字稿（不需 OAuth、不吃 quota）
+  {
+    name: "youtube_get_transcript",
+    description:
+      "Get video transcript/subtitles as plain text. FREE — does not use YouTube API quota. Works with auto-generated and manual captions.",
+    inputSchema: {
+      video_id: z.string().describe("YouTube video ID"),
+      language: z.string().optional().describe("Language code (e.g. 'en', 'zh-TW', default: auto)"),
     },
   },
 ];
@@ -868,6 +899,27 @@ async function execute(
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
+    }
+
+    // 影片逐字稿（不需 OAuth、不吃 YouTube API quota）
+    case "youtube_get_transcript": {
+      try {
+        const videoId = params.video_id as string;
+        const lang = params.language as string | undefined;
+        const config: { lang?: string } = {};
+        if (lang) config.lang = lang;
+        const transcript = await YoutubeTranscript.fetchTranscript(videoId, config);
+        // 將逐字稿拼成純文字
+        const text = transcript.map((t) => t.text).join(" ");
+        return {
+          content: [{ type: "text", text: JSON.stringify({ video_id: videoId, language: lang ?? "auto", text }, null, 2) }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `此影片無可用字幕。(TRANSCRIPT_NOT_AVAILABLE)\n${err instanceof Error ? err.message : "Unknown error"}` }],
+          isError: true,
+        };
+      }
     }
 
     default:

@@ -66,6 +66,7 @@ const actionMap: Record<string, string> = {
   move_task: "gtasks_move_task",
   clear_completed: "gtasks_clear_completed",
   create_tasklist: "gtasks_create_tasklist",
+  delete_tasklist: "gtasks_delete_tasklist",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -188,6 +189,7 @@ function getSkill(action?: string): string {
   move_task(tasklist, task, parent?, previous?) — move/reorder task
   clear_completed(tasklist) — clear all completed tasks
   create_tasklist(title) — create new task list
+  delete_tasklist(tasklist) — delete task list permanently
 Use octodock_help(app:"google_tasks", action:"ACTION") for detailed params + example.`;
 }
 
@@ -432,6 +434,15 @@ const tools: ToolDefinition[] = [
       title: z.string().describe("Task list name"),
     },
   },
+  // 刪除任務清單
+  {
+    name: "gtasks_delete_tasklist",
+    description:
+      "Delete a task list permanently from Google Tasks.",
+    inputSchema: {
+      tasklist: z.string().describe("Task list ID to delete"),
+    },
+  },
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
@@ -588,6 +599,18 @@ async function execute(
       );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 刪除任務清單
+    case "gtasks_delete_tasklist": {
+      await gtasksFetch(
+        `/users/@me/lists/${encodeURIComponent(params.tasklist as string)}`,
+        token,
+        { method: "DELETE" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify({ deleted: true }, null, 2) }],
       };
     }
 
