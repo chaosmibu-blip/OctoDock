@@ -432,10 +432,14 @@ function formatResponse(action: string, rawData: unknown): string {
       return text ? `已發表留言：「${text.slice(0, 100)}」` : "已成功發表留言。";
     }
 
-    // 影片逐字稿
+    // 影片逐字稿：從結構化資料中提取純文字
     case "get_transcript": {
       if (typeof rawData === "string") return rawData;
-      return String(rawData);
+      const d = rawData as { video_id?: string; language?: string; length?: number; text?: string };
+      if (d.text) {
+        return `**逐字稿** (${d.language ?? "auto"}, ${d.length ?? 0} segments)\n\n${d.text}`;
+      }
+      return JSON.stringify(rawData, null, 2);
     }
 
     default:
