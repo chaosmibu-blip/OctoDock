@@ -4,7 +4,6 @@
  * YouTube Data API v3 — 每日配額 10,000 單位
  */
 import { z } from "zod";
-import { YouTubeTranscriptApi } from "@playzone/youtube-transcript/dist/api";
 import type {
   AppAdapter,
   OAuthConfig,
@@ -915,6 +914,7 @@ async function execute(
 
       // ── 策略 1：@playzone/youtube-transcript ──
       try {
+        const { YouTubeTranscriptApi } = await import("@playzone/youtube-transcript/dist/api");
         const api = new YouTubeTranscriptApi();
         const languages = lang ? [lang] : ["en", "zh-TW", "zh-Hant", "zh", "ja"];
         const transcript = await api.fetch(videoId, languages);
