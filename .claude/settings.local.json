@@ -45,7 +45,10 @@
       "Bash(pip list:*)",
       "Bash(python3:*)",
       "Bash(pip install:*)",
-      "Bash(npm list:*)"
+      "Bash(npm list:*)",
+      "Bash(file:*)",
+      "Bash(SRC=\"/home/runner/workspace/截圖/螢幕擷取畫面 2026-03-16 132152.png\" && PUB=\"/home/runner/workspace/public\" && magick \"$SRC\" -gravity center -extent 1780x1780 -background black \"/tmp/octodock-square.png\" && magick \"/tmp/octodock-square.png\" -resize 512x512 \"$PUB/icon-512.png\" && magick \"/tmp/octodock-square.png\" -resize 192x192 \"$PUB/icon-192.png\" && magick \"/tmp/octodock-square.png\" -resize 180x180 \"$PUB/apple-touch-icon.png\" && magick \"/tmp/octodock-square.png\" -resize 32x32 \"/tmp/favicon-32.png\" && magick \"/tmp/octodock-square.png\" -resize 16x16 \"/tmp/favicon-16.png\" && magick \"/tmp/favicon-32.png\" \"/tmp/favicon-16.png\" \"$PUB/../src/app/favicon.ico\" && echo \"Done generating icons\")",
+      "Bash(SRC=\"/home/runner/workspace/截圖/octodock-icon-final.png\" && PUB=\"/home/runner/workspace/public\" && magick \"$SRC\" -resize 512x512 -strip \"$PUB/icon-512.png\" && magick \"$SRC\" -resize 192x192 -strip \"$PUB/icon-192.png\" && magick \"$SRC\" -resize 180x180 -strip \"$PUB/apple-touch-icon.png\" && magick \"$SRC\" -resize 32x32 -strip \"/tmp/favicon-32.png\" && magick \"$SRC\" -resize 16x16 -strip \"/tmp/favicon-16.png\" && magick \"/tmp/favicon-32.png\" \"/tmp/favicon-16.png\" \"$PUB/../src/app/favicon.ico\" && echo \"Done\")"
     ]
   }
 }
