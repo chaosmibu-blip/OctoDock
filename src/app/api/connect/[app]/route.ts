@@ -21,15 +21,16 @@ async function ensureAdapters() {
   }
 }
 
-// Generate OAuth state parameter (CSRF protection)
-function generateState(userId: string): string {
-  const payload = { userId, ts: Date.now(), r: Math.random().toString(36) };
+/** 產生 OAuth state 參數（CSRF 保護 + 來源追蹤） */
+function generateState(userId: string, from?: string): string {
+  const payload: Record<string, unknown> = { userId, ts: Date.now(), r: Math.random().toString(36) };
+  if (from) payload.from = from;
   return Buffer.from(JSON.stringify(payload)).toString("base64url");
 }
 
 // GET /api/connect/:app — Initiate OAuth flow or show API key form
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ app: string }> },
 ) {
   const session = await auth();
@@ -39,6 +40,9 @@ export async function GET(
 
   const { app: appName } = await params;
   await ensureAdapters();
+
+  /* 讀取來源參數（技能樹頁面傳 from=skill-tree，callback 會自動關閉新分頁） */
+  const from = new URL(req.url).searchParams.get("from") ?? undefined;
 
   // ── Google 一鍵連接：合併所有 Google App 的 scope，一次授權 ──
   if (appName === "google_all") {
@@ -52,7 +56,7 @@ export async function GET(
       }
     }
 
-    const state = generateState(session.user.id);
+    const state = generateState(session.user.id, from);
     const clientId = getOAuthClientId("gmail"); // Google 系共用同一組
     const redirectUri = `${APP_URL}/callback/google_all`;
 
@@ -75,7 +79,7 @@ export async function GET(
 
   if (adapter.authConfig.type === "oauth2") {
     const config = adapter.authConfig as OAuthConfig;
-    const state = generateState(session.user.id);
+    const state = generateState(session.user.id, from);
     const clientId = getOAuthClientId(appName);
     const redirectUri = `${APP_URL}/callback/${appName}`;
 

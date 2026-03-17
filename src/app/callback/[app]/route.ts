@@ -15,8 +15,8 @@ import { getOAuthClientId, getOAuthClientSecret } from "@/lib/oauth-env";
 // Google 系列 App 名稱（用於一鍵連接 callback）
 const GOOGLE_APPS = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
 
-// Verify and decode OAuth state parameter
-function verifyState(state: string | null): string | null {
+/** 解碼 OAuth state 參數，回傳 userId 和額外資訊 */
+function verifyState(state: string | null): { userId: string; from?: string } | null {
   if (!state) return null;
   try {
     const decoded = JSON.parse(
@@ -24,7 +24,7 @@ function verifyState(state: string | null): string | null {
     );
     // Check expiry (15 minutes)
     if (Date.now() - decoded.ts > 15 * 60 * 1000) return null;
-    return decoded.userId;
+    return { userId: decoded.userId, from: decoded.from };
   } catch {
     return null;
   }
@@ -104,12 +104,14 @@ export async function GET(
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
 
-  const userId = verifyState(state);
-  if (!userId) {
+  const stateData = verifyState(state);
+  if (!stateData) {
     return NextResponse.redirect(
       new URL("/dashboard?error=invalid_state", APP_URL),
     );
   }
+  const userId = stateData.userId;
+  const fromSkillTree = stateData.from === "skill-tree";
 
   // ── Google 一鍵連接：一組 token 寫入 7 筆 connectedApps ──
   if (appName === "google_all") {
@@ -162,11 +164,32 @@ export async function GET(
           });
       }
 
+      if (fromSkillTree) {
+        return new NextResponse(
+          `<!DOCTYPE html><html><head><title>連接成功</title></head><body>
+          <p style="font-family:sans-serif;text-align:center;margin-top:40vh">
+            ✅ Google 全系列連接成功，此視窗即將關閉…
+          </p>
+          <script>window.close();</script>
+          </body></html>`,
+          { headers: { "Content-Type": "text/html" } },
+        );
+      }
       return NextResponse.redirect(
         new URL("/dashboard?connected=google_all", APP_URL),
       );
     } catch (error) {
       console.error("Google All OAuth callback error:", error);
+      if (fromSkillTree) {
+        return new NextResponse(
+          `<!DOCTYPE html><html><head><title>連接失敗</title></head><body>
+          <p style="font-family:sans-serif;text-align:center;margin-top:40vh;color:#e24b4a">
+            ❌ Google 連接失敗，請關閉此視窗後重試。
+          </p>
+          </body></html>`,
+          { headers: { "Content-Type": "text/html" } },
+        );
+      }
       return NextResponse.redirect(
         new URL("/dashboard?error=oauth_failed&app=google_all", APP_URL),
       );
@@ -230,11 +253,35 @@ export async function GET(
         },
       });
 
+    if (fromSkillTree) {
+      return new NextResponse(
+        `<!DOCTYPE html><html><head><title>連接成功</title></head><body>
+        <p style="font-family:sans-serif;text-align:center;margin-top:40vh">
+          ✅ ${appName} 連接成功，此視窗即將關閉…
+        </p>
+        <script>window.close();</script>
+        </body></html>`,
+        { headers: { "Content-Type": "text/html" } },
+      );
+    }
+
     return NextResponse.redirect(
       new URL(`/dashboard?connected=${appName}`, APP_URL),
     );
   } catch (error) {
     console.error(`OAuth callback error for ${appName}:`, error);
+
+    if (fromSkillTree) {
+      return new NextResponse(
+        `<!DOCTYPE html><html><head><title>連接失敗</title></head><body>
+        <p style="font-family:sans-serif;text-align:center;margin-top:40vh;color:#e24b4a">
+          ❌ ${appName} 連接失敗，請關閉此視窗後重試。
+        </p>
+        </body></html>`,
+        { headers: { "Content-Type": "text/html" } },
+      );
+    }
+
     return NextResponse.redirect(
       new URL(`/dashboard?error=oauth_failed&app=${appName}`, APP_URL),
     );

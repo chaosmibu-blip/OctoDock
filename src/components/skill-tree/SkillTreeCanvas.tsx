@@ -43,6 +43,30 @@ export function SkillTreeCanvas() {
   /* ── tooltip 位置（螢幕座標） ── */
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
 
+  /* ── 重新載入資料的共用函式 ── */
+  const refreshData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/skills');
+      if (res.ok) {
+        const data = await res.json();
+        setApps(data.apps);
+        setCombos(data.combos ?? []);
+      }
+    } catch { /* 靜默失敗 */ }
+  }, []);
+
+  /* ── 頁面重新獲得焦點時刷新資料（OAuth 新分頁關閉後觸發） ── */
+  useEffect(() => {
+    const handleFocus = () => { refreshData(); };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') refreshData();
+    });
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [refreshData]);
+
   /* ── 載入 API 資料 ── */
   useEffect(() => {
     fetch('/api/skills')
@@ -147,22 +171,33 @@ export function SkillTreeCanvas() {
     }
   }, []);
 
-  const handleConnect = useCallback((appName: string, authType: string) => {
-    if (authType === 'oauth2') {
-      window.location.href = `/api/connect/${appName}`;
+  const handleConnect = useCallback(async (appName: string, authType: string) => {
+    /* 先檢查登入狀態 */
+    try {
+      const sessionRes = await fetch('/api/auth/session');
+      const session = await sessionRes.json();
+      if (!session?.user) {
+        /* 未登入 → 導向登入頁 */
+        window.location.href = '/api/auth/signin?callbackUrl=/skill-tree';
+        return;
+      }
+    } catch {
+      window.location.href = '/api/auth/signin?callbackUrl=/skill-tree';
+      return;
     }
+
+    if (authType === 'oauth2') {
+      /* 用新分頁開 OAuth，帶 from=skill-tree 讓 callback 自動關閉 */
+      window.open(`/api/connect/${appName}?from=skill-tree`, '_blank');
+    }
+    /* bot_token / api_key 由 ConnectDialog 內部處理 */
   }, []);
 
   const handleDisconnect = useCallback(async (appName: string) => {
     await fetch(`/api/connect/${appName}`, { method: 'DELETE' });
-    const res = await fetch('/api/skills');
-    if (res.ok) {
-      const data = await res.json();
-      setApps(data.apps);
-      setCombos(data.combos ?? []);
-    }
+    await refreshData();
     setConnectTarget(null);
-  }, []);
+  }, [refreshData]);
 
   const handleSearchSelect = useCallback((node: SkillNode) => {
     const container = containerRef.current;
