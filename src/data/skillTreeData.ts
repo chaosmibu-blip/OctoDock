@@ -55,8 +55,9 @@ export interface SkillsApiCombo {
 const CENTER = { x: 900, y: 700 };
 const APP_RING_RADIUS = 550;       // 外圈 App 半徑
 const COMBO_RING_RADIUS = 120;     // 內圈組合技半徑
-const BASE_CLUSTER_R = 40;         // action cluster 基礎半徑（衛星環繞 App）
-const CLUSTER_R_PER_ACTION = 4;    // 每多一個 action 加的半徑
+const MIN_ACTION_DIST = 90;        // action 離 App 中心的最小距離（App 對角線 ~70px + 餘裕）
+const BASE_CLUSTER_R = 90;         // action cluster 基礎半徑（衛星環繞 App）
+const CLUSTER_R_PER_ACTION = 5;    // 每多一個 action 加的半徑
 
 /* ── OAuth provider 分群 ── */
 
@@ -101,14 +102,28 @@ function placeActionsInCluster(
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   const positions: Array<{ x: number; y: number }> = [];
 
+  /* 起始半徑 = MIN_ACTION_DIST，確保在 App 方形外面 */
+  const innerR = MIN_ACTION_DIST;
+  const outerR = Math.max(clusterR, innerR + 20);
+
   for (let i = 0; i < count; i++) {
-    const t = count === 1 ? 0.5 : i / (count - 1);
-    const r = clusterR * 0.25 + clusterR * 0.75 * Math.sqrt(t);
+    const t = count === 1 ? 0 : i / (count - 1);
+    /* 從 innerR 向外展開到 outerR */
+    const r = innerR + (outerR - innerR) * Math.sqrt(t);
     const angle = i * goldenAngle;
-    positions.push({
-      x: Math.round(anchorX + Math.cos(angle) * r),
-      y: Math.round(anchorY + Math.sin(angle) * r),
-    });
+    let x = anchorX + Math.cos(angle) * r;
+    let y = anchorY + Math.sin(angle) * r;
+
+    /* 碰撞檢測：距離 App 中心 < 80px 就往外推 */
+    const dx = x - anchorX;
+    const dy = y - anchorY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 80 && dist > 0) {
+      x = anchorX + (dx / dist) * 80;
+      y = anchorY + (dy / dist) * 80;
+    }
+
+    positions.push({ x: Math.round(x), y: Math.round(y) });
   }
   return positions;
 }
