@@ -1,22 +1,20 @@
 "use client";
 
 /**
- * 技能樹主畫布 — SVG 拖拽/縮放/hover/點擊互動
- * 顯示所有 App cluster、技能節點、組合技節點及其連線
+ * 技能樹主畫布 — 從 /api/skills 取得真實資料，SVG 拖拽/縮放/hover/點擊互動
  */
 
-import { useState, useRef, useCallback, useMemo } from 'react';
-import { nodes, edges, SkillNode, SkillEdge, NodeStatus } from '@/data/skillTreeData';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { buildSkillTree, SkillNode, SkillEdge, SkillsApiApp } from '@/data/skillTreeData';
 import { DetailPanel } from './DetailPanel';
 import { ProgressBar } from './ProgressBar';
 import { Legend } from './Legend';
 import { SearchBar } from './SearchBar';
-import { OAuthDialog } from './OAuthDialog';
+import { ConnectDialog } from './ConnectDialog';
 
 /* 節點狀態對應的顏色 */
-const NODE_COLORS: Record<NodeStatus, string> = {
+const NODE_COLORS = {
   unlocked: '#1D9E75',
-  pending: '#D4A843',
   locked: '#CBD5E1',
 };
 
@@ -28,6 +26,12 @@ const EDGE_COLORS = {
 };
 
 export function SkillTreeCanvas() {
+  /* ── API 資料 ── */
+  const [apps, setApps] = useState<SkillsApiApp[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  /* ── 互動狀態 ── */
   const containerRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: -200, y: -50 });
   const [zoom, setZoom] = useState(0.75);
@@ -36,39 +40,40 @@ export function SkillTreeCanvas() {
   const [selectedNode, setSelectedNode] = useState<SkillNode | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [connectTarget, setConnectTarget] = useState<SkillNode | null>(null);
 
-  /* 已連接的 App（預設假資料：Notion 和 Calendar 已連接） */
-  const [connectedApps, setConnectedApps] = useState<Set<string>>(new Set(['notion', 'calendar']));
-  const [oauthTarget, setOauthTarget] = useState<SkillNode | null>(null);
+  /* ── 載入 API 資料 ── */
+  useEffect(() => {
+    fetch('/api/skills')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        setApps(data.apps);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, []);
 
-  const nodeMap = useMemo(() => new Map(nodes.map(n => [n.id, n])), []);
+  /* ── 根據 API 資料動態建構節點和邊 ── */
+  const { nodes, edges } = useMemo(() => {
+    if (apps.length === 0) return { nodes: [], edges: [] };
+    return buildSkillTree(apps);
+  }, [apps]);
 
-  /** 根據 App 連接狀態，計算節點的實際狀態（遞迴函式，用於 combo 節點） */
-  const getEffectiveStatus = useMemo(() => {
-    const fn = (nodeId: string): NodeStatus => {
-      const node = nodeMap.get(nodeId);
-      if (!node) return 'locked';
+  const nodeMap = useMemo(() => new Map(nodes.map(n => [n.id, n])), [nodes]);
 
-      if (node.type === 'source') {
-        return connectedApps.has(node.id) ? 'unlocked' : 'locked';
-      }
-      if (node.type === 'skill') {
-        if (!node.app || !connectedApps.has(node.app)) return 'locked';
-        return node.intrinsicStatus;
-      }
-      if (node.type === 'combo') {
-        const allSatisfied = (node.prerequisites || []).every(preId => {
-          const eff = fn(preId);
-          return eff !== 'locked';
-        });
-        return allSatisfied ? 'unlocked' : 'locked';
-      }
-      return 'locked';
-    };
-    return fn;
-  }, [connectedApps, nodeMap]);
+  /* 已連接 App 的 Set */
+  const connectedApps = useMemo(
+    () => new Set(apps.filter(a => a.connected).map(a => a.name)),
+    [apps],
+  );
 
-  /* 搜尋篩選 */
+  /* ── 搜尋篩選 ── */
   const searchMatches = useMemo(() => {
     if (!searchQuery.trim()) return null;
     const q = searchQuery.toLowerCase();
@@ -76,7 +81,7 @@ export function SkillTreeCanvas() {
       n.label.toLowerCase().includes(q) ||
       (n.app && n.app.toLowerCase().includes(q))
     ).map(n => n.id));
-  }, [searchQuery]);
+  }, [searchQuery, nodes]);
 
   /* hover 時高亮相關邊和節點 */
   const highlightedEdges = hoveredNode
@@ -86,14 +91,14 @@ export function SkillTreeCanvas() {
     ? new Set(edges.filter(e => e.from === hoveredNode || e.to === hoveredNode).flatMap(e => [e.from, e.to]))
     : new Set<string>();
 
-  /* 滾輪縮放 */
+  /* ── 滾輪縮放 ── */
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setZoom(z => Math.min(2, Math.max(0.3, z * delta)));
   }, []);
 
-  /* 拖拽平移 */
+  /* ── 拖拽平移 ── */
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 0) {
       setDragging(true);
@@ -109,7 +114,7 @@ export function SkillTreeCanvas() {
 
   const handleMouseUp = useCallback(() => setDragging(false), []);
 
-  /* 觸控支援 */
+  /* ── 觸控支援 ── */
   const touchRef = useRef<{ x: number; y: number } | null>(null);
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 1) {
@@ -125,31 +130,40 @@ export function SkillTreeCanvas() {
     }
   }, []);
 
-  /* 點擊節點 — source 節點開啟連接對話框，其他開啟詳情面板 */
+  /* ── 點擊節點 ── */
   const handleNodeClick = useCallback((e: React.MouseEvent, node: SkillNode) => {
     e.stopPropagation();
     if (node.type === 'source') {
-      setOauthTarget(node);
+      /* 點擊 App 節點 → 開啟連接/中斷對話框 */
+      setConnectTarget(node);
     } else {
+      /* 點擊技能/組合技節點 → 開啟詳情面板 */
       setSelectedNode(node);
     }
   }, []);
 
-  /* OAuth 確認 — 切換 App 連接狀態 */
-  const handleOAuthConfirm = useCallback(() => {
-    if (!oauthTarget) return;
-    setConnectedApps(prev => {
-      const next = new Set(prev);
-      if (next.has(oauthTarget.id)) {
-        next.delete(oauthTarget.id);
-      } else {
-        next.add(oauthTarget.id);
-      }
-      return next;
-    });
-  }, [oauthTarget]);
+  /* ── 連接確認 → 導向 OAuth 或其他流程 ── */
+  const handleConnect = useCallback((appName: string, authType: string) => {
+    if (authType === 'oauth2') {
+      /* OAuth2 → 直接導向 /api/connect/{app} */
+      window.location.href = `/api/connect/${appName}`;
+    }
+    /* bot_token / api_key 的情況由 ConnectDialog 內部處理 */
+  }, []);
 
-  /* 搜尋選取 — 將視口平移到選中節點 */
+  /* ── 中斷連接 ── */
+  const handleDisconnect = useCallback(async (appName: string) => {
+    await fetch(`/api/connect/${appName}`, { method: 'DELETE' });
+    /* 重新載入資料 */
+    const res = await fetch('/api/skills');
+    if (res.ok) {
+      const data = await res.json();
+      setApps(data.apps);
+    }
+    setConnectTarget(null);
+  }, []);
+
+  /* ── 搜尋選取 → 平移視口到該節點 ── */
   const handleSearchSelect = useCallback((node: SkillNode) => {
     const container = containerRef.current;
     if (!container) return;
@@ -163,20 +177,23 @@ export function SkillTreeCanvas() {
     setSearchQuery('');
   }, []);
 
-  /** 計算邊的顏色 */
+  /* ── 邊的顏色計算 ── */
   const getEdgeColor = (edge: SkillEdge) => {
-    const fromStatus = getEffectiveStatus(edge.from);
-    const toStatus = getEffectiveStatus(edge.to);
+    const from = nodeMap.get(edge.from);
+    const to = nodeMap.get(edge.to);
+    if (!from || !to) return EDGE_COLORS.inactive;
+
     if (edge.type === 'combo') {
-      return fromStatus !== 'locked' && toStatus !== 'locked' ? EDGE_COLORS.combo : EDGE_COLORS.inactive;
+      return from.status === 'unlocked' && to.status === 'unlocked'
+        ? EDGE_COLORS.combo : EDGE_COLORS.inactive;
     }
-    if (fromStatus === 'unlocked' && toStatus === 'unlocked') return EDGE_COLORS.active;
+    if (from.status === 'unlocked' && to.status === 'unlocked') return EDGE_COLORS.active;
     return EDGE_COLORS.inactive;
   };
 
   const isEdgeHighlighted = (edge: SkillEdge) => highlightedEdges.has(`${edge.from}-${edge.to}`);
 
-  /** 渲染一條邊（二次貝茲曲線） */
+  /* ── 渲染邊 ── */
   const renderEdge = (edge: SkillEdge, i: number) => {
     const from = nodeMap.get(edge.from);
     const to = nodeMap.get(edge.to);
@@ -186,7 +203,6 @@ export function SkillTreeCanvas() {
     const highlighted = isEdgeHighlighted(edge);
     const isCombo = edge.type === 'combo';
 
-    /* 用垂直偏移產生弧度 */
     const mx = (from.x + to.x) / 2;
     const my = (from.y + to.y) / 2;
     const dx = to.x - from.x;
@@ -217,10 +233,9 @@ export function SkillTreeCanvas() {
     );
   };
 
-  /** 渲染節點 — 依類型繪製不同形狀 */
+  /* ── 渲染節點 ── */
   const renderNode = (node: SkillNode) => {
-    const effectiveNodeStatus = getEffectiveStatus(node.id);
-    const color = NODE_COLORS[effectiveNodeStatus];
+    const color = NODE_COLORS[node.status];
     const dimmedByHover = hoveredNode && !highlightedNodes.has(node.id) && hoveredNode !== node.id;
     const dimmedBySearch = searchMatches && !searchMatches.has(node.id);
     const baseOpacity = dimmedByHover ? 0.2 : dimmedBySearch ? 0.15 : 1;
@@ -231,7 +246,7 @@ export function SkillTreeCanvas() {
     /* Source 節點（App）— 正方形 */
     if (node.type === 'source') {
       const size = 32;
-      const isConnected = connectedApps.has(node.id);
+      const isConnected = node.status === 'unlocked';
       return (
         <g
           key={node.id}
@@ -275,7 +290,7 @@ export function SkillTreeCanvas() {
     if (node.type === 'combo') {
       const size = 24;
       const points = `${node.x},${node.y - size} ${node.x + size},${node.y} ${node.x},${node.y + size} ${node.x - size},${node.y}`;
-      const isActive = effectiveNodeStatus !== 'locked';
+      const isActive = node.status === 'unlocked';
       return (
         <g
           key={node.id}
@@ -306,8 +321,9 @@ export function SkillTreeCanvas() {
       );
     }
 
-    /* Skill 節點 — 圓形 */
+    /* Skill 節點（action）— 圓形 */
     const r = 20;
+    const isUnlocked = node.status === 'unlocked';
     return (
       <g
         key={node.id}
@@ -323,22 +339,20 @@ export function SkillTreeCanvas() {
           stroke={color}
           strokeWidth={isHovered || isSelected ? 3 : 2}
           style={
-            isHovered && effectiveNodeStatus === 'unlocked'
+            isHovered && isUnlocked
               ? { filter: 'drop-shadow(0 0 8px rgba(29,158,117,0.5))' }
-              : isHovered && effectiveNodeStatus === 'pending'
-              ? { filter: 'drop-shadow(0 0 8px rgba(212,168,67,0.4))' }
               : {}
           }
         />
         <circle
           cx={node.x} cy={node.y} r={5}
           fill={color}
-          opacity={effectiveNodeStatus === 'locked' ? 0.3 : 0.8}
+          opacity={isUnlocked ? 0.8 : 0.3}
         />
         <text
           x={node.x} y={node.y + r + 14}
           textAnchor="middle" dominantBaseline="middle"
-          fill={effectiveNodeStatus === 'locked' ? '#94A3B8' : '#1E293B'}
+          fill={isUnlocked ? '#1E293B' : '#94A3B8'}
           fontSize={9} fontWeight={500}
           fontFamily="JetBrains Mono, monospace"
         >
@@ -348,12 +362,42 @@ export function SkillTreeCanvas() {
     );
   };
 
-  /* 進度統計 */
-  const skillNodes = nodes.filter(n => n.type !== 'source');
-  const unlockedNodes = skillNodes.filter(n => getEffectiveStatus(n.id) === 'unlocked').length;
+  /* ── 進度統計：已連接 App 數 / 總 App 數 ── */
+  const connectedCount = connectedApps.size;
+  const totalApps = apps.length;
+
+  /* ── Loading 狀態 ── */
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center w-full h-screen bg-white">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-gray-200 border-t-[#1D9E75] rounded-full animate-spin mx-auto" />
+          <p className="text-gray-400 font-mono text-sm">載入技能樹…</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Error 狀態 ── */
+  if (error) {
+    return (
+      <div className="flex items-center justify-center w-full h-screen bg-white">
+        <div className="text-center space-y-3 max-w-md px-4">
+          <p className="text-red-500 font-semibold">載入失敗</p>
+          <p className="text-gray-400 text-sm">{error}</p>
+          <button
+            onClick={() => { setError(null); setLoading(true); window.location.reload(); }}
+            className="px-4 py-2 bg-black text-white text-sm rounded-md hover:bg-gray-800"
+          >
+            重試
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-background select-none">
+    <div className="relative w-full h-screen overflow-hidden bg-white select-none">
       <div
         ref={containerRef}
         className="w-full h-full"
@@ -374,11 +418,8 @@ export function SkillTreeCanvas() {
             </pattern>
           </defs>
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-            {/* 點狀背景 */}
             <rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#dotGrid)" />
-            {/* 邊 */}
             {edges.map((e, i) => renderEdge(e, i))}
-            {/* 節點 */}
             {nodes.map(renderNode)}
           </g>
         </svg>
@@ -386,7 +427,7 @@ export function SkillTreeCanvas() {
 
       {/* UI 覆蓋層 */}
       <SearchBar nodes={nodes} onSearch={setSearchQuery} onSelectNode={handleSearchSelect} />
-      <ProgressBar unlocked={unlockedNodes} total={skillNodes.length} />
+      <ProgressBar unlocked={connectedCount} total={totalApps} />
       <Legend />
 
       {/* 詳情面板 */}
@@ -394,19 +435,20 @@ export function SkillTreeCanvas() {
         <DetailPanel
           node={selectedNode}
           allNodes={nodes}
-          effectiveStatus={getEffectiveStatus}
+          connectedApps={connectedApps}
           onClose={() => setSelectedNode(null)}
         />
       )}
 
-      {/* OAuth 連接對話框 */}
-      {oauthTarget && (
-        <OAuthDialog
-          appLabel={oauthTarget.label}
-          isConnected={connectedApps.has(oauthTarget.id)}
-          open={!!oauthTarget}
-          onOpenChange={(open) => { if (!open) setOauthTarget(null); }}
-          onConfirm={handleOAuthConfirm}
+      {/* 連接 / 中斷對話框 */}
+      {connectTarget && (
+        <ConnectDialog
+          node={connectTarget}
+          isConnected={connectedApps.has(connectTarget.id)}
+          open={!!connectTarget}
+          onOpenChange={(open) => { if (!open) setConnectTarget(null); }}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
         />
       )}
     </div>
