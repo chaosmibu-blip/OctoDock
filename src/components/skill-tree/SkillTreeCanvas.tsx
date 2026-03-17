@@ -38,14 +38,34 @@ export function SkillTreeCanvas() {
   const [connectTarget, setConnectTarget] = useState<SkillNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
 
+  /* ── 健康狀態資料 ── */
+  interface AppHealth {
+    appName: string;
+    status: 'green' | 'yellow' | 'red';
+    successRate: number;
+    totalCalls: number;
+    failedCalls: number;
+    avgDurationMs: number;
+  }
+  const [healthData, setHealthData] = useState<Map<string, AppHealth>>(new Map());
+
   /* ── 刷新資料 ── */
   const refreshData = useCallback(async () => {
     try {
-      const res = await fetch('/api/skills');
-      if (res.ok) {
-        const data = await res.json();
+      const [skillsRes, healthRes] = await Promise.all([
+        fetch('/api/skills'),
+        fetch('/api/skills/health').catch(() => null),
+      ]);
+      if (skillsRes.ok) {
+        const data = await skillsRes.json();
         setApps(data.apps);
         setCombos(data.combos ?? []);
+      }
+      if (healthRes?.ok) {
+        const hData = await healthRes.json();
+        const map = new Map<string, AppHealth>();
+        (hData.health ?? []).forEach((h: AppHealth) => map.set(h.appName, h));
+        setHealthData(map);
       }
     } catch { /* 靜默 */ }
   }, []);
@@ -64,9 +84,20 @@ export function SkillTreeCanvas() {
   }, [refreshData]);
 
   useEffect(() => {
-    fetch('/api/skills')
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
-      .then(data => { setApps(data.apps); setCombos(data.combos ?? []); setLoading(false); })
+    Promise.all([
+      fetch('/api/skills').then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+      fetch('/api/skills/health').then(r => r.ok ? r.json() : null).catch(() => null),
+    ])
+      .then(([skillsData, healthRaw]) => {
+        setApps(skillsData.apps);
+        setCombos(skillsData.combos ?? []);
+        if (healthRaw?.health) {
+          const map = new Map<string, AppHealth>();
+          healthRaw.health.forEach((h: AppHealth) => map.set(h.appName, h));
+          setHealthData(map);
+        }
+        setLoading(false);
+      })
       .catch(err => { setError(err.message); setLoading(false); });
   }, []);
 
@@ -348,6 +379,26 @@ export function SkillTreeCanvas() {
           >
             {isConnected ? '已連接' : isPreviewing ? '點擊解鎖' : '點擊連接'}
           </text>
+          {/* 健康燈號：已連接且有使用紀錄才顯示 */}
+          {isConnected && (() => {
+            const h = healthData.get(node.id);
+            if (!h || h.totalCalls === 0) return null;
+            const color = h.status === 'green' ? '#22C55E' : h.status === 'yellow' ? '#EAB308' : '#EF4444';
+            return (
+              <g>
+                <circle cx={node.x + size - 6} cy={node.y - size + 6} r={5}
+                  fill={color} stroke="#FFFFFF" strokeWidth={1.5} />
+                {/* hover App 時在燈號旁顯示成功率 */}
+                {isHovered && (
+                  <text x={node.x + size + 6} y={node.y - size + 10}
+                    fontSize={8} fill={color} fontFamily="JetBrains Mono, monospace"
+                  >
+                    {h.successRate}% · {h.avgDurationMs}ms
+                  </text>
+                )}
+              </g>
+            );
+          })()}
         </g>
       );
     }
