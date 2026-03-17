@@ -5,6 +5,7 @@ import { connectedApps } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { loadAdapters, getAllAdapters } from "@/mcp/registry";
 import { loadCombos, getCombosWithStatus } from "@/combos/registry";
+import { getActionZh } from "@/data/action-i18n";
 
 /**
  * GET /api/skills
@@ -51,7 +52,10 @@ export async function GET() {
       const tool = adapter.tools.find((t) => t.name === internalToolName);
       return {
         name: actionName,
-        description: tool?.description ?? "",
+        description: {
+          zh: getActionZh(adapter.name, actionName),
+          en: tool?.description ?? actionName,
+        },
       };
     });
 

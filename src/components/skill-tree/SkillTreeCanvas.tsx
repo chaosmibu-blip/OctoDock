@@ -325,7 +325,7 @@ export function SkillTreeCanvas() {
             fontSize={8} fontWeight={500}
             fontFamily="JetBrains Mono, monospace"
           >
-            {isConnected ? 'CONNECTED' : 'CLICK TO CONNECT'}
+            {isConnected ? '已連接' : '點擊連接'}
           </text>
         </g>
       );
