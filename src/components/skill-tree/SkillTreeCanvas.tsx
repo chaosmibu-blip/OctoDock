@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { buildSkillTree, SkillNode, SkillEdge, SkillsApiApp } from '@/data/skillTreeData';
+import { buildSkillTree, SkillNode, SkillEdge, SkillsApiApp, SkillsApiCombo } from '@/data/skillTreeData';
 import { DetailPanel } from './DetailPanel';
 import { ProgressBar } from './ProgressBar';
 import { Legend } from './Legend';
@@ -28,6 +28,7 @@ const EDGE_COLORS = {
 export function SkillTreeCanvas() {
   /* ── API 資料 ── */
   const [apps, setApps] = useState<SkillsApiApp[]>([]);
+  const [combos, setCombos] = useState<SkillsApiCombo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +52,7 @@ export function SkillTreeCanvas() {
       })
       .then(data => {
         setApps(data.apps);
+        setCombos(data.combos ?? []);
         setLoading(false);
       })
       .catch(err => {
@@ -62,8 +64,8 @@ export function SkillTreeCanvas() {
   /* ── 根據 API 資料動態建構節點和邊 ── */
   const { nodes, edges } = useMemo(() => {
     if (apps.length === 0) return { nodes: [], edges: [] };
-    return buildSkillTree(apps);
-  }, [apps]);
+    return buildSkillTree(apps, combos);
+  }, [apps, combos]);
 
   const nodeMap = useMemo(() => new Map(nodes.map(n => [n.id, n])), [nodes]);
 
@@ -154,11 +156,12 @@ export function SkillTreeCanvas() {
   /* ── 中斷連接 ── */
   const handleDisconnect = useCallback(async (appName: string) => {
     await fetch(`/api/connect/${appName}`, { method: 'DELETE' });
-    /* 重新載入資料 */
+    /* 重新載入資料（包含 combos 的 unlocked 狀態也會更新） */
     const res = await fetch('/api/skills');
     if (res.ok) {
       const data = await res.json();
       setApps(data.apps);
+      setCombos(data.combos ?? []);
     }
     setConnectTarget(null);
   }, []);

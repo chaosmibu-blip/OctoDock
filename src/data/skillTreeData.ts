@@ -1,5 +1,5 @@
 /**
- * 技能樹資料定義 — 類型、佈局計算、組合技定義
+ * 技能樹資料定義 — 類型、佈局計算
  * 節點和邊由 buildSkillTree() 根據 API 回傳動態產生
  */
 
@@ -17,7 +17,7 @@ export interface SkillNode {
   description: string;
   app?: string;           // 所屬 App 名稱
   authType?: string;      // source 節點的認證方式
-  prerequisites?: string[]; // combo 節點的前置 App
+  prerequisites?: string[]; // combo 節點的前置 App 名稱
 }
 
 /** 技能樹邊 */
@@ -37,7 +37,16 @@ export interface SkillsApiApp {
   actions: Array<{ name: string; description: string }>;
 }
 
-/* ── 佈局常數 ── */
+/** API /api/skills 回傳的組合技資料 */
+export interface SkillsApiCombo {
+  id: string;
+  name: { zh: string; en: string };
+  description: { zh: string; en: string };
+  prerequisites: Array<{ app: string; action: string }>;
+  unlocked: boolean;
+}
+
+/* ── 佈局工具 ── */
 
 /** 計算環形佈局位置 */
 function radial(cx: number, cy: number, index: number, total: number, radius: number) {
@@ -45,7 +54,7 @@ function radial(cx: number, cy: number, index: number, total: number, radius: nu
   return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
 }
 
-/** 計算 cluster 中心座標（3 列網格佈局，根據 App 數量動態排列） */
+/** 計算 cluster 中心座標（3 列網格佈局） */
 function computeClusterCenters(count: number): Array<{ x: number; y: number }> {
   const cols = 3;
   const xSpacing = 600;
@@ -61,51 +70,21 @@ function computeClusterCenters(count: number): Array<{ x: number; y: number }> {
   return centers;
 }
 
-/* ── 組合技定義（寫死） ── */
-
-/** 組合技的前置條件定義 */
-const COMBO_DEFINITIONS = [
-  {
-    id: 'combo-email-archive',
-    label: '信件摘要歸檔',
-    description: '自動摘要 Gmail 對話串並歸檔到 Notion',
-    requiredApps: ['gmail', 'notion'],
-  },
-  {
-    id: 'combo-meeting-prep',
-    label: '會議準備助手',
-    description: '根據日曆事件自動搜尋相關文件並發送準備郵件',
-    requiredApps: ['google_calendar', 'google_drive', 'gmail'],
-  },
-  {
-    id: 'combo-video-doc',
-    label: '影片內容轉文件',
-    description: '下載 YouTube 字幕並自動建立 Notion 文件',
-    requiredApps: ['youtube', 'notion'],
-  },
-  {
-    id: 'combo-code-review',
-    label: 'AI Code Review',
-    description: '自動化 Pull Request 審查流程',
-    requiredApps: ['github'],
-  },
-];
-
 /* ── 主要建構函式 ── */
 
 /**
- * 根據 API 回傳的 apps 陣列，動態產生技能樹的節點和邊
+ * 根據 API 回傳的 apps + combos 陣列，動態產生技能樹的節點和邊
  */
-export function buildSkillTree(apps: SkillsApiApp[]): {
+export function buildSkillTree(
+  apps: SkillsApiApp[],
+  combos: SkillsApiCombo[],
+): {
   nodes: SkillNode[];
   edges: SkillEdge[];
 } {
   const nodes: SkillNode[] = [];
   const edges: SkillEdge[] = [];
   const centers = computeClusterCenters(apps.length);
-
-  /* 已連接 App 的 Set（用於組合技判斷） */
-  const connectedSet = new Set(apps.filter(a => a.connected).map(a => a.name));
 
   /* 為每個 App 建立 cluster */
   apps.forEach((app, appIndex) => {
@@ -146,32 +125,36 @@ export function buildSkillTree(apps: SkillsApiApp[]): {
     });
   });
 
-  /* 組合技節點 — 放在整個畫面的底部中央區域 */
-  const maxRow = Math.ceil(apps.length / 3);
-  const comboBaseY = 300 + maxRow * 550 + 100;
-  const comboSpacing = 400;
-  const comboStartX = 300 + (3 * 600 - comboSpacing * (COMBO_DEFINITIONS.length - 1)) / 2 - 300;
+  /* 組合技節點 — 放在整個畫面的底部區域 */
+  if (combos.length > 0) {
+    const maxRow = Math.ceil(apps.length / 3);
+    const comboBaseY = 300 + maxRow * 550 + 100;
+    const comboSpacing = 350;
+    const totalComboWidth = comboSpacing * (combos.length - 1);
+    const canvasWidth = 3 * 600;
+    const comboStartX = (canvasWidth - totalComboWidth) / 2 + 300;
 
-  COMBO_DEFINITIONS.forEach((combo, i) => {
-    /* 判斷所有前置 App 是否已連接 */
-    const allConnected = combo.requiredApps.every(appName => connectedSet.has(appName));
+    combos.forEach((combo, i) => {
+      /* 收集此組合技需要的 App 名稱（去重） */
+      const requiredApps = [...new Set(combo.prerequisites.map(p => p.app))];
 
-    nodes.push({
-      id: combo.id,
-      label: combo.label,
-      type: 'combo',
-      status: allConnected ? 'unlocked' : 'locked',
-      x: comboStartX + i * comboSpacing,
-      y: comboBaseY,
-      description: combo.description,
-      prerequisites: combo.requiredApps,
+      nodes.push({
+        id: combo.id,
+        label: combo.name.zh,
+        type: 'combo',
+        status: combo.unlocked ? 'unlocked' : 'locked',
+        x: comboStartX + i * comboSpacing,
+        y: comboBaseY,
+        description: combo.description.zh,
+        prerequisites: requiredApps,
+      });
+
+      /* 邊：前置 App source 節點 → combo 節點 */
+      requiredApps.forEach(appName => {
+        edges.push({ from: appName, to: combo.id, type: 'combo' });
+      });
     });
-
-    /* 邊：前置 App source 節點 → combo 節點 */
-    combo.requiredApps.forEach(appName => {
-      edges.push({ from: appName, to: combo.id, type: 'combo' });
-    });
-  });
+  }
 
   return { nodes, edges };
 }

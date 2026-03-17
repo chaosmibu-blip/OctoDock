@@ -4,15 +4,19 @@ import { db } from "@/db";
 import { connectedApps } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { loadAdapters, getAllAdapters } from "@/mcp/registry";
+import { loadCombos, getCombosWithStatus } from "@/combos/registry";
 
 /**
  * GET /api/skills
- * 回傳技能樹所需的完整資料：所有 App adapter 的 action 清單 + 用戶連接狀態
- * 未登入時仍回傳 App/action 清單，但 connected 全部為 false
+ * 回傳技能樹所需的完整資料：
+ * - apps：所有 App adapter 的 action 清單 + 用戶連接狀態
+ * - combos：已驗證的組合技 + 即時計算的 unlocked 狀態
+ * 未登入時仍回傳完整清單，但 connected/unlocked 全部為 false
  */
 export async function GET() {
-  /* 載入所有 adapter */
+  /* 載入所有 adapter 和組合技 */
   await loadAdapters();
+  await loadCombos();
   const adapters = getAllAdapters();
 
   /* 查詢用戶已連接的 App（未登入則為空） */
@@ -61,5 +65,11 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ apps });
+  /* 組合技：根據用戶已連接的 App 計算 unlocked 狀態 */
+  const connectedAppNames = new Set(
+    userApps.filter((a) => a.status === "active").map((a) => a.appName),
+  );
+  const combos = getCombosWithStatus(connectedAppNames);
+
+  return NextResponse.json({ apps, combos });
 }
