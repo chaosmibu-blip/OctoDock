@@ -76,6 +76,8 @@ const ACTION_ZH: Record<string, string> = {
   "google_drive.export": "匯出檔案",
   "google_drive.list_permissions": "權限清單",
   "google_drive.add_comment": "新增留言",
+  "google_drive.list_comments": "留言列表",
+  "google_drive.delete_permission": "移除權限",
 
   /* ── Google Sheets ── */
   "google_sheets.create": "建立試算表",
@@ -159,6 +161,9 @@ const ACTION_ZH: Record<string, string> = {
   "github.star_repo": "Star Repo",
   "github.fork_repo": "Fork Repo",
   "github.create_branch": "建立分支",
+  "github.list_runs": "Workflow 執行列表",
+  "github.get_run": "取得 Workflow 執行",
+  "github.create_review": "建立 PR Review",
 };
 
 /** 自動直譯 fallback：snake_case → 中文（取底線分段用空格連接） */

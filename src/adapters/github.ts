@@ -83,6 +83,9 @@ const actionMap: Record<string, string> = {
   star_repo: "github_star_repo",
   fork_repo: "github_fork_repo",
   create_branch: "github_create_branch",
+  list_runs: "github_list_runs",
+  get_run: "github_get_run",
+  create_review: "github_create_review",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -372,6 +375,36 @@ Create a new branch from an existing branch or the default branch.
   from (optional): Source branch name (default: repo's default branch)
 ### Example
 octodock_do(app:"github", action:"create_branch", params:{owner:"octocat", repo:"Hello-World", branch:"feature-x", from:"main"})`,
+
+  list_runs: `## github.list_runs
+List recent workflow runs for a repository. Shows run ID, status, conclusion, workflow name, and branch.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  workflow_id (optional): Filter by workflow ID or filename (e.g. "ci.yml")
+  status (optional): Filter by status (queued, in_progress, completed)
+### Example
+octodock_do(app:"github", action:"list_runs", params:{owner:"octocat", repo:"Hello-World"})`,
+
+  get_run: `## github.get_run
+Get details of a specific workflow run, including status, conclusion, timing, and jobs.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  run_id: Workflow run ID (from list_runs)
+### Example
+octodock_do(app:"github", action:"get_run", params:{owner:"octocat", repo:"Hello-World", run_id:12345})`,
+
+  create_review: `## github.create_review
+Create a review on a pull request (approve, request changes, or comment).
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  pull_number: Pull request number
+  event: Review action — APPROVE, REQUEST_CHANGES, or COMMENT
+  body (optional): Review comment body
+### Example
+octodock_do(app:"github", action:"create_review", params:{owner:"octocat", repo:"Hello-World", pull_number:42, event:"APPROVE", body:"LGTM!"})`,
 };
 
 // ── do+help 架構：取得技能說明 ────────────────────────────
@@ -394,6 +427,9 @@ function getSkill(action?: string): string {
   delete_file(owner, repo, path, message, sha, branch?) — delete a file with commit
   list_branches(owner, repo) — list branches
   create_branch(owner, repo, branch, from?) — create a new branch
+  list_runs(owner, repo, workflow_id?, status?) — list workflow runs
+  get_run(owner, repo, run_id) — get workflow run details
+  create_review(owner, repo, pull_number, event, body?) — review a PR
   create_pr(owner, repo, title, body, head, base?) — create pull request
   merge_pr(owner, repo, pull_number, merge_method?) — merge pull request
   list_commits(owner, repo, per_page?) — list recent commits
@@ -492,6 +528,35 @@ function formatResponse(action: string, rawData: unknown): string {
       const data = rawData as any;
       const branchName = data.ref?.replace("refs/heads/", "") ?? "unknown";
       return `Done. Branch "${branchName}" created.`;
+    }
+
+    // Workflow runs 列表
+    case "list_runs": {
+      const runs = (rawData as any).workflow_runs;
+      if (!Array.isArray(runs) || runs.length === 0) return "No workflow runs found.";
+      return runs.map((r: any) =>
+        `- **${r.name}** #${r.run_number} (${r.status}${r.conclusion ? ` → ${r.conclusion}` : ""})\n  Branch: ${r.head_branch} | Run ID: ${r.id} | ${r.created_at}`
+      ).join("\n");
+    }
+
+    // Workflow run 詳情
+    case "get_run": {
+      const r = rawData as any;
+      let text = `Workflow: ${r.name} #${r.run_number}\nStatus: ${r.status}${r.conclusion ? ` → ${r.conclusion}` : ""}\nBranch: ${r.head_branch}\nTriggered: ${r.event} by ${r.actor?.login ?? "unknown"}\nCreated: ${r.created_at}\nUpdated: ${r.updated_at}`;
+      if (r.jobs) {
+        const jobs = Array.isArray(r.jobs) ? r.jobs : [];
+        if (jobs.length > 0) {
+          text += "\n\nJobs:";
+          text += jobs.map((j: any) => `\n  - ${j.name}: ${j.status}${j.conclusion ? ` → ${j.conclusion}` : ""}`).join("");
+        }
+      }
+      return text;
+    }
+
+    // PR Review
+    case "create_review": {
+      const r = rawData as any;
+      return `Done. Review submitted: ${r.state ?? "unknown"}.${r.body ? ` Comment: "${r.body}"` : ""}`;
     }
 
     // Star 倉庫：204 No Content 成功
@@ -959,6 +1024,39 @@ const tools: ToolDefinition[] = [
       from: z.string().optional().describe("Source branch name (default: repo's default branch)"),
     },
   },
+  {
+    name: "github_list_runs",
+    description:
+      "List recent GitHub Actions workflow runs for a repository. Shows run ID, status, conclusion, workflow name, branch, and timing.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      workflow_id: z.string().optional().describe("Filter by workflow ID or filename (e.g. 'ci.yml')"),
+      status: z.string().optional().describe("Filter by status: queued, in_progress, completed"),
+    },
+  },
+  {
+    name: "github_get_run",
+    description:
+      "Get details of a specific GitHub Actions workflow run including status, conclusion, timing, trigger event, and jobs.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      run_id: z.number().describe("Workflow run ID (from list_runs)"),
+    },
+  },
+  {
+    name: "github_create_review",
+    description:
+      "Create a review on a pull request. Can approve, request changes, or leave a comment.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      pull_number: z.number().describe("Pull request number"),
+      event: z.string().describe("Review action: APPROVE, REQUEST_CHANGES, or COMMENT"),
+      body: z.string().optional().describe("Review comment body (required for REQUEST_CHANGES)"),
+    },
+  },
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
@@ -1399,6 +1497,52 @@ async function execute(
         `/repos/${params.owner}/${params.repo}/forks`,
         token,
         { method: "POST" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 列出 workflow runs
+    case "github_list_runs": {
+      const workflowId = params.workflow_id as string | undefined;
+      const status = params.status as string | undefined;
+      let path = workflowId
+        ? `/repos/${params.owner}/${params.repo}/actions/workflows/${workflowId}/runs`
+        : `/repos/${params.owner}/${params.repo}/actions/runs`;
+      const qParams = new URLSearchParams();
+      if (status) qParams.set("status", status);
+      qParams.set("per_page", "20");
+      path += `?${qParams.toString()}`;
+
+      const result = await githubFetch(path, token);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 取得 workflow run 詳情
+    case "github_get_run": {
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/actions/runs/${params.run_id}`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 建立 PR review
+    case "github_create_review": {
+      const body: Record<string, unknown> = {
+        event: params.event,
+      };
+      if (params.body) body.body = params.body;
+
+      const result = await githubFetch(
+        `/repos/${params.owner}/${params.repo}/pulls/${params.pull_number}/reviews`,
+        token,
+        { method: "POST", body: JSON.stringify(body) },
       );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],

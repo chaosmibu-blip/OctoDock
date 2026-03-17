@@ -153,6 +153,8 @@ const actionMap: Record<string, string> = {
   export: "gdrive_export",
   list_permissions: "gdrive_list_permissions",
   add_comment: "gdrive_add_comment",
+  list_comments: "gdrive_list_comments",
+  delete_permission: "gdrive_delete_permission",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -266,6 +268,21 @@ Add a comment to a file in Google Drive.
   content: Comment text
 ### Example
 octodock_do(app:"google_drive", action:"add_comment", params:{file_id:"1Bxi...", content:"Please review this section."})`,
+
+  list_comments: `## google_drive.list_comments
+List all comments on a file in Google Drive.
+### Parameters
+  file_id: Google Drive file ID
+### Example
+octodock_do(app:"google_drive", action:"list_comments", params:{file_id:"1Bxi..."})`,
+
+  delete_permission: `## google_drive.delete_permission
+Remove a specific permission (sharing) from a file.
+### Parameters
+  file_id: Google Drive file ID
+  permission_id: Permission ID (from list_permissions)
+### Example
+octodock_do(app:"google_drive", action:"delete_permission", params:{file_id:"1Bxi...", permission_id:"12345"})`,
 };
 
 function getSkill(action?: string): string {
@@ -285,6 +302,8 @@ function getSkill(action?: string): string {
   export(file_id, format) — export Google Workspace file to pdf/docx/txt/csv
   list_permissions(file_id) — list file permissions
   add_comment(file_id, content) — add a comment to a file
+  list_comments(file_id) — list all comments on a file
+  delete_permission(file_id, permission_id) — remove a sharing permission
 Use octodock_help(app:"google_drive", action:"ACTION") for detailed params + example.`;
 }
 
@@ -380,6 +399,15 @@ function formatResponse(action: string, rawData: unknown): string {
       const ac = rawData as any;
       return `Comment added by ${ac.author?.displayName ?? "unknown"}: "${ac.content}"`;
     }
+    case "list_comments": {
+      const comments = (rawData as any).comments;
+      if (!Array.isArray(comments) || comments.length === 0) return "No comments found.";
+      return comments.map((c: any) =>
+        `- **${c.author?.displayName ?? "unknown"}** (${c.createdTime ?? ""}): ${c.content}${c.resolved ? " [resolved]" : ""}`
+      ).join("\n");
+    }
+    case "delete_permission":
+      return `Done. Permission removed.`;
     default:
       return JSON.stringify(rawData, null, 2);
   }
@@ -550,6 +578,23 @@ const tools: ToolDefinition[] = [
     inputSchema: {
       file_id: z.string().describe("Google Drive file ID"),
       content: z.string().describe("Comment text"),
+    },
+  },
+  {
+    name: "gdrive_list_comments",
+    description:
+      "List all comments on a file in Google Drive. Returns author, content, creation time, and resolved status.",
+    inputSchema: {
+      file_id: z.string().describe("Google Drive file ID"),
+    },
+  },
+  {
+    name: "gdrive_delete_permission",
+    description:
+      "Remove a specific sharing permission from a file. Use list_permissions first to find the permission ID.",
+    inputSchema: {
+      file_id: z.string().describe("Google Drive file ID"),
+      permission_id: z.string().describe("Permission ID (from list_permissions)"),
     },
   },
 ];
@@ -829,6 +874,29 @@ async function execute(
       );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 列出檔案上的所有留言
+    case "gdrive_list_comments": {
+      const result = await driveFetch(
+        `/files/${params.file_id}/comments?fields=comments(id,author,content,createdTime,resolved)`,
+        token,
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 移除權限（取消分享）
+    case "gdrive_delete_permission": {
+      await driveFetch(
+        `/files/${params.file_id}/permissions/${params.permission_id}`,
+        token,
+        { method: "DELETE" },
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify({ deleted: true }) }],
       };
     }
 
