@@ -55,8 +55,7 @@ export interface SkillsApiCombo {
 const CENTER = { x: 900, y: 700 };
 const APP_RING_RADIUS = 550;       // 外圈 App 半徑
 const COMBO_RING_RADIUS = 120;     // 內圈組合技半徑
-const ACTION_PULL_RATIO = 0.38;    // action 從 App 往中心拉多少（0=App 位置，1=中心）
-const BASE_CLUSTER_R = 40;         // action cluster 基礎半徑
+const BASE_CLUSTER_R = 40;         // action cluster 基礎半徑（衛星環繞 App）
 const CLUSTER_R_PER_ACTION = 4;    // 每多一個 action 加的半徑
 
 /* ── OAuth provider 分群 ── */
@@ -155,20 +154,15 @@ export function buildSkillTree(
     });
   });
 
-  /* ── 中圈：Action 技能 ── */
+  /* ── Action 技能（衛星環繞 App） ── */
 
   apps.forEach((app) => {
     const appPos = appPositions.get(app.name);
     if (!appPos) return;
 
-    /* action anchor = 從 App 位置往中心拉 ACTION_PULL_RATIO */
-    const anchorX = appPos.x + (CENTER.x - appPos.x) * ACTION_PULL_RATIO;
-    const anchorY = appPos.y + (CENTER.y - appPos.y) * ACTION_PULL_RATIO;
-
-    /* cluster 半徑根據 action 數量動態算 */
+    /* action 以 App 為中心向外展開（衛星群） */
     const clusterR = BASE_CLUSTER_R + app.actions.length * CLUSTER_R_PER_ACTION;
-
-    const actionPositions = placeActionsInCluster(anchorX, anchorY, app.actions.length, clusterR);
+    const actionPositions = placeActionsInCluster(appPos.x, appPos.y, app.actions.length, clusterR);
 
     app.actions.forEach((action, i) => {
       const actionId = `${app.name}--${action.name}`;

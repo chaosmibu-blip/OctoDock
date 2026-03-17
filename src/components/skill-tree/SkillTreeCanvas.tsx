@@ -196,17 +196,30 @@ export function SkillTreeCanvas() {
     const isCombo = edge.type === 'combo';
     const edgeKey = `${edge.from}-${edge.to}`;
     const highlighted = highlightedEdges.has(edgeKey);
-
-    /* 組合技邊：只在 hover 組合技時才顯示 */
-    if (isCombo && !highlighted) return null;
-
     const isActive = from.status === 'unlocked' && to.status === 'unlocked';
 
-    let stroke = GRAY_LIGHT;
-    if (isCombo) stroke = isActive ? GOLD : '#B8A060';
-    else if (isActive) stroke = TEAL;
+    let stroke: string;
+    let opacity: number;
 
-    if (highlighted) stroke = isCombo ? GOLD : TEAL;
+    if (isCombo) {
+      /* 組合技虛線永遠可見 */
+      stroke = isActive ? GOLD : GRAY;
+      if (hoveredNode) {
+        /* hover 時：相關的高亮，其他淡化但不消失 */
+        opacity = highlighted ? 0.8 : 0.1;
+      } else {
+        /* 預設：已解鎖金色 0.6，未解鎖灰色 0.2 */
+        opacity = isActive ? 0.6 : 0.2;
+      }
+      if (highlighted) stroke = GOLD;
+    } else {
+      /* App → action 細線 */
+      stroke = isActive ? TEAL : GRAY_LIGHT;
+      if (highlighted) stroke = TEAL;
+      opacity = hoveredNode
+        ? (highlighted ? 0.8 : 0.05)
+        : (isActive ? 0.25 : 0.08);
+    }
 
     return (
       <line
@@ -215,11 +228,7 @@ export function SkillTreeCanvas() {
         stroke={stroke}
         strokeWidth={isCombo ? 1.5 : 1}
         strokeDasharray={isCombo ? '6 4' : 'none'}
-        opacity={
-          hoveredNode
-            ? (highlighted ? 0.8 : 0.05)
-            : (isActive ? 0.25 : 0.08)
-        }
+        opacity={opacity}
         style={{ transition: 'opacity 300ms' }}
       />
     );
