@@ -9,7 +9,13 @@
 </p>
 
 <p align="center">
-  Paste one MCP URL into Claude or ChatGPT — your AI can operate all your apps, and it gets smarter the more you use it.
+  <a href="https://octo-dock.com">Website</a> · <a href="#quick-start">Quick Start</a> · <a href="#connected-apps">Connected Apps</a> · <a href="#adding-a-new-adapter">Add Your App</a>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL--1.1-blue" alt="License"></a>
+  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/github/stars/chaosmibu-blip/OctoDock?style=social" alt="Stars">
 </p>
 
 ---
@@ -37,6 +43,13 @@ Every operation flows through OctoDock. Over time, it learns:
 Switch from Claude to ChatGPT? Your memory follows you.
 
 ## Quick Start
+
+### Use the hosted version
+
+1. Go to [octo-dock.com](https://octo-dock.com)
+2. Sign in, connect your apps
+3. Copy your MCP URL → paste into Claude / ChatGPT settings
+4. Done.
 
 ### Self-host
 
@@ -74,12 +87,18 @@ You → Claude/ChatGPT → octodock_do("notion", "create_page", {title: "Meeting
 
 | App | Actions | Auth |
 |-----|---------|------|
-| Notion | 19 | OAuth |
-| Gmail | 5 | OAuth |
+| Notion | 21 | OAuth |
+| Gmail | 7 | OAuth |
+| Google Calendar | 5 | OAuth |
+| Google Drive | 3 | OAuth |
+| Google Docs | 5 | OAuth |
+| Google Sheets | 4 | OAuth |
+| GitHub | 29 | OAuth |
 | LINE | 5 | API Key |
 | Telegram | 4 | Bot Token |
 | Threads | 5 | OAuth |
 | Instagram | 5 | OAuth |
+| YouTube | 3 | OAuth |
 
 **Adding a new app = adding one file in `src/adapters/`.** The core system auto-discovers it.
 
@@ -124,4 +143,4 @@ See `.claude/skills/adapter-quality-checklist.md` for quality guidelines.
 
 ## License
 
-[Business Source License 1.1](LICENSE) — 你可以自由使用、修改、自架，但不能拿去做競品託管服務。4 年後自動轉為 MIT。
+[Business Source License 1.1](LICENSE) — Free to use, modify, and self-host. You may not offer a competing hosted service. Converts to MIT automatically after 4 years.
