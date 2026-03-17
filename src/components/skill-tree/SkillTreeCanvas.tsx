@@ -7,7 +7,7 @@
  */
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { buildSkillTree, SkillNode, SkillEdge, SkillsApiApp, SkillsApiCombo } from '@/data/skillTreeData';
+import { buildSkillTree, SkillNode, SkillEdge, SkillsApiApp, SkillsApiCombo, SkillsApiDiscovered } from '@/data/skillTreeData';
 import { DetailPanel } from './DetailPanel';
 import { ProgressBar } from './ProgressBar';
 import { Legend } from './Legend';
@@ -23,6 +23,7 @@ export function SkillTreeCanvas() {
   /* ── API 資料 ── */
   const [apps, setApps] = useState<SkillsApiApp[]>([]);
   const [combos, setCombos] = useState<SkillsApiCombo[]>([]);
+  const [discovered, setDiscovered] = useState<SkillsApiDiscovered[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +61,7 @@ export function SkillTreeCanvas() {
         const data = await skillsRes.json();
         setApps(data.apps);
         setCombos(data.combos ?? []);
+        setDiscovered(data.discovered ?? []);
       }
       if (healthRes?.ok) {
         const hData = await healthRes.json();
@@ -91,6 +93,7 @@ export function SkillTreeCanvas() {
       .then(([skillsData, healthRaw]) => {
         setApps(skillsData.apps);
         setCombos(skillsData.combos ?? []);
+        setDiscovered(skillsData.discovered ?? []);
         if (healthRaw?.health) {
           const map = new Map<string, AppHealth>();
           healthRaw.health.forEach((h: AppHealth) => map.set(h.appName, h));
@@ -104,8 +107,8 @@ export function SkillTreeCanvas() {
   /* ── 建構節點 ── */
   const { nodes, edges } = useMemo(() => {
     if (apps.length === 0) return { nodes: [], edges: [] };
-    return buildSkillTree(apps, combos);
-  }, [apps, combos]);
+    return buildSkillTree(apps, combos, discovered);
+  }, [apps, combos, discovered]);
 
   const nodeMap = useMemo(() => new Map(nodes.map(n => [n.id, n])), [nodes]);
   const connectedApps = useMemo(() => new Set(apps.filter(a => a.connected).map(a => a.name)), [apps]);
@@ -407,9 +410,58 @@ export function SkillTreeCanvas() {
     if (node.type === 'combo') {
       const size = 28;
       const isActive = isConnected;
+      const isDisc = !!node.discovered;
       const opacity = dimmedBySearch ? 0.15 : dimmedByHover ? 0.2 : 1;
-      const pts = `${node.x},${node.y - size} ${node.x + size},${node.y} ${node.x},${node.y + size} ${node.x - size},${node.y}`;
 
+      /* 自動發現的用圓形 + 紫色，策展的用菱形 + 金色 */
+      const accentColor = isDisc ? '#8B5CF6' : GOLD;
+      const fillActive = isDisc ? '#F5F3FF' : '#FFFDF5';
+
+      if (isDisc) {
+        /* 自動發現：虛線圓形 */
+        return (
+          <g key={node.id} opacity={opacity} style={{ cursor: 'pointer', transition: 'opacity 300ms' }}
+            onClick={(e) => handleNodeClick(e, node)}
+            onMouseEnter={() => setHoveredNode(node.id)}
+            onMouseLeave={() => setHoveredNode(null)}
+          >
+            {isActive && (
+              <circle cx={node.x} cy={node.y} r={size + 3}
+                fill="none" stroke={accentColor} strokeWidth={1} opacity={0.3}
+                style={{ filter: 'blur(3px)' }}
+              />
+            )}
+            <circle cx={node.x} cy={node.y} r={size}
+              fill={isActive ? fillActive : '#FAFAFA'}
+              stroke={isActive ? accentColor : GRAY}
+              strokeWidth={isHovered || isSelected ? 2.5 : 1.5}
+              strokeDasharray="5 3"
+            />
+            {/* 頻率徽章 */}
+            <text x={node.x} y={node.y - 2} textAnchor="middle" dominantBaseline="middle"
+              fill={isActive ? accentColor : '#9CA3AF'} fontSize={10} fontWeight={600}
+              fontFamily="JetBrains Mono, monospace"
+            >
+              {node.frequency ?? '?'}×
+            </text>
+            <text x={node.x} y={node.y + size + 16} textAnchor="middle" dominantBaseline="middle"
+              fill={isActive ? accentColor : '#9CA3AF'} fontSize={8} fontWeight={500}
+              fontFamily="JetBrains Mono, monospace"
+            >
+              {node.label}
+            </text>
+            <text x={node.x} y={node.y + size + 28} textAnchor="middle" dominantBaseline="middle"
+              fill="#9CA3AF" fontSize={7}
+              fontFamily="JetBrains Mono, monospace"
+            >
+              自動發現
+            </text>
+          </g>
+        );
+      }
+
+      /* 策展組合技：菱形 */
+      const pts = `${node.x},${node.y - size} ${node.x + size},${node.y} ${node.x},${node.y + size} ${node.x - size},${node.y}`;
       return (
         <g key={node.id} opacity={opacity} style={{ cursor: 'pointer', transition: 'opacity 300ms' }}
           onClick={(e) => handleNodeClick(e, node)}
@@ -419,18 +471,18 @@ export function SkillTreeCanvas() {
           {isActive && (
             <polygon
               points={`${node.x},${node.y - size - 3} ${node.x + size + 3},${node.y} ${node.x},${node.y + size + 3} ${node.x - size - 3},${node.y}`}
-              fill="none" stroke={GOLD} strokeWidth={1} opacity={0.3}
+              fill="none" stroke={accentColor} strokeWidth={1} opacity={0.3}
               style={{ filter: 'blur(3px)' }}
             />
           )}
           <polygon points={pts}
-            fill={isActive ? '#FFFDF5' : '#FAFAFA'}
-            stroke={isActive ? GOLD : GRAY}
+            fill={isActive ? fillActive : '#FAFAFA'}
+            stroke={isActive ? accentColor : GRAY}
             strokeWidth={isHovered || isSelected ? 2.5 : 1.5}
             strokeDasharray="5 3"
           />
           <text x={node.x} y={node.y + size + 16} textAnchor="middle" dominantBaseline="middle"
-            fill={isActive ? GOLD : '#9CA3AF'} fontSize={9} fontWeight={500}
+            fill={isActive ? accentColor : '#9CA3AF'} fontSize={9} fontWeight={500}
             fontFamily="JetBrains Mono, monospace"
           >
             {node.label}

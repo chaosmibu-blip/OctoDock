@@ -23,6 +23,8 @@ export interface SkillNode {
   authType?: string;
   actionCount?: number;
   prerequisites?: Array<{ nodeId: string; label: string; app: string }>;
+  discovered?: boolean;     // 第三層：自動發現的候選組合技
+  frequency?: number;       // 自動發現的出現次數
 }
 
 /** 技能樹邊 */
@@ -40,6 +42,15 @@ export interface SkillsApiApp {
   connected: boolean;
   connectedAt: string | null;
   actions: Array<{ name: string; description: { zh: string; en: string } }>;
+}
+
+/** API 回傳的自動發現候選組合技 */
+export interface SkillsApiDiscovered {
+  id: string;
+  pattern: Array<{ app: string; action: string }>;
+  frequency: number;
+  lastSeen: string;
+  suggestedName: string;
 }
 
 /** API 回傳的組合技資料 */
@@ -133,6 +144,7 @@ function placeActionsInCluster(
 export function buildSkillTree(
   apps: SkillsApiApp[],
   combos: SkillsApiCombo[],
+  discovered?: SkillsApiDiscovered[],
 ): { nodes: SkillNode[]; edges: SkillEdge[] } {
   const nodes: SkillNode[] = [];
   const edges: SkillEdge[] = [];
@@ -230,6 +242,44 @@ export function buildSkillTree(
       edges.push({ from: `${p.app}--${p.action}`, to: combo.id, type: 'combo' });
     });
   });
+
+  /* ── 第三層：自動發現的候選組合技 ── */
+  if (discovered && discovered.length > 0) {
+    /* 放在內圈稍外一點的位置（R=180），跟策展組合技（R=120）分開 */
+    const discR = 180;
+    discovered.forEach((disc, di) => {
+      const angle = discovered.length === 1
+        ? Math.PI / 4 // 45° 位置
+        : (di / discovered.length) * Math.PI * 2 + Math.PI / 6; // 偏移避免跟策展重疊
+      const x = Math.round(CENTER.x + Math.cos(angle) * discR);
+      const y = Math.round(CENTER.y + Math.sin(angle) * discR);
+
+      const prereqNodes = disc.pattern.map(p => ({
+        nodeId: `${p.app}--${p.action}`,
+        label: nodes.find(nd => nd.id === `${p.app}--${p.action}`)?.label ?? p.action,
+        app: p.app,
+      }));
+
+      const requiredApps = [...new Set(disc.pattern.map(p => p.app))];
+      const isUnlocked = requiredApps.every(a => connectedSet.has(a));
+
+      nodes.push({
+        id: disc.id,
+        label: disc.suggestedName,
+        type: 'combo',
+        status: isUnlocked ? 'unlocked' : 'locked',
+        x, y,
+        description: `自動發現：你已重複執行 ${disc.frequency} 次的跨 App 流程`,
+        discovered: true,
+        frequency: disc.frequency,
+        prerequisites: prereqNodes,
+      });
+
+      disc.pattern.forEach(p => {
+        edges.push({ from: `${p.app}--${p.action}`, to: disc.id, type: 'combo' });
+      });
+    });
+  }
 
   return { nodes, edges };
 }

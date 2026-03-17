@@ -5,6 +5,7 @@ import { connectedApps } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { loadAdapters, getAllAdapters } from "@/mcp/registry";
 import { loadCombos, getCombosWithStatus } from "@/combos/registry";
+import { discoverCombos } from "@/combos/auto-discover";
 import { getActionZh } from "@/data/action-i18n";
 
 /**
@@ -75,5 +76,15 @@ export async function GET() {
   );
   const combos = getCombosWithStatus(connectedAppNames);
 
-  return NextResponse.json({ apps, combos });
+  /* 第三層：自動發現的候選組合技（需要登入才有資料） */
+  let discovered: Awaited<ReturnType<typeof discoverCombos>> = [];
+  if (session?.user?.id) {
+    try {
+      discovered = await discoverCombos(session.user.id);
+    } catch {
+      /* 自動發現失敗不影響主回傳 */
+    }
+  }
+
+  return NextResponse.json({ apps, combos, discovered });
 }
