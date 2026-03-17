@@ -87,6 +87,62 @@ export function SkillTreeCanvas() {
   /* 判斷 hover 的是否為 combo 節點 */
   const hoveredIsCombo = hoveredNodeData?.type === 'combo';
 
+  /* ── 預覽亮起：hover 未連接 App 時，其 cluster 暫時亮起 ── */
+  const previewApp = useMemo(() => {
+    if (!hoveredNodeData) return null;
+    /* hover 未連接的 App → 預覽亮起 */
+    if (hoveredNodeData.type === 'source' && hoveredNodeData.status === 'locked') {
+      return hoveredNodeData.id;
+    }
+    /* hover 未連接 App 的 action → 預覽亮起該 App */
+    if (hoveredNodeData.type === 'skill' && hoveredNodeData.app && !connectedApps.has(hoveredNodeData.app)) {
+      return hoveredNodeData.app;
+    }
+    return null;
+  }, [hoveredNodeData, connectedApps]);
+
+  /* ── 推薦下一個該連的 App（解鎖最多組合技的） ── */
+  const recommendation = useMemo(() => {
+    if (combos.length === 0 || apps.length === 0) return null;
+    const unconnected = apps.filter(a => !a.connected);
+    if (unconnected.length === 0) return null;
+
+    let bestApp: SkillsApiApp | null = null;
+    let bestScore = 0;
+    let bestReason = '';
+
+    for (const app of unconnected) {
+      /* 計算：如果連上這個 App，能額外解鎖幾個組合技 */
+      const hypothetical = new Set([...connectedApps, app.name]);
+      let newUnlocks = 0;
+      const unlockNames: string[] = [];
+
+      for (const combo of combos) {
+        if (combo.unlocked) continue; // 已解鎖的不算
+        const requiredApps = [...new Set(combo.prerequisites.map(p => p.app))];
+        const wouldUnlock = requiredApps.every(a => hypothetical.has(a));
+        if (wouldUnlock) {
+          newUnlocks++;
+          unlockNames.push(combo.name.zh);
+        }
+      }
+
+      /* 分數 = 能解鎖的組合技數 + action 數 * 0.01（同分時 action 多的優先） */
+      const score = newUnlocks + app.actions.length * 0.01;
+      if (score > bestScore) {
+        bestScore = score;
+        bestApp = app;
+        bestReason = newUnlocks > 0
+          ? `可解鎖 ${newUnlocks} 個組合技：${unlockNames.slice(0, 2).join('、')}${unlockNames.length > 2 ? '…' : ''}`
+          : `新增 ${app.actions.length} 個技能`;
+      }
+    }
+
+    if (!bestApp) return null;
+    const label = bestApp.displayName.zh || bestApp.displayName.en || bestApp.name;
+    return { appName: label, appId: bestApp.name, reason: bestReason };
+  }, [apps, combos, connectedApps]);
+
   /* ── 搜尋 ── */
   const searchMatches = useMemo(() => {
     if (!searchQuery.trim()) return null;
@@ -197,6 +253,8 @@ export function SkillTreeCanvas() {
     const edgeKey = `${edge.from}-${edge.to}`;
     const highlighted = highlightedEdges.has(edgeKey);
     const isActive = from.status === 'unlocked' && to.status === 'unlocked';
+    /* 是否在預覽中（hover 未連接 App 時，其 cluster 的邊也亮起） */
+    const isPreviewing = previewApp && (from.app === previewApp || from.id === previewApp || to.app === previewApp);
 
     let stroke: string;
     let opacity: number;
@@ -205,19 +263,18 @@ export function SkillTreeCanvas() {
       /* 組合技虛線永遠可見 */
       stroke = isActive ? GOLD : GRAY;
       if (hoveredNode) {
-        /* hover 時：相關的高亮，其他淡化但不消失 */
         opacity = highlighted ? 0.8 : 0.1;
       } else {
-        /* 預設：已解鎖金色 0.6，未解鎖灰色 0.2 */
         opacity = isActive ? 0.6 : 0.2;
       }
       if (highlighted) stroke = GOLD;
     } else {
       /* App → action 細線 */
-      stroke = isActive ? TEAL : GRAY_LIGHT;
+      const edgeLit = isActive || isPreviewing;
+      stroke = edgeLit ? TEAL : GRAY_LIGHT;
       if (highlighted) stroke = TEAL;
       opacity = hoveredNode
-        ? (highlighted ? 0.8 : 0.05)
+        ? (highlighted ? 0.8 : isPreviewing ? 0.3 : 0.05)
         : (isActive ? 0.25 : 0.08);
     }
 
@@ -246,6 +303,8 @@ export function SkillTreeCanvas() {
     if (node.type === 'source') {
       const size = 44;
       const r = 8;
+      const isPreviewing = previewApp === node.id; // hover 未連接 App 時預覽亮起
+      const showLit = isConnected || isPreviewing;  // 連接或預覽中都顯示亮起
       const opacity = dimmedBySearch ? 0.15 : dimmedByHover ? 0.2 : 1;
 
       return (
@@ -254,37 +313,40 @@ export function SkillTreeCanvas() {
           onMouseEnter={() => setHoveredNode(node.id)}
           onMouseLeave={() => setHoveredNode(null)}
         >
-          {isConnected && (
+          {/* 光暈：已連接 = teal，預覽 = teal 半透明脈動 */}
+          {showLit && (
             <rect x={node.x - size - 4} y={node.y - size - 4}
               width={(size + 4) * 2} height={(size + 4) * 2}
               rx={r + 4} ry={r + 4}
-              fill="none" stroke={TEAL} strokeWidth={1} opacity={0.2}
-              style={{ filter: 'blur(4px)' }}
+              fill="none" stroke={TEAL} strokeWidth={isPreviewing ? 1.5 : 1}
+              opacity={isPreviewing ? 0.4 : 0.2}
+              style={{ filter: `blur(${isPreviewing ? 6 : 4}px)`, transition: 'opacity 300ms' }}
             />
           )}
           <rect x={node.x - size} y={node.y - size}
             width={size * 2} height={size * 2} rx={r} ry={r}
-            fill={isConnected ? '#F0FDF9' : '#FAFAFA'}
-            stroke={isConnected ? TEAL : '#D1D5DB'}
+            fill={showLit ? '#F0FDF9' : '#FAFAFA'}
+            stroke={showLit ? TEAL : '#D1D5DB'}
             strokeWidth={isHovered || isSelected ? 2.5 : 1.5}
+            style={{ transition: 'fill 300ms, stroke 300ms' }}
           />
           <text x={node.x} y={node.y - 6} textAnchor="middle" dominantBaseline="middle"
-            fill={isConnected ? '#0F4F3E' : '#9CA3AF'} fontSize={12} fontWeight={600}
+            fill={showLit ? '#0F4F3E' : '#9CA3AF'} fontSize={12} fontWeight={600}
             fontFamily="Inter, sans-serif"
           >
             {node.label}
           </text>
           <text x={node.x} y={node.y + 12} textAnchor="middle" dominantBaseline="middle"
-            fill={isConnected ? '#6B7280' : '#D1D5DB'} fontSize={9}
+            fill={showLit ? '#6B7280' : '#D1D5DB'} fontSize={9}
             fontFamily="JetBrains Mono, monospace"
           >
             · {node.actionCount ?? 0} actions
           </text>
           <text x={node.x} y={node.y + size + 14} textAnchor="middle" dominantBaseline="middle"
-            fill={isConnected ? TEAL : '#9CA3AF'} fontSize={8} fontWeight={500}
+            fill={showLit ? TEAL : '#9CA3AF'} fontSize={8} fontWeight={500}
             fontFamily="JetBrains Mono, monospace"
           >
-            {isConnected ? '已連接' : '點擊連接'}
+            {isConnected ? '已連接' : isPreviewing ? '點擊解鎖' : '點擊連接'}
           </text>
         </g>
       );
@@ -329,7 +391,9 @@ export function SkillTreeCanvas() {
     /* ── Action（中圈）── 小圓點 */
     const dotR = isHovered ? 10 : 8;
     const clusterConnected = node.app ? connectedApps.has(node.app) : false;
-    const baseOpacity = clusterConnected ? 1 : 0.3;
+    const clusterPreviewing = node.app ? previewApp === node.app : false;
+    const showActionLit = clusterConnected || clusterPreviewing; // 連接或預覽中
+    const baseOpacity = showActionLit ? 1 : 0.3;
     const finalOpacity = dimmedBySearch ? 0.08 : dimmedByHover ? 0.1 : baseOpacity;
 
     return (
@@ -339,13 +403,13 @@ export function SkillTreeCanvas() {
         onMouseLeave={() => setHoveredNode(null)}
       >
         <circle cx={node.x} cy={node.y} r={dotR}
-          fill={clusterConnected ? TEAL : GRAY}
-          opacity={clusterConnected ? 0.7 : 0.5}
-          style={{ transition: 'r 150ms, fill 300ms' }}
+          fill={showActionLit ? TEAL : GRAY}
+          opacity={showActionLit ? (clusterPreviewing ? 0.5 : 0.7) : 0.5}
+          style={{ transition: 'r 150ms, fill 300ms, opacity 300ms' }}
         />
         {isHovered && (
           <circle cx={node.x} cy={node.y} r={dotR + 4}
-            fill="none" stroke={clusterConnected ? TEAL : GRAY}
+            fill="none" stroke={showActionLit ? TEAL : GRAY}
             strokeWidth={1.5} opacity={0.5}
           />
         )}
@@ -433,7 +497,24 @@ export function SkillTreeCanvas() {
       )}
 
       <SearchBar nodes={nodes} onSearch={setSearchQuery} onSelectNode={handleSearchSelect} />
-      <ProgressBar unlocked={connectedCount} total={totalApps} />
+      <ProgressBar
+        unlocked={connectedCount}
+        total={totalApps}
+        recommendation={recommendation ? { appName: recommendation.appName, reason: recommendation.reason } : null}
+        onRecommendationClick={(name) => {
+          /* 找到對應的 App 節點並平移到它 */
+          const appNode = nodes.find(n => n.type === 'source' && n.label === name);
+          if (appNode) {
+            const container = containerRef.current;
+            if (container) {
+              const rect = container.getBoundingClientRect();
+              setPan({ x: rect.width / 2 - appNode.x, y: rect.height / 2 - appNode.y });
+              setZoom(1);
+            }
+            setHoveredNode(appNode.id);
+          }
+        }}
+      />
       <Legend />
 
       {selectedNode && (
