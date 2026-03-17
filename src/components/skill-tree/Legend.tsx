@@ -1,38 +1,40 @@
 "use client";
 
-/** 技能樹圖例 — 左下角顯示各形狀 / 顏色的意義 */
+/** 技能樹圖例 — 左下角，三層視覺層級 + 連接狀態 */
 
 export function Legend() {
-  const items = [
-    { shape: 'square', color: 'border-[#1D9E75]', label: '已連接 App' },
-    { shape: 'square', color: 'border-[#CBD5E1]', label: '未連接 App' },
-    { shape: 'circle', color: 'border-[#1D9E75]', label: '已解鎖技能' },
-    { shape: 'circle', color: 'border-[#D4A843]', label: '待精修技能' },
-    { shape: 'circle', color: 'border-[#CBD5E1]', label: '未解鎖技能' },
-    { shape: 'diamond', color: 'border-[#D4A843]', label: '組合技' },
-  ];
-
   return (
     <div className="fixed bottom-4 left-4 z-40 glass-panel rounded-lg px-4 py-3">
-      <span className="font-mono text-xs text-gray-400 mb-2 block">圖例</span>
+      <span className="font-mono text-[10px] text-gray-400 mb-2 block tracking-wider">LEGEND</span>
       <div className="space-y-2">
-        {items.map((item) => (
-          <div key={item.label} className="flex items-center gap-2.5">
-            {item.shape === 'square' && (
-              <div className={`w-3.5 h-3.5 border-2 ${item.color} bg-white`} />
-            )}
-            {item.shape === 'circle' && (
-              <div className={`w-3.5 h-3.5 rounded-full border-2 ${item.color} bg-white`} />
-            )}
-            {item.shape === 'diamond' && (
-              <div className={`w-3.5 h-3.5 border-2 ${item.color} bg-white rotate-45`} />
-            )}
-            <span className="text-gray-700 text-xs">{item.label}</span>
+        {/* App 節點 */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-5 h-5 rounded border-2 border-[#1D9E75] bg-[#F0FDF9]" />
+          <span className="text-gray-600 text-xs">已連接 App</span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <div className="w-5 h-5 rounded border-[1.5px] border-gray-300 bg-[#FAFAFA]" />
+          <span className="text-gray-600 text-xs">未連接 App</span>
+        </div>
+        {/* Action 圓點 */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-5 flex justify-center">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#1D9E75] opacity-70" />
           </div>
-        ))}
-        <div className="flex items-center gap-2.5 mt-1">
-          <div className="w-5 h-0 border-t-2 border-dashed border-[#D4A843]" />
-          <span className="text-gray-700 text-xs">組合技路線</span>
+          <span className="text-gray-600 text-xs">已解鎖 Action</span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <div className="w-5 flex justify-center">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#CBD5E1] opacity-50" />
+          </div>
+          <span className="text-gray-600 text-xs">未解鎖 Action</span>
+        </div>
+        {/* 組合技 */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-5 flex justify-center">
+            <div className="w-3.5 h-3.5 border-[1.5px] border-dashed border-[#D4A843] bg-[#FFFDF5] rotate-45" />
+          </div>
+          <span className="text-gray-600 text-xs">組合技</span>
         </div>
       </div>
     </div>
