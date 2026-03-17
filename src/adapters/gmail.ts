@@ -1,6 +1,6 @@
 /**
  * Gmail Adapter
- * 提供 Gmail 郵件搜尋、閱讀、發送、回覆、草稿、標籤管理、封存、垃圾桶、已讀/未讀、附件下載功能
+ * 提供 Gmail 郵件搜尋、閱讀、發送、回覆、對話串、草稿全套、標籤管理、封存、垃圾桶、已讀/未讀、附件下載功能
  */
 import { z } from "zod";
 import type {
@@ -175,6 +175,12 @@ const actionMap: Record<string, string> = {
   send: "gmail_send",
   reply: "gmail_reply",
   draft: "gmail_draft",
+  list_drafts: "gmail_list_drafts",
+  get_draft: "gmail_get_draft",
+  send_draft: "gmail_send_draft",
+  delete_draft: "gmail_delete_draft",
+  list_threads: "gmail_list_threads",
+  get_thread: "gmail_get_thread",
   label_list: "gmail_label_list",
   trash: "gmail_trash",
   untrash: "gmail_untrash",
@@ -288,6 +294,49 @@ Download an email attachment by attachment ID. Returns base64-decoded content.
   attachment_id: Attachment ID (found in message payload parts)
 ### Example
 octodock_do(app:"gmail", action:"get_attachment", params:{message_id:"18e5a3b2c4d6f789", attachment_id:"ANGjdJ8..."})`,
+
+  list_threads: `## gmail.list_threads
+Search and list email threads (conversations). Each thread groups related emails together.
+### Parameters
+  query (optional): Gmail search query (default: all threads)
+  max_results (optional): Max threads to return (default 10, max 50)
+### Example
+octodock_do(app:"gmail", action:"list_threads", params:{query:"from:client@company.com", max_results:5})`,
+
+  get_thread: `## gmail.get_thread
+Get all messages in an email thread (full conversation).
+### Parameters
+  thread_id: Gmail thread ID (from list_threads or search results)
+### Example
+octodock_do(app:"gmail", action:"get_thread", params:{thread_id:"18e5a3b2c4d6f789"})`,
+
+  list_drafts: `## gmail.list_drafts
+List all draft emails in user's Gmail.
+### Parameters
+  max_results (optional): Max drafts to return (default 10, max 50)
+### Example
+octodock_do(app:"gmail", action:"list_drafts", params:{max_results:5})`,
+
+  get_draft: `## gmail.get_draft
+Get full content of a specific draft email.
+### Parameters
+  draft_id: Gmail draft ID (from list_drafts)
+### Example
+octodock_do(app:"gmail", action:"get_draft", params:{draft_id:"r-123456789"})`,
+
+  send_draft: `## gmail.send_draft
+Send an existing draft email.
+### Parameters
+  draft_id: Gmail draft ID to send
+### Example
+octodock_do(app:"gmail", action:"send_draft", params:{draft_id:"r-123456789"})`,
+
+  delete_draft: `## gmail.delete_draft
+Permanently delete a draft email.
+### Parameters
+  draft_id: Gmail draft ID to delete
+### Example
+octodock_do(app:"gmail", action:"delete_draft", params:{draft_id:"r-123456789"})`,
 };
 
 function getSkill(action?: string): string {
@@ -298,7 +347,13 @@ function getSkill(action?: string): string {
   read(message_id) — read full email content
   send(to, subject, body) — send new email
   reply(message_id, body) — reply to email thread
+  list_threads(query?, max_results?) — list email threads (conversations)
+  get_thread(thread_id) — get all messages in a thread
   draft(to, subject, body) — create draft email
+  list_drafts(max_results?) — list all drafts
+  get_draft(draft_id) — get draft content
+  send_draft(draft_id) — send existing draft
+  delete_draft(draft_id) — delete draft permanently
   label_list() — list all labels
   trash(message_id) — move email to trash
   untrash(message_id) — restore email from trash
@@ -368,6 +423,49 @@ function formatResponse(action: string, rawData: unknown): string {
       const size = (data as any).size;
       return `Attachment downloaded. Size: ${size ?? "unknown"} bytes. Data included in response.`;
     }
+    // 對話串列表
+    case "list_threads": {
+      if (Array.isArray(rawData)) {
+        if (rawData.length === 0) return "No threads found.";
+        return rawData.map((t: any) =>
+          `- **${t.subject}** from ${t.lastFrom} (${t.lastDate})\n  Thread ID: ${t.id} | ${t.messageCount} messages | ${t.snippet}`
+        ).join("\n");
+      }
+      return JSON.stringify(rawData, null, 2);
+    }
+    // 對話串完整內容
+    case "get_thread": {
+      if (Array.isArray(rawData)) {
+        return rawData.map((msg: any, i: number) =>
+          `--- Message ${i + 1}/${rawData.length} ---\nFrom: ${msg.from}\nTo: ${msg.to}\nDate: ${msg.date}\nSubject: ${msg.subject}\n\n${msg.body}`
+        ).join("\n\n");
+      }
+      return JSON.stringify(rawData, null, 2);
+    }
+    // 草稿列表
+    case "list_drafts": {
+      if (Array.isArray(rawData)) {
+        if (rawData.length === 0) return "No drafts found.";
+        return rawData.map((d: any) =>
+          `- **${d.subject}** to ${d.to}\n  Draft ID: ${d.id} | ${d.snippet}`
+        ).join("\n");
+      }
+      return JSON.stringify(rawData, null, 2);
+    }
+    // 草稿內容
+    case "get_draft": {
+      const { subject, from, to, date, body, id } = data as any;
+      return `Draft ID: ${id}\nFrom: ${from}\nTo: ${to}\nDate: ${date}\nSubject: ${subject}\n\n${body}`;
+    }
+    // 發送草稿
+    case "send_draft": {
+      const msg = data.message as Record<string, unknown> | undefined;
+      const id = data.id || msg?.id;
+      return `Done. Draft sent. Message ID: ${id}`;
+    }
+    // 刪除草稿
+    case "delete_draft":
+      return `Done. Draft deleted.`;
     default:
       return JSON.stringify(rawData, null, 2);
   }
@@ -479,6 +577,55 @@ const tools: ToolDefinition[] = [
     inputSchema: {
       message_id: z.string().describe("Gmail message ID containing the attachment"),
       attachment_id: z.string().describe("Attachment ID (found in message payload parts)"),
+    },
+  },
+  {
+    name: "gmail_list_threads",
+    description:
+      "Search and list email threads (conversations). Each thread groups related emails. Returns thread ID, subject, last sender, date, message count, and snippet.",
+    inputSchema: {
+      query: z.string().optional().describe("Gmail search query (default: all threads)"),
+      max_results: z.number().optional().describe("Maximum number of threads (default 10, max 50)"),
+    },
+  },
+  {
+    name: "gmail_get_thread",
+    description:
+      "Get all messages in an email thread (full conversation). Returns each message's sender, recipient, date, subject, and body text in chronological order.",
+    inputSchema: {
+      thread_id: z.string().describe("Gmail thread ID (from list_threads or search results)"),
+    },
+  },
+  {
+    name: "gmail_list_drafts",
+    description:
+      "List all draft emails in user's Gmail account. Returns draft ID, subject, recipient, and snippet.",
+    inputSchema: {
+      max_results: z.number().optional().describe("Maximum number of drafts (default 10, max 50)"),
+    },
+  },
+  {
+    name: "gmail_get_draft",
+    description:
+      "Get the full content of a specific draft email by its draft ID.",
+    inputSchema: {
+      draft_id: z.string().describe("Gmail draft ID (from list_drafts)"),
+    },
+  },
+  {
+    name: "gmail_send_draft",
+    description:
+      "Send an existing draft email. The draft is removed from drafts and sent immediately.",
+    inputSchema: {
+      draft_id: z.string().describe("Gmail draft ID to send"),
+    },
+  },
+  {
+    name: "gmail_delete_draft",
+    description:
+      "Permanently delete a draft email. This action cannot be undone.",
+    inputSchema: {
+      draft_id: z.string().describe("Gmail draft ID to delete"),
     },
   },
 ];
@@ -713,6 +860,177 @@ async function execute(
       );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 對話串列表：搜尋並列出對話串
+    case "gmail_list_threads": {
+      const maxResults = Math.min((params.max_results as number) ?? 10, 50);
+      const query = (params.query as string) ?? "";
+      const qParam = query ? `&q=${encodeURIComponent(query)}` : "";
+      const list = (await gmailFetch(
+        `/threads?maxResults=${maxResults}${qParam}`,
+        token,
+      )) as { threads?: Array<{ id: string; snippet: string }> };
+
+      if (!list.threads?.length) {
+        return { content: [{ type: "text", text: "No threads found." }] };
+      }
+
+      // 並行取得每個 thread 的摘要（第一封信的 Subject + 最後一封的 From/Date + 訊息數）
+      const summaries = await Promise.all(
+        list.threads.map(async (t) => {
+          const thread = (await gmailFetch(
+            `/threads/${t.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+            token,
+          )) as {
+            id: string;
+            snippet: string;
+            messages: Array<{ payload: { headers: Array<{ name: string; value: string }> } }>;
+          };
+          const first = thread.messages[0];
+          const last = thread.messages[thread.messages.length - 1];
+          return {
+            id: thread.id,
+            subject: getHeader(first.payload.headers, "Subject"),
+            lastFrom: getHeader(last.payload.headers, "From"),
+            lastDate: getHeader(last.payload.headers, "Date"),
+            messageCount: thread.messages.length,
+            snippet: thread.snippet,
+          };
+        }),
+      );
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(summaries, null, 2) }],
+      };
+    }
+
+    // 對話串完整內容：取得 thread 中的所有訊息
+    case "gmail_get_thread": {
+      const thread = (await gmailFetch(
+        `/threads/${params.thread_id}?format=full`,
+        token,
+      )) as {
+        id: string;
+        messages: Array<{
+          id: string;
+          payload: { headers: Array<{ name: string; value: string }> } & Record<string, unknown>;
+        }>;
+      };
+
+      // 解析每封訊息的內容
+      const messages = thread.messages.map((msg) => {
+        const headers = msg.payload.headers;
+        return {
+          id: msg.id,
+          subject: getHeader(headers, "Subject"),
+          from: getHeader(headers, "From"),
+          to: getHeader(headers, "To"),
+          date: getHeader(headers, "Date"),
+          body: extractText(msg.payload),
+        };
+      });
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(messages, null, 2) }],
+      };
+    }
+
+    // 草稿列表：列出所有草稿
+    case "gmail_list_drafts": {
+      const maxResults = Math.min((params.max_results as number) ?? 10, 50);
+      const list = (await gmailFetch(
+        `/drafts?maxResults=${maxResults}`,
+        token,
+      )) as { drafts?: Array<{ id: string; message: { id: string } }> };
+
+      if (!list.drafts?.length) {
+        return { content: [{ type: "text", text: "No drafts found." }] };
+      }
+
+      // 並行取得每個草稿的摘要
+      const summaries = await Promise.all(
+        list.drafts.map(async (d) => {
+          const draft = (await gmailFetch(
+            `/drafts/${d.id}`,
+            token,
+          )) as {
+            id: string;
+            message: {
+              id: string;
+              snippet: string;
+              payload: { headers: Array<{ name: string; value: string }> };
+            };
+          };
+          return {
+            id: draft.id,
+            subject: getHeader(draft.message.payload.headers, "Subject"),
+            to: getHeader(draft.message.payload.headers, "To"),
+            snippet: draft.message.snippet,
+          };
+        }),
+      );
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(summaries, null, 2) }],
+      };
+    }
+
+    // 取得草稿內容
+    case "gmail_get_draft": {
+      const draft = (await gmailFetch(
+        `/drafts/${params.draft_id}`,
+        token,
+      )) as {
+        id: string;
+        message: {
+          id: string;
+          payload: { headers: Array<{ name: string; value: string }> } & Record<string, unknown>;
+        };
+      };
+
+      const headers = draft.message.payload.headers;
+      const body = extractText(draft.message.payload);
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            id: draft.id,
+            subject: getHeader(headers, "Subject"),
+            from: getHeader(headers, "From"),
+            to: getHeader(headers, "To"),
+            date: getHeader(headers, "Date"),
+            body,
+          }, null, 2),
+        }],
+      };
+    }
+
+    // 發送草稿：將草稿直接寄出
+    case "gmail_send_draft": {
+      const result = await gmailFetch("/drafts/send", token, {
+        method: "POST",
+        body: JSON.stringify({ id: params.draft_id }),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 刪除草稿：永久刪除（API 回傳 204 No Content）
+    case "gmail_delete_draft": {
+      const res = await fetch(`${GMAIL_API}/drafts/${params.draft_id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: { message: res.statusText } }));
+        throw new Error(`Gmail API error: ${(error as { error: { message: string } }).error.message} (GMAIL_API_ERROR)`);
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify({ deleted: true }) }],
       };
     }
 

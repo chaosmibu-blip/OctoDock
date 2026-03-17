@@ -42,6 +42,12 @@ const ACTION_ZH: Record<string, string> = {
   "gmail.mark_read": "標為已讀",
   "gmail.mark_unread": "標為未讀",
   "gmail.get_attachment": "下載附件",
+  "gmail.list_threads": "對話串列表",
+  "gmail.get_thread": "取得對話串",
+  "gmail.list_drafts": "草稿列表",
+  "gmail.get_draft": "取得草稿",
+  "gmail.send_draft": "發送草稿",
+  "gmail.delete_draft": "刪除草稿",
 
   /* ── Google Calendar ── */
   "google_calendar.list_calendars": "日曆清單",
