@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { tickScheduler } from "@/services/scheduler";
-import { loadAdapters } from "@/mcp/registry";
+import { ensureAdapters } from "@/mcp/registry";
 
 // ============================================================
 // 排程引擎觸發 API
@@ -9,8 +9,6 @@ import { loadAdapters } from "@/mcp/registry";
 //
 // Replit 可以用 UptimeRobot 或 cron-job.org 來定時觸發
 // ============================================================
-
-let adaptersLoaded = false;
 
 /** POST /api/scheduler — 觸發排程引擎主循環 */
 export async function POST(req: Request) {
@@ -25,11 +23,8 @@ export async function POST(req: Request) {
     );
   }
 
-  // 確保 Adapter 已載入
-  if (!adaptersLoaded) {
-    await loadAdapters();
-    adaptersLoaded = true;
-  }
+  // 確保 Adapter 已載入（並發安全的單例）
+  await ensureAdapters();
 
   try {
     await tickScheduler();

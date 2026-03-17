@@ -86,6 +86,16 @@ export async function loadAdapters(): Promise<void> {
   );
 }
 
+/** 單例 Promise：確保 loadAdapters 只執行一次，並發請求共享同一個 Promise */
+let loadPromise: Promise<void> | null = null;
+
+/** 確保 Adapter 已載入（並發安全的單例模式） */
+export function ensureAdapters(): Promise<void> {
+  if (adapters.size > 0) return Promise.resolve();
+  if (!loadPromise) loadPromise = loadAdapters();
+  return loadPromise;
+}
+
 /** 根據 App 名稱取得 Adapter */
 export function getAdapter(appName: string): AppAdapter | undefined {
   return adapters.get(appName);

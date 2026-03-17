@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { connectedApps } from "@/db/schema";
-import { getAdapter, loadAdapters } from "@/mcp/registry";
-
-let adaptersLoaded = false;
-async function ensureAdapters() {
-  if (!adaptersLoaded) { await loadAdapters(); adaptersLoaded = true; }
-}
+import { getAdapter, ensureAdapters } from "@/mcp/registry";
 import { encrypt } from "@/lib/crypto";
 import { APP_URL } from "@/lib/constants";
 import type { OAuthConfig, TokenSet } from "@/adapters/types";

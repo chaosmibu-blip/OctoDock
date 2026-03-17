@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { connectedApps } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { getAdapter, getAllAdapters, loadAdapters } from "@/mcp/registry";
+import { getAdapter, getAllAdapters, ensureAdapters } from "@/mcp/registry";
 import { APP_URL } from "@/lib/constants";
 import type { OAuthConfig, ApiKeyConfig } from "@/adapters/types";
 import { encrypt } from "@/lib/crypto";
@@ -11,15 +11,6 @@ import { getOAuthClientId } from "@/lib/oauth-env";
 
 // Google 系列 App 名稱（用於一鍵連接）
 const GOOGLE_APPS = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
-
-let adaptersLoaded = false;
-
-async function ensureAdapters() {
-  if (!adaptersLoaded) {
-    await loadAdapters();
-    adaptersLoaded = true;
-  }
-}
 
 import { createHmac } from "crypto";
 

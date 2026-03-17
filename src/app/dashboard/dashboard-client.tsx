@@ -21,7 +21,7 @@ interface DashboardProps {
   origin: string;
 }
 
-/* App 定義清單 */
+/* App 定義清單 — 已上線的 */
 const APP_KEYS = [
   // 筆記 / 文件
   { name: "notion", displayName: "Notion", descKey: "app.notion.desc" },
@@ -38,6 +38,15 @@ const APP_KEYS = [
   { name: "youtube", displayName: "YouTube", descKey: "app.youtube.desc" },
   // 開發
   { name: "github", displayName: "GitHub", descKey: "app.github.desc" },
+];
+
+/* 即將推出的 App — adapter 已寫好但尚未開放 */
+const COMING_SOON_APPS = [
+  { name: "line", displayName: "LINE" },
+  { name: "telegram", displayName: "Telegram" },
+  { name: "discord", displayName: "Discord" },
+  { name: "threads", displayName: "Threads" },
+  { name: "instagram", displayName: "Instagram" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {
@@ -293,6 +302,22 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                   >
                     {t("dashboard.connect")}
                   </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── 即將推出 App ── */}
+        {COMING_SOON_APPS.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold text-gray-300 mb-3">
+              即將推出
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              {COMING_SOON_APPS.map((app) => (
+                <div key={app.name} className="rounded-[10px] border border-dashed border-gray-200 bg-gray-50 p-3 text-center">
+                  <h3 className="text-xs text-gray-300">{app.displayName}</h3>
                 </div>
               ))}
             </div>

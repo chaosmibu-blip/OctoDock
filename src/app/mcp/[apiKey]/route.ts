@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { authenticateByApiKey } from "@/mcp/middleware/auth";
 import { createServerForUser } from "@/mcp/server";
-import { loadAdapters } from "@/mcp/registry";
+import { ensureAdapters } from "@/mcp/registry";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 // ============================================================
@@ -15,17 +15,6 @@ import { checkRateLimit } from "@/lib/rate-limit";
 // 每個 HTTP 請求獨立處理，不維護 session
 // 回應格式：Server-Sent Events（SSE）
 // ============================================================
-
-/** Adapter 只需要載入一次（程序生命週期內快取） */
-let adaptersLoaded = false;
-
-/** 確保 Adapter Registry 已載入所有 App Adapter */
-async function ensureAdaptersLoaded() {
-  if (!adaptersLoaded) {
-    await loadAdapters();
-    adaptersLoaded = true;
-  }
-}
 
 /**
  * MCP 請求統一處理函式
@@ -56,7 +45,7 @@ async function handleMcpRequest(
   }
 
   // 3. 確保 Adapter 已載入
-  await ensureAdaptersLoaded();
+  await ensureAdapters();
 
   // 4. 為此用戶建立 MCP server（只含 octodock_do + octodock_help）
   const server = await createServerForUser(user);

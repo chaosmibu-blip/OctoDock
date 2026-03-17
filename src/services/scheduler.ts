@@ -192,48 +192,84 @@ async function executeSchedule(
  * @param timezone 用戶時區
  * @returns 下次執行的 UTC 時間
  */
-export function calculateNextRun(cronExpr: string, timezone: string): Date {
+/**
+ * 計算 cron 表達式的下一次執行時間
+ * 支援完整 5 欄位 cron：分 時 日 月 週
+ * 暴力搜尋最多 366 天內的下一個匹配時間點
+ */
+export function calculateNextRun(cronExpr: string, _timezone: string): Date {
   const parts = cronExpr.split(" ");
   if (parts.length !== 5) {
-    // 無效的 cron 表達式，預設 1 小時後
     const fallback = new Date();
     fallback.setHours(fallback.getHours() + 1);
     return fallback;
   }
 
-  const [minuteExpr, hourExpr] = parts;
+  const [minuteExpr, hourExpr, domExpr, monthExpr, dowExpr] = parts;
 
-  // 解析分鐘和小時
-  const minute = minuteExpr === "*" ? -1 : parseInt(minuteExpr);
-  const hour = hourExpr === "*" ? -1 : parseInt(hourExpr);
+  /** 解析 cron 欄位為允許的數值集合，支援 *、數字、逗號、範圍(-)、間隔(/) */
+  function parseField(expr: string, min: number, max: number): Set<number> | null {
+    if (expr === "*") return null; // null = 任意值都匹配
+    const values = new Set<number>();
+    for (const part of expr.split(",")) {
+      const stepMatch = part.match(/^(\*|\d+-\d+)\/(\d+)$/);
+      if (stepMatch) {
+        const step = parseInt(stepMatch[2]);
+        let start = min, end = max;
+        if (stepMatch[1] !== "*") {
+          const [a, b] = stepMatch[1].split("-").map(Number);
+          start = a; end = b;
+        }
+        for (let v = start; v <= end; v += step) values.add(v);
+      } else if (part.includes("-")) {
+        const [a, b] = part.split("-").map(Number);
+        for (let v = a; v <= b; v++) values.add(v);
+      } else {
+        values.add(parseInt(part));
+      }
+    }
+    return values;
+  }
 
-  // 從現在開始找下一個匹配的時間點
+  const minutes = parseField(minuteExpr, 0, 59);
+  const hours = parseField(hourExpr, 0, 23);
+  const doms = parseField(domExpr, 1, 31);
+  const months = parseField(monthExpr, 1, 12);
+  const dows = parseField(dowExpr, 0, 6); // 0=週日
+
+  /** 檢查某個時間點是否匹配 cron */
+  function matches(d: Date): boolean {
+    if (minutes && !minutes.has(d.getMinutes())) return false;
+    if (hours && !hours.has(d.getHours())) return false;
+    if (months && !months.has(d.getMonth() + 1)) return false;
+    /* 日和週的關係：cron 標準是兩者都指定時取聯集（OR） */
+    if (doms && dows) {
+      if (!doms.has(d.getDate()) && !dows.has(d.getDay())) return false;
+    } else if (doms) {
+      if (!doms.has(d.getDate())) return false;
+    } else if (dows) {
+      if (!dows.has(d.getDay())) return false;
+    }
+    return true;
+  }
+
+  /* 從下一分鐘開始暴力搜尋 */
   const now = new Date();
   const candidate = new Date(now);
+  candidate.setSeconds(0, 0);
+  candidate.setMinutes(candidate.getMinutes() + 1);
 
-  // 設定分鐘
-  if (minute >= 0) {
-    candidate.setMinutes(minute, 0, 0);
-  } else {
-    // 每分鐘執行：下一分鐘
-    candidate.setMinutes(candidate.getMinutes() + 1, 0, 0);
+  /* 最多搜尋 366 天 × 24 小時 × 60 分鐘 = 527,040 分鐘 */
+  const maxIterations = 366 * 24 * 60;
+  for (let i = 0; i < maxIterations; i++) {
+    if (matches(candidate)) return candidate;
+    candidate.setMinutes(candidate.getMinutes() + 1);
   }
 
-  // 設定小時
-  if (hour >= 0) {
-    candidate.setHours(hour);
-  }
-
-  // 如果算出的時間已經過了，往後推一天（或一小時）
-  if (candidate <= now) {
-    if (hour >= 0) {
-      candidate.setDate(candidate.getDate() + 1);
-    } else if (minute >= 0) {
-      candidate.setHours(candidate.getHours() + 1);
-    }
-  }
-
-  return candidate;
+  /* 找不到匹配（理論上不會發生），fallback 1 小時後 */
+  const fallback = new Date();
+  fallback.setHours(fallback.getHours() + 1);
+  return fallback;
 }
 
 // ============================================================
