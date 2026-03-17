@@ -58,12 +58,14 @@ export function SkillTreeCanvas() {
   /* ── 頁面重新獲得焦點時刷新資料（OAuth 新分頁關閉後觸發） ── */
   useEffect(() => {
     const handleFocus = () => { refreshData(); };
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', () => {
+    const handleVisibility = () => {
       if (document.visibilityState === 'visible') refreshData();
-    });
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [refreshData]);
 
