@@ -175,9 +175,9 @@ function verifyPaddleSignature(
 ): boolean {
   const secret = process.env.PADDLE_WEBHOOK_SECRET;
   if (!secret) {
-    // 沒設定 secret 時跳過驗證（開發環境）
-    console.warn("PADDLE_WEBHOOK_SECRET not set, skipping signature verification");
-    return true;
+    // 沒設定 secret → 拒絕所有 webhook（防止 production 意外未設定時被偽造）
+    console.error("[SECURITY] PADDLE_WEBHOOK_SECRET not set — rejecting webhook");
+    return false;
   }
   if (!signature) return false;
 

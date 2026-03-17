@@ -9,6 +9,11 @@ import { getEmbedding, toVectorString } from "./embedding";
 // 儲存用 DB（PostgreSQL + pgvector），呈現用 MD，寫入收自然語言
 // ============================================================
 
+/** 跳脫 LIKE/ILIKE 的萬用字元（%、_），防止 wildcard 注入 */
+function escapeLike(input: string): string {
+  return input.replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 /** 記憶條目的結構 */
 export interface MemoryEntry {
   key: string; // 記憶的識別鍵（例如 "folder:會議"）
@@ -119,8 +124,8 @@ async function textQuery(
   if (query) {
     conditions.push(
       or(
-        ilike(memory.key, `%${query}%`),
-        ilike(memory.value, `%${query}%`),
+        ilike(memory.key, `%${escapeLike(query)}%`),
+        ilike(memory.value, `%${escapeLike(query)}%`),
       )!,
     );
   }
@@ -343,7 +348,7 @@ export async function resolveIdentifier(
         eq(memory.category, "context"),
         eq(memory.appName, appName),
         // 搜尋 key 結尾是 :name 的記憶（例如 "folder:會議"）
-        ilike(memory.key, `%:${name}`),
+        ilike(memory.key, `%:${escapeLike(name)}`),
       ),
     )
     .limit(1);
@@ -367,7 +372,7 @@ export async function resolveIdentifier(
         eq(memory.userId, userId),
         eq(memory.category, "context"),
         eq(memory.appName, appName),
-        ilike(memory.value, `%${name}%`),
+        ilike(memory.value, `%${escapeLike(name)}%`),
       ),
     )
     .limit(1);

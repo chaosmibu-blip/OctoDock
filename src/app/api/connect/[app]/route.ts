@@ -21,11 +21,22 @@ async function ensureAdapters() {
   }
 }
 
-/** 產生 OAuth state 參數（CSRF 保護 + 來源追蹤） */
+import { createHmac } from "crypto";
+
+/** HMAC 簽名用的 key — 用 TOKEN_ENCRYPTION_KEY 派生，確保無法偽造 state */
+function getStateKey(): string {
+  const key = process.env.TOKEN_ENCRYPTION_KEY;
+  if (!key) throw new Error("TOKEN_ENCRYPTION_KEY not set");
+  return createHmac("sha256", key).update("oauth-state-signing").digest("hex");
+}
+
+/** 產生帶 HMAC 簽名的 OAuth state 參數（CSRF 保護 + 來源追蹤） */
 function generateState(userId: string, from?: string): string {
   const payload: Record<string, unknown> = { userId, ts: Date.now(), r: Math.random().toString(36) };
   if (from) payload.from = from;
-  return Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig = createHmac("sha256", getStateKey()).update(data).digest("base64url");
+  return `${data}.${sig}`;
 }
 
 // GET /api/connect/:app — Initiate OAuth flow or show API key form

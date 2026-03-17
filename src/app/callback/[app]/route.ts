@@ -15,14 +15,36 @@ import { getOAuthClientId, getOAuthClientSecret } from "@/lib/oauth-env";
 // Google 系列 App 名稱（用於一鍵連接 callback）
 const GOOGLE_APPS = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
 
-/** 解碼 OAuth state 參數，回傳 userId 和額外資訊 */
+import { createHmac, timingSafeEqual } from "crypto";
+
+/** HMAC 簽名用的 key — 跟 connect route 用同一個派生邏輯 */
+function getStateKey(): string {
+  const key = process.env.TOKEN_ENCRYPTION_KEY;
+  if (!key) throw new Error("TOKEN_ENCRYPTION_KEY not set");
+  return createHmac("sha256", key).update("oauth-state-signing").digest("hex");
+}
+
+/** 驗證帶 HMAC 簽名的 OAuth state 參數，防止 CSRF 偽造 */
 function verifyState(state: string | null): { userId: string; from?: string } | null {
   if (!state) return null;
   try {
-    const decoded = JSON.parse(
-      Buffer.from(state, "base64url").toString("utf8"),
-    );
-    // Check expiry (15 minutes)
+    /* state 格式：base64url(payload).base64url(hmac) */
+    const dotIndex = state.lastIndexOf('.');
+    if (dotIndex === -1) return null;
+
+    const data = state.slice(0, dotIndex);
+    const sig = state.slice(dotIndex + 1);
+
+    /* 驗證 HMAC 簽名（timing-safe 防止 timing attack） */
+    const expectedSig = createHmac("sha256", getStateKey()).update(data).digest("base64url");
+    const sigBuf = Buffer.from(sig, "base64url");
+    const expectedBuf = Buffer.from(expectedSig, "base64url");
+    if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+      return null;
+    }
+
+    const decoded = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
+    /* 檢查過期（15 分鐘） */
     if (Date.now() - decoded.ts > 15 * 60 * 1000) return null;
     return { userId: decoded.userId, from: decoded.from };
   } catch {

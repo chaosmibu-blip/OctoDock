@@ -59,7 +59,11 @@ async function handleEcpayNotification(
   // 訂單編號格式：AGENTDOCK_{userId}_{timestamp}
   const userId = extractUserIdFromTradeNo(merchantTradeNo);
   if (!userId) {
-    console.error("ECPay webhook: cannot extract userId from", merchantTradeNo);
+    console.error(
+      "[CRITICAL] ECPay webhook: cannot extract userId from trade no:",
+      merchantTradeNo,
+      "— 付款已成功但訂閱未啟用！需要手動處理。RtnCode:", rtnCode, "TradeNo:", tradeNo,
+    );
     return;
   }
 
@@ -127,8 +131,8 @@ function verifyEcpayCheckMac(params: Record<string, string>): boolean {
   const hashIV = process.env.ECPAY_HASH_IV;
 
   if (!hashKey || !hashIV) {
-    console.warn("ECPay credentials not set, skipping verification");
-    return true;
+    console.error("[SECURITY] ECPay credentials not set — rejecting webhook");
+    return false;
   }
 
   const receivedMac = params.CheckMacValue;

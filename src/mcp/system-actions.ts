@@ -477,10 +477,30 @@ export async function executeSystemAction(
         return { ok: false, error: "Only HTTPS URLs are allowed for security." };
       }
 
-      // 安全檢查：阻擋已知危險的 URL 模式
-      const blocked = ["localhost", "127.0.0.1", "0.0.0.0", "169.254", "10.", "192.168"];
-      if (blocked.some((b) => url.includes(b))) {
+      // 安全檢查：解析 hostname 後阻擋內網 IP 和危險 URL
+      let hostname: string;
+      try {
+        hostname = new URL(url).hostname.toLowerCase();
+      } catch {
+        return { ok: false, error: "Invalid URL format." };
+      }
+
+      // 阻擋 localhost 和各種別名
+      const blockedHostnames = ["localhost", "0.0.0.0", "[::1]", "[::0]"];
+      if (blockedHostnames.includes(hostname) || hostname.endsWith(".local") || hostname.endsWith(".internal")) {
         return { ok: false, error: "Internal/private URLs are not allowed." };
+      }
+
+      // 阻擋 IP 位址（阻止所有直接 IP 存取，包括 IPv4/IPv6/decimal/octal/hex 等繞過方式）
+      // 只允許域名，不允許 IP
+      const ipPatterns = /^(\d{1,3}\.){3}\d{1,3}$|^\[.*\]$|^\d{9,10}$/;
+      if (ipPatterns.test(hostname)) {
+        return { ok: false, error: "Direct IP access is not allowed. Use a domain name." };
+      }
+
+      // 阻擋 metadata service（雲端環境的 SSRF 常見目標）
+      if (hostname === "metadata.google.internal" || hostname.startsWith("169.254.")) {
+        return { ok: false, error: "Cloud metadata service access is not allowed." };
       }
 
       try {
