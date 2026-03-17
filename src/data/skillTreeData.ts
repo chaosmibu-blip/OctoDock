@@ -1,7 +1,9 @@
 /**
- * 技能樹資料定義 — 類型 + 力導向佈局演算法
- * 佈局：組合技在中央，App 在外圈，action 在中間
- * 視覺動線：外圈 App → 中間 action → 中央組合技
+ * 技能樹資料定義 — 三圈同心圓佈局
+ * 外圈：App 源技能（方形）— 半徑 550px
+ * 中圈：Action 技能（圓點）— App 往中心方向偏移
+ * 內圈：組合技（菱形）— 半徑 120px
+ * 所有座標演算法計算，新增 App / action / combo 時自動重算
  */
 
 export type NodeStatus = 'unlocked' | 'locked';
@@ -15,12 +17,12 @@ export interface SkillNode {
   status: NodeStatus;
   x: number;
   y: number;
-  description: string;        // 主要描述（中文優先）
-  descriptionEn?: string;     // 英文描述（skill 節點）
+  description: string;
+  descriptionEn?: string;
   app?: string;
   authType?: string;
-  actionCount?: number;       // source 節點的 action 數量
-  prerequisites?: Array<{ nodeId: string; label: string; app: string }>; // combo 的前置 action 節點
+  actionCount?: number;
+  prerequisites?: Array<{ nodeId: string; label: string; app: string }>;
 }
 
 /** 技能樹邊 */
@@ -30,7 +32,7 @@ export interface SkillEdge {
   type: 'normal' | 'combo';
 }
 
-/** API /api/skills 回傳的 App 資料 */
+/** API 回傳的 App 資料 */
 export interface SkillsApiApp {
   name: string;
   displayName: Record<string, string>;
@@ -40,7 +42,7 @@ export interface SkillsApiApp {
   actions: Array<{ name: string; description: { zh: string; en: string } }>;
 }
 
-/** API /api/skills 回傳的組合技資料 */
+/** API 回傳的組合技資料 */
 export interface SkillsApiCombo {
   id: string;
   name: { zh: string; en: string };
@@ -50,134 +52,63 @@ export interface SkillsApiCombo {
 }
 
 /* ── 佈局常數 ── */
+const CENTER = { x: 900, y: 700 };
+const APP_RING_RADIUS = 550;       // 外圈 App 半徑
+const COMBO_RING_RADIUS = 120;     // 內圈組合技半徑
+const ACTION_PULL_RATIO = 0.38;    // action 從 App 往中心拉多少（0=App 位置，1=中心）
+const BASE_CLUSTER_R = 40;         // action cluster 基礎半徑
+const CLUSTER_R_PER_ACTION = 4;    // 每多一個 action 加的半徑
 
-const BASE_RADIUS = 60;
-const RADIUS_PER_ACTION = 8;
+/* ── OAuth provider 分群 ── */
 
-/* 力導向參數 */
-const SIM_ITERATIONS = 150;
-const REPULSION = 90000;
-const AFFINITY_STRENGTH = 0.05;
-const CANVAS_CENTER = { x: 900, y: 700 };
-const CENTER_PULL = 0.001;
-const OUTWARD_PUSH = 0.04;    // 把 App 往外推的力
-const MIN_CENTER_DIST = 350;  // App 離中心的最小距離（留空給組合技）
-
-/* ── 力導向佈局（App 往外推） ── */
-
-function forceDirectedLayout(
-  apps: SkillsApiApp[],
-): Map<string, { x: number; y: number; radius: number }> {
-  const n = apps.length;
-  if (n === 0) return new Map();
-
-  const radii = apps.map(a => BASE_RADIUS + a.actions.length * RADIUS_PER_ACTION);
-
-  const getProvider = (app: SkillsApiApp): string => {
-    if (app.name.startsWith('google_') || app.name === 'gmail' || app.name === 'youtube') return 'google';
-    return app.name;
-  };
-
-  /* 初始位置：沿大圓分佈在外圈 */
-  const initRadius = 500 + n * 25;
-  const positions = apps.map((_, i) => {
-    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
-    return {
-      x: CANVAS_CENTER.x + Math.cos(angle) * initRadius,
-      y: CANVAS_CENTER.y + Math.sin(angle) * initRadius,
-      vx: 0,
-      vy: 0,
-    };
-  });
-
-  for (let iter = 0; iter < SIM_ITERATIONS; iter++) {
-    const cooling = 1 - iter / SIM_ITERATIONS;
-
-    for (let i = 0; i < n; i++) {
-      let fx = 0, fy = 0;
-
-      /* 斥力 */
-      for (let j = 0; j < n; j++) {
-        if (i === j) continue;
-        const dx = positions[i].x - positions[j].x;
-        const dy = positions[i].y - positions[j].y;
-        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-        const minDist = radii[i] + radii[j] + 80;
-        const force = REPULSION / (dist * dist);
-        const overlap = dist < minDist ? (minDist - dist) * 2 : 0;
-        fx += (dx / dist) * (force + overlap);
-        fy += (dy / dist) * (force + overlap);
-      }
-
-      /* 同 provider 吸引力 */
-      const providerI = getProvider(apps[i]);
-      for (let j = 0; j < n; j++) {
-        if (i === j) continue;
-        if (getProvider(apps[j]) === providerI) {
-          const dx = positions[j].x - positions[i].x;
-          const dy = positions[j].y - positions[i].y;
-          fx += dx * AFFINITY_STRENGTH;
-          fy += dy * AFFINITY_STRENGTH;
-        }
-      }
-
-      /* 微弱中心引力（防止飄太遠） */
-      fx += (CANVAS_CENTER.x - positions[i].x) * CENTER_PULL;
-      fy += (CANVAS_CENTER.y - positions[i].y) * CENTER_PULL;
-
-      /* 向外推的力：離中心越近推力越大，保持中央留白給組合技 */
-      const dxCenter = positions[i].x - CANVAS_CENTER.x;
-      const dyCenter = positions[i].y - CANVAS_CENTER.y;
-      const distCenter = Math.max(Math.sqrt(dxCenter * dxCenter + dyCenter * dyCenter), 1);
-      if (distCenter < MIN_CENTER_DIST) {
-        const pushStrength = (MIN_CENTER_DIST - distCenter) * OUTWARD_PUSH;
-        fx += (dxCenter / distCenter) * pushStrength;
-        fy += (dyCenter / distCenter) * pushStrength;
-      }
-
-      positions[i].vx = (positions[i].vx + fx) * cooling * 0.5;
-      positions[i].vy = (positions[i].vy + fy) * cooling * 0.5;
-    }
-
-    for (let i = 0; i < n; i++) {
-      positions[i].x += positions[i].vx;
-      positions[i].y += positions[i].vy;
-    }
-  }
-
-  const result = new Map<string, { x: number; y: number; radius: number }>();
-  apps.forEach((app, i) => {
-    result.set(app.name, {
-      x: Math.round(positions[i].x),
-      y: Math.round(positions[i].y),
-      radius: radii[i],
-    });
-  });
-  return result;
+/**
+ * 判斷 App 的 OAuth provider（用於分群排列）
+ * 從 adapter 的 authType 和名稱前綴推斷，不寫死
+ */
+function getOAuthProvider(app: SkillsApiApp): string {
+  if (app.authType !== 'oauth2') return `__${app.authType}`;
+  /* Google 系列：名稱以 google_ 開頭，或是 gmail / youtube */
+  if (app.name.startsWith('google_') || app.name === 'gmail' || app.name === 'youtube') return 'google';
+  /* Meta 系列 */
+  if (app.name === 'threads' || app.name === 'instagram') return 'meta';
+  /* 其他各自成群 */
+  return app.name;
 }
 
-/* ── action 群聚佈局（黃金角螺旋） ── */
+/**
+ * 按 OAuth provider 分群排序
+ * 同群的 App 排相鄰，群內按名稱字母排序
+ * 回傳排好序的 index 陣列
+ */
+function sortAppsByProvider(apps: SkillsApiApp[]): number[] {
+  const indexed = apps.map((app, i) => ({ app, i, provider: getOAuthProvider(app) }));
+  /* 群排序：先按 provider 字母排，群內按 App 名稱排 */
+  indexed.sort((a, b) => {
+    if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+    return a.app.name.localeCompare(b.app.name);
+  });
+  return indexed.map(item => item.i);
+}
 
-function placeActions(
-  cx: number,
-  cy: number,
+/* ── 黃金角螺旋排列 action ── */
+
+function placeActionsInCluster(
+  anchorX: number,
+  anchorY: number,
   count: number,
-  clusterRadius: number,
+  clusterR: number,
 ): Array<{ x: number; y: number }> {
   if (count === 0) return [];
-
-  const positions: Array<{ x: number; y: number }> = [];
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-  const innerR = clusterRadius * 0.35;
-  const outerR = clusterRadius * 0.85;
+  const positions: Array<{ x: number; y: number }> = [];
 
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0.5 : i / (count - 1);
-    const r = innerR + (outerR - innerR) * Math.sqrt(t);
+    const r = clusterR * 0.25 + clusterR * 0.75 * Math.sqrt(t);
     const angle = i * goldenAngle;
     positions.push({
-      x: Math.round(cx + Math.cos(angle) * r),
-      y: Math.round(cy + Math.sin(angle) * r),
+      x: Math.round(anchorX + Math.cos(angle) * r),
+      y: Math.round(anchorY + Math.sin(angle) * r),
     });
   }
   return positions;
@@ -188,40 +119,57 @@ function placeActions(
 export function buildSkillTree(
   apps: SkillsApiApp[],
   combos: SkillsApiCombo[],
-): {
-  nodes: SkillNode[];
-  edges: SkillEdge[];
-} {
+): { nodes: SkillNode[]; edges: SkillEdge[] } {
   const nodes: SkillNode[] = [];
   const edges: SkillEdge[] = [];
 
-  /* 1. 力導向計算 App 位置（外圈） */
-  const layout = forceDirectedLayout(apps);
-
-  /* 已連接 App Set */
   const connectedSet = new Set(apps.filter(a => a.connected).map(a => a.name));
 
-  /* 2. 建立 App cluster */
-  apps.forEach((app) => {
-    const pos = layout.get(app.name);
-    if (!pos) return;
-    const { x: cx, y: cy, radius } = pos;
-    const label = app.displayName.zh || app.displayName.en || app.name;
+  /* ── 外圈：App 源技能 ── */
 
+  /* 按 provider 分群排序後，均勻分配到圓周 */
+  const sortedIndices = sortAppsByProvider(apps);
+  const n = apps.length;
+
+  /* appPositions: app name → { x, y, angle } */
+  const appPositions = new Map<string, { x: number; y: number; angle: number }>();
+
+  sortedIndices.forEach((origIdx, sortPos) => {
+    const app = apps[origIdx];
+    const angle = (sortPos / n) * Math.PI * 2 - Math.PI / 2; // 從頂部開始
+    const x = Math.round(CENTER.x + Math.cos(angle) * APP_RING_RADIUS);
+    const y = Math.round(CENTER.y + Math.sin(angle) * APP_RING_RADIUS);
+    appPositions.set(app.name, { x, y, angle });
+
+    const label = app.displayName.zh || app.displayName.en || app.name;
     nodes.push({
       id: app.name,
       label,
       type: 'source',
       status: app.connected ? 'unlocked' : 'locked',
-      x: cx,
-      y: cy,
+      x, y,
       description: `${label} 整合`,
       app: app.name,
       authType: app.authType,
       actionCount: app.actions.length,
     });
+  });
 
-    const actionPositions = placeActions(cx, cy, app.actions.length, radius);
+  /* ── 中圈：Action 技能 ── */
+
+  apps.forEach((app) => {
+    const appPos = appPositions.get(app.name);
+    if (!appPos) return;
+
+    /* action anchor = 從 App 位置往中心拉 ACTION_PULL_RATIO */
+    const anchorX = appPos.x + (CENTER.x - appPos.x) * ACTION_PULL_RATIO;
+    const anchorY = appPos.y + (CENTER.y - appPos.y) * ACTION_PULL_RATIO;
+
+    /* cluster 半徑根據 action 數量動態算 */
+    const clusterR = BASE_CLUSTER_R + app.actions.length * CLUSTER_R_PER_ACTION;
+
+    const actionPositions = placeActionsInCluster(anchorX, anchorY, app.actions.length, clusterR);
+
     app.actions.forEach((action, i) => {
       const actionId = `${app.name}--${action.name}`;
       nodes.push({
@@ -239,74 +187,40 @@ export function buildSkillTree(
     });
   });
 
-  /* 3. 組合技節點 — 放在中央區域 */
-  if (combos.length > 0) {
-    /* 用小型力導向讓組合技在中央區域散開，不重疊 */
-    const comboPositions = combos.map((_, i) => {
-      const angle = (i / combos.length) * Math.PI * 2 - Math.PI / 2;
-      const r = 60 + combos.length * 12;
-      return {
-        x: CANVAS_CENTER.x + Math.cos(angle) * r,
-        y: CANVAS_CENTER.y + Math.sin(angle) * r,
-        vx: 0, vy: 0,
-      };
+  /* ── 內圈：組合技 ── */
+
+  combos.forEach((combo, ci) => {
+    const angle = combos.length === 1
+      ? 0
+      : (ci / combos.length) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.round(CENTER.x + Math.cos(angle) * COMBO_RING_RADIUS);
+    const y = Math.round(CENTER.y + Math.sin(angle) * COMBO_RING_RADIUS);
+
+    const prereqNodes = combo.prerequisites.map(p => ({
+      nodeId: `${p.app}--${p.action}`,
+      label: nodes.find(nd => nd.id === `${p.app}--${p.action}`)?.label ?? p.action,
+      app: p.app,
+    }));
+
+    const requiredApps = [...new Set(combo.prerequisites.map(p => p.app))];
+    const isUnlocked = requiredApps.every(a => connectedSet.has(a));
+
+    nodes.push({
+      id: combo.id,
+      label: combo.name.zh,
+      type: 'combo',
+      status: isUnlocked ? 'unlocked' : 'locked',
+      x, y,
+      description: combo.description.zh,
+      descriptionEn: combo.description.en,
+      prerequisites: prereqNodes,
     });
 
-    /* 排斥迭代 */
-    for (let iter = 0; iter < 50; iter++) {
-      for (let i = 0; i < combos.length; i++) {
-        let fx = 0, fy = 0;
-        for (let j = 0; j < combos.length; j++) {
-          if (i === j) continue;
-          const dx = comboPositions[i].x - comboPositions[j].x;
-          const dy = comboPositions[i].y - comboPositions[j].y;
-          const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-          if (dist < 130) {
-            const push = (130 - dist);
-            fx += (dx / dist) * push * 0.3;
-            fy += (dy / dist) * push * 0.3;
-          }
-        }
-        /* 微弱中心引力 */
-        fx += (CANVAS_CENTER.x - comboPositions[i].x) * 0.01;
-        fy += (CANVAS_CENTER.y - comboPositions[i].y) * 0.01;
-
-        comboPositions[i].x += fx;
-        comboPositions[i].y += fy;
-      }
-    }
-
-    combos.forEach((combo, ci) => {
-      /* 前置 action 節點 ID 列表 */
-      const prereqNodes = combo.prerequisites.map(p => ({
-        nodeId: `${p.app}--${p.action}`,
-        label: nodes.find(n => n.id === `${p.app}--${p.action}`)?.label ?? p.action,
-        app: p.app,
-      }));
-
-      /* 所有前置 App 都已連接 → unlocked */
-      const requiredApps = [...new Set(combo.prerequisites.map(p => p.app))];
-      const isUnlocked = requiredApps.every(a => connectedSet.has(a));
-
-      nodes.push({
-        id: combo.id,
-        label: combo.name.zh,
-        type: 'combo',
-        status: isUnlocked ? 'unlocked' : 'locked',
-        x: Math.round(comboPositions[ci].x),
-        y: Math.round(comboPositions[ci].y),
-        description: combo.description.zh,
-        descriptionEn: combo.description.en,
-        prerequisites: prereqNodes,
-      });
-
-      /* 邊：連到具體 action 節點 */
-      combo.prerequisites.forEach(p => {
-        const actionNodeId = `${p.app}--${p.action}`;
-        edges.push({ from: actionNodeId, to: combo.id, type: 'combo' });
-      });
+    /* 邊：連到具體 action 節點 */
+    combo.prerequisites.forEach(p => {
+      edges.push({ from: `${p.app}--${p.action}`, to: combo.id, type: 'combo' });
     });
-  }
+  });
 
   return { nodes, edges };
 }
