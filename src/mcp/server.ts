@@ -133,7 +133,9 @@ async function compressIfNeeded(
 }
 
 /**
- * 從完整文字中擷取摘要：保留前 N 行 + 後 N 行，中間標示省略行數
+ * F2: 從完整文字中擷取摘要
+ * 保留前 N 行 + 後 N 行，中間標示省略行數
+ * 附帶 metadata：總字數、總行數、標題列表，讓 AI 判斷是否需要完整版
  */
 function buildSummary(text: string, headLines: number, tailLines: number): string {
   const lines = text.split("\n");
@@ -143,7 +145,18 @@ function buildSummary(text: string, headLines: number, tailLines: number): strin
   const tail = lines.slice(-tailLines).join("\n");
   const omitted = lines.length - headLines - tailLines;
 
-  return head + `\n\n... (${omitted} lines omitted) ...\n\n` + tail;
+  // F2: 提取 heading 標題（Markdown # 和 Notion heading block）
+  const headings = lines
+    .filter((l) => /^#{1,3}\s/.test(l.trim()) || /"type"\s*:\s*"heading_[123]"/.test(l))
+    .map((l) => l.trim().replace(/^#+\s*/, ""))
+    .slice(0, 15); // 最多 15 個標題
+
+  const metadata = [
+    `Total: ${text.length} chars, ${lines.length} lines`,
+    headings.length > 0 ? `Headings: ${headings.join(" | ")}` : null,
+  ].filter(Boolean).join("\n");
+
+  return `[Metadata] ${metadata}\n\n` + head + `\n\n... (${omitted} lines omitted) ...\n\n` + tail;
 }
 
 /**
@@ -478,9 +491,14 @@ function registerDoTool(
         }
 
         // ── 回傳壓縮（Level 3）──
-        // 超過上限的回傳存 DB，只回傳摘要 + ref ID
-        if (result.data && typeof result.data === "string") {
-          result.data = await compressIfNeeded(userId, app, action, result.data);
+        // F2: 對 string 和非 string 的 data 都做壓縮檢查
+        if (result.data) {
+          const dataStr = typeof result.data === "string"
+            ? result.data
+            : JSON.stringify(result.data, null, 2);
+          if (dataStr.length > MAX_RESPONSE_CHARS) {
+            result.data = await compressIfNeeded(userId, app, action, dataStr);
+          }
         }
       }
 

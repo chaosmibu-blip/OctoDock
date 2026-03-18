@@ -60,6 +60,40 @@ async function notionFetch(
   return res.json();
 }
 
+/**
+ * F1: 分頁拉取所有 block children
+ * loop next_cursor 直到 has_more === false
+ * 上限 MAX_BLOCKS 避免無限迴圈，超過時標註 truncated
+ */
+const MAX_BLOCKS = 1000;
+
+async function fetchAllBlocks(
+  blockId: string,
+  token: string,
+): Promise<{ results: unknown[]; truncated: boolean; totalCount: number }> {
+  const allResults: unknown[] = [];
+  let cursor: string | undefined;
+  let hasMore = true;
+
+  while (hasMore && allResults.length < MAX_BLOCKS) {
+    const url = `/blocks/${blockId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`;
+    const data = (await notionFetch(url, token)) as {
+      results: unknown[];
+      has_more: boolean;
+      next_cursor: string | null;
+    };
+    allResults.push(...data.results);
+    hasMore = data.has_more;
+    cursor = data.next_cursor ?? undefined;
+  }
+
+  return {
+    results: allResults.slice(0, MAX_BLOCKS),
+    truncated: allResults.length > MAX_BLOCKS || hasMore,
+    totalCount: allResults.length,
+  };
+}
+
 // ============================================================
 // 簡化 Action → 內部工具名稱對應表
 // octodock_do 收到 action 後查這張表，找到要呼叫的內部工具
@@ -1114,12 +1148,19 @@ async function execute(
       };
     }
 
-    // ── 取得頁面（同時拉頁面屬性和內容區塊） ──
+    // ── 取得頁面（同時拉頁面屬性和完整內容區塊）──
+    // F1: 用 fetchAllBlocks 處理分頁，確保超過 100 blocks 的頁面不會被截斷
     case "notion_get_page": {
-      const [page, blocks] = await Promise.all([
+      const [page, allBlocks] = await Promise.all([
         notionFetch(`/pages/${params.page_id}`, token),
-        notionFetch(`/blocks/${params.page_id}/children?page_size=100`, token),
+        fetchAllBlocks(params.page_id as string, token),
       ]);
+      const blocks = {
+        results: allBlocks.results,
+        ...(allBlocks.truncated
+          ? { _truncated: true, _note: `Showing ${allBlocks.results.length} of ${allBlocks.totalCount}+ blocks` }
+          : {}),
+      };
       return {
         content: [
           { type: "text", text: JSON.stringify({ page, blocks }, null, 2) },
@@ -1299,13 +1340,16 @@ async function execute(
       };
     }
 
-    // ── 取得區塊的子區塊（頁面內容結構） ──
+    // ── 取得區塊的子區塊（頁面內容結構）──
+    // F1: 用 fetchAllBlocks 處理分頁
     case "notion_get_block_children": {
-      const pageSize = (params.page_size as number) ?? 100;
-      const result = await notionFetch(
-        `/blocks/${params.block_id}/children?page_size=${pageSize}`,
-        token,
-      );
+      const allBlocks = await fetchAllBlocks(params.block_id as string, token);
+      const result = {
+        results: allBlocks.results,
+        ...(allBlocks.truncated
+          ? { _truncated: true, _note: `Showing ${allBlocks.results.length} of ${allBlocks.totalCount}+ blocks` }
+          : {}),
+      };
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
