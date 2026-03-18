@@ -48,7 +48,8 @@ async function handleMcpRequest(
   await ensureAdapters();
 
   // 4. 為此用戶建立 MCP server（只含 octodock_do + octodock_help）
-  const server = await createServerForUser(user);
+  // A1: 傳入 request headers，供提取 agent 實例 ID
+  const server = await createServerForUser(user, req.headers);
 
   // 5. 建立 Stateless transport（每個請求獨立，不維護 session）
   const transport = new WebStandardStreamableHTTPServerTransport({

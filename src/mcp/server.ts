@@ -5,7 +5,11 @@ import { connectedApps, storedResults } from "@/db/schema";
 import { eq, lt, or, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getAdapter, getAllAdapters } from "./registry";
-import { executeWithMiddleware } from "./middleware/logger";
+import { executeWithMiddleware, type MiddlewareOptions } from "./middleware/logger";
+import { checkMcpRateLimit } from "@/lib/rate-limit";
+import { getPreContext } from "./middleware/pre-context";
+import { runPostCheck } from "./middleware/post-check";
+import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
 import { learnIdentifier, resolveIdentifier, listMemory, queryMemory } from "@/services/memory-engine";
 import { detectSopCandidate } from "@/services/sop-detector";
 import {
@@ -32,12 +36,25 @@ import type { DoResult } from "@/adapters/types";
 
 type User = { id: string; email: string; name: string | null };
 
+/** A1: 從 HTTP request headers 提取 Agent 實例識別資訊 */
+function extractAgentInstanceId(headers?: Headers): string | null {
+  if (!headers) return null;
+  // 優先用明確的 X-Agent-Id header，其次用 User-Agent
+  return headers.get("x-agent-id")
+    ?? headers.get("x-client-id")
+    ?? headers.get("user-agent")
+    ?? null;
+}
+
 /**
  * 為特定用戶建立 MCP server 實例
  * 每個 MCP 請求都會建立一個新的 server（stateless 架構）
  * server 只註冊 octodock_do 和 octodock_help 兩個工具
+ *
+ * @param user 已驗證的用戶資訊
+ * @param requestHeaders HTTP request headers（用於提取 agent 實例 ID）
  */
-export async function createServerForUser(user: User): Promise<McpServer> {
+export async function createServerForUser(user: User, requestHeaders?: Headers): Promise<McpServer> {
   const server = new McpServer({ name: "octodock", version: "1.0.0" });
 
   // 查詢用戶已連結且有效的 App 列表
@@ -50,8 +67,11 @@ export async function createServerForUser(user: User): Promise<McpServer> {
     .filter((a) => a.status === "active")
     .map((a) => a.appName);
 
+  // A1: 從 request headers 提取 agent 實例 ID
+  const agentInstanceId = extractAgentInstanceId(requestHeaders);
+
   // ── 註冊 octodock_do ──
-  registerDoTool(server, user.id, connectedAppNames);
+  registerDoTool(server, user.id, connectedAppNames, agentInstanceId);
 
   // ── 註冊 octodock_help ──
   registerHelpTool(server, user.id, connectedAppNames);
@@ -154,6 +174,7 @@ function registerDoTool(
   server: McpServer,
   userId: string,
   connectedAppNames: string[],
+  agentInstanceId: string | null,
 ): void {
   server.tool(
     "octodock_do",
@@ -234,6 +255,21 @@ function registerDoTool(
         };
       }
 
+      // B3: MCP 層 rate limit 檢查（per-user + per-action 高風險限制）
+      const rateCheck = checkMcpRateLimit(userId, toolName);
+      if (!rateCheck.allowed) {
+        result = {
+          ok: false,
+          error: `Rate limit exceeded. Please retry later. (RATE_LIMITED)`,
+          errorCode: "RATE_LIMITED",
+          retryable: true,
+          retryAfterMs: rateCheck.retryAfterMs,
+        };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+        };
+      }
+
       // ── 參數格式轉換：簡化參數 → API 原始格式 ──
       // 掃描 params 中的簡化欄位（folder、page、database 等），
       // 查記憶解析成實際 ID，讓 AI 不用知道 Notion 的 parent_id 格式
@@ -244,6 +280,57 @@ function registerDoTool(
         params,
       );
 
+      // C6: Dry-run 模式 — 破壞性操作預覽，不實際執行
+      const isDryRun = translatedParams.dryRun === true;
+      const isDryRunEligible = /delete|trash|replace|update/.test(toolName);
+      if (isDryRun && isDryRunEligible) {
+        // 移除 dryRun 參數避免傳給上游 API
+        const { dryRun: _, ...cleanParams } = translatedParams;
+        try {
+          const { getValidToken } = await import("@/services/token-manager");
+          const dryToken = await getValidToken(userId, app);
+          const dryContext = await getPreContext(
+            userId, app, toolName, cleanParams,
+            (tn, p, t) => adapter.execute(tn, p, t),
+            dryToken,
+          );
+          result = {
+            ok: true,
+            data: {
+              dryRun: true,
+              wouldAffect: dryContext?.targetInfo ?? dryContext?.currentContent ?? null,
+            },
+          };
+        } catch (err) {
+          result = {
+            ok: true,
+            data: { dryRun: true, wouldAffect: null, note: "Could not preview target" },
+          };
+        }
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+        };
+      }
+      // 非 dry-run 時移除 dryRun 參數（如果 AI 誤傳了）
+      if ("dryRun" in translatedParams) {
+        delete translatedParams.dryRun;
+      }
+
+      // C1+C4: 操作前自動查目標現狀（不阻塞主操作，失敗就跳過）
+      let preContext: Awaited<ReturnType<typeof getPreContext>> = null;
+      try {
+        // 需要 token 來查上游 API，先用 getValidToken 取
+        const { getValidToken } = await import("@/services/token-manager");
+        const preToken = await getValidToken(userId, app).catch(() => null);
+        preContext = await getPreContext(
+          userId, app, toolName, translatedParams,
+          preToken ? (tn, p, t) => adapter.execute(tn, p, t) : null,
+          preToken,
+        );
+      } catch (err) {
+        console.error("Pre-context failed:", err);
+      }
+
       // 透過 middleware 執行（取 token → 呼叫 API → 記錄日誌）
       const toolResult = await executeWithMiddleware(
         userId,
@@ -251,10 +338,52 @@ function registerDoTool(
         toolName,
         translatedParams,
         (p, token) => adapter.execute(toolName, p, token),
+        { agentInstanceId },
       );
 
       // 轉換成標準化的 DoResult
       result = toolResultToDoResult(toolResult, app);
+
+      // C1: 把 pre-context 附在 DoResult 上（只在有資料時）
+      if (preContext && result.ok) {
+        const contextParts: string[] = [];
+        if (preContext.existingSiblings) {
+          contextParts.push(`Existing siblings: ${preContext.existingSiblings.map((s) => s.title).join(", ")}`);
+        }
+        if (preContext.namingConvention) {
+          const nc = preContext.namingConvention;
+          contextParts.push(`Naming convention: ${nc.datePrefix ? "date prefix" : "no date prefix"}${nc.commonTypes.length > 0 ? `, types: ${nc.commonTypes.join(", ")}` : ""}. Examples: ${nc.examples.join(", ")}`);
+        }
+        if (preContext.todaySentToRecipient != null) {
+          contextParts.push(`Sent to this recipient today: ${preContext.todaySentToRecipient} times`);
+        }
+        if (preContext.targetInfo) {
+          contextParts.push(`Target: "${preContext.targetInfo.title}" (created ${preContext.targetInfo.createdAt})`);
+        }
+        if (preContext.currentContent) {
+          contextParts.push(`Current: "${preContext.currentContent.title}" (last edited ${preContext.currentContent.lastEdited})`);
+        }
+        if (preContext.patterns && preContext.patterns.length > 0) {
+          contextParts.push(`Detected patterns: ${preContext.patterns.map((p) => `${p.name}(×${p.count})`).join(", ")}`);
+        }
+        if (contextParts.length > 0) {
+          // 合併既有的 context（session 用戶摘要），不覆蓋
+          const existing = result.context ? result.context + "\n\n" : "";
+          result.context = existing + "Pre-context:\n" + contextParts.join("\n");
+        }
+      }
+
+      // C5: 操作結果帶結構化摘要
+      if (result.ok && result.data) {
+        try {
+          const summary = adapter.extractSummary
+            ? adapter.extractSummary(action, result.data)
+            : extractDefaultSummary(result.data);
+          if (summary) result.summary = summary;
+        } catch {
+          // extractSummary 失敗不影響主流程
+        }
+      }
 
       // ── 回傳格式轉換層（G1/G3 通用框架）──
       // 如果 adapter 有實作 formatResponse，用它把 raw JSON 轉成 AI 友善格式
@@ -276,6 +405,16 @@ function registerDoTool(
         if (betterError) {
           result.error = betterError;
         }
+        // E2: 失敗自動修復建議（結構化，從 operations 表查）
+        try {
+          const hint = await getRecoveryHint(userId, app, toolName);
+          if (hint) {
+            result.recoveryHint = hint;
+          }
+        } catch {
+          // 修復建議查詢失敗不影響錯誤回傳
+        }
+
         // 記憶層輔助：查最近成功的同類操作，提供參數參考
         try {
           const recentMemory = await queryMemory(userId, `${app} ${action}`, "context");
@@ -292,6 +431,16 @@ function registerDoTool(
       if (result.ok) {
         learnFromResult(userId, app, action, params, result).catch(() => {});
 
+        // C2+C3: 操作後基線比對 + 修正 pattern 偵測
+        try {
+          const postCheck = await runPostCheck(userId, app, toolName, translatedParams);
+          if (postCheck?.warnings && postCheck.warnings.length > 0) {
+            result.warnings = postCheck.warnings;
+          }
+        } catch (err) {
+          console.error("Post-check failed:", err);
+        }
+
         // ── Phase 8：SOP 自動辨識 ──
         // 非同步偵測重複操作模式，有候選 SOP 時附在 suggestions 裡
         try {
@@ -301,6 +450,31 @@ function registerDoTool(
           }
         } catch {
           // 偵測失敗不影響主流程
+        }
+
+        // E1: 操作鏈自動補全（非同步，但需結果放進 response）
+        try {
+          const nextSuggestion = await suggestNextAction(userId, app, toolName);
+          if (nextSuggestion) {
+            result.nextSuggestion = nextSuggestion;
+          }
+        } catch {
+          // 建議失敗不影響主流程
+        }
+
+        // E4: 跨 App 上下文連結
+        try {
+          const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string);
+          if (keyword) {
+            const crossApp = await findCrossAppContext(userId, app, keyword);
+            if (crossApp.length > 0) {
+              const existing = result.context ? result.context + "\n\n" : "";
+              const crossAppText = crossApp.map((c) => `- [${c.app}] ${c.action}: ${c.title} (${c.date})`).join("\n");
+              result.context = existing + "Related across apps:\n" + crossAppText;
+            }
+          }
+        } catch {
+          // 跨 App 查詢失敗不影響主流程
         }
 
         // ── 回傳壓縮（Level 3）──
@@ -409,6 +583,19 @@ function registerHelpTool(
         }
 
         text += `\n\nUse \`octodock_help(app: "app_name")\` to see actions for a specific app.`;
+
+        // E3: Action 推薦引擎 — 用戶最常用的操作
+        try {
+          const likely = await getLikelyNextActions(userId);
+          if (likely.length > 0) {
+            const likelyText = likely.map((l) =>
+              `- **${l.app}.${l.action}** — ${l.reason}${l.suggestedParams ? ` (suggested params: ${JSON.stringify(l.suggestedParams)})` : ""}`
+            ).join("\n");
+            text += `\n\n## Likely Next Actions\n\n${likelyText}`;
+          }
+        } catch {
+          // 推薦失敗不影響主流程
+        }
 
         // ── 用戶記憶：自動帶入或 onboarding ──
         try {
@@ -734,11 +921,21 @@ async function searchForId(
  * 解析 JSON、提取關鍵欄位（url、title）、移除冗餘資料
  */
 function toolResultToDoResult(
-  toolResult: { content: Array<{ type: string; text: string }>; isError?: boolean },
+  toolResult: { content: Array<{ type: string; text: string }>; isError?: boolean; _classifiedError?: import("@/mcp/error-types").OctoDockError },
   appName: string,
 ): DoResult {
-  // 錯誤情況
+  // B1: 錯誤情況 — 優先用結構化錯誤
   if (toolResult.isError) {
+    const classified = toolResult._classifiedError;
+    if (classified) {
+      return {
+        ok: false,
+        error: classified.message,
+        errorCode: classified.code,
+        retryable: classified.retryable,
+        retryAfterMs: classified.retryAfterMs,
+      };
+    }
     const errorText = toolResult.content[0]?.text ?? "Unknown error";
     return { ok: false, error: errorText };
   }
@@ -895,4 +1092,27 @@ function extractTitleFromItem(item: Record<string, unknown>): string | undefined
   }
 
   return undefined;
+}
+
+/**
+ * C5: 通用 fallback — 從 rawResult 嘗試提取 id、title/name、url
+ * adapter 沒實作 extractSummary 時使用
+ */
+function extractDefaultSummary(rawData: unknown): Record<string, unknown> | null {
+  if (typeof rawData !== "object" || rawData === null) return null;
+  const obj = rawData as Record<string, unknown>;
+  const summary: Record<string, unknown> = {};
+  let hasData = false;
+
+  if (typeof obj.id === "string") { summary.id = obj.id; hasData = true; }
+  if (typeof obj.url === "string") { summary.url = obj.url; hasData = true; }
+
+  // 嘗試取 title
+  const title = extractTitle(obj);
+  if (title) { summary.title = title; hasData = true; }
+
+  // 嘗試取 name（非 Notion 類 App 常用）
+  if (typeof obj.name === "string") { summary.name = obj.name; hasData = true; }
+
+  return hasData ? summary : null;
 }

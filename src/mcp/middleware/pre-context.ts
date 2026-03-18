@@ -1,0 +1,253 @@
+import { db } from "@/db";
+import { operations } from "@/db/schema";
+import { and, eq, gte, sql } from "drizzle-orm";
+
+// ============================================================
+// C1 + C4: Pre-context Middleware
+// 操作前自動查目標現狀，結果放入 response.context
+// C4: create_page 時從兄弟頁面標題推斷命名慣例
+//
+// 設計原則：
+// - 查詢失敗不擋主操作（全部 try-catch）
+// - timeout 2 秒，超時放棄
+// - 不直接 import adapter，透過參數傳入 execute 函式
+// ============================================================
+
+/** pre-context 查詢逾時（毫秒） */
+const PRE_CONTEXT_TIMEOUT_MS = 2_000;
+
+/** pre-context 查詢規則：toolName 模式 → 需要查什麼 */
+interface PreContextRule {
+  pattern: RegExp;                         // toolName 的匹配規則
+  paramKey: string;                        // 從 params 取哪個 key 當目標 ID
+  queryType: "siblings" | "target" | "sent_today"; // 查詢類型
+}
+
+const PRE_CONTEXT_RULES: PreContextRule[] = [
+  { pattern: /create_page/, paramKey: "parent_id", queryType: "siblings" },
+  { pattern: /replace_content|update/, paramKey: "page_id", queryType: "target" },
+  { pattern: /delete|trash/, paramKey: "page_id", queryType: "target" },
+  { pattern: /send/, paramKey: "to", queryType: "sent_today" },
+];
+
+/** pre-context 查詢結果 */
+export interface PreContextResult {
+  existingSiblings?: Array<{ title: string; createdAt: string }>;
+  currentContent?: { title: string; lastEdited: string };
+  todaySentToRecipient?: number;
+  targetInfo?: { title: string; createdAt: string };
+  namingConvention?: { datePrefix: boolean; commonTypes: string[]; examples: string[] };
+  patterns?: Array<{ name: string; count: number }>;
+}
+
+/**
+ * 操作前自動查詢目標現狀
+ *
+ * @param userId 用戶 ID
+ * @param appName App 名稱
+ * @param toolName 內部工具名稱
+ * @param params 操作參數
+ * @param executeQuery 查詢上游 API 的函式（不直接 import adapter）
+ * @param token OAuth token
+ */
+export async function getPreContext(
+  userId: string,
+  appName: string,
+  toolName: string,
+  params: Record<string, unknown>,
+  executeQuery: ((toolName: string, params: Record<string, unknown>, token: string) => Promise<unknown>) | null,
+  token: string | null,
+): Promise<PreContextResult | null> {
+  // 帶 timeout 的包裝
+  try {
+    const result = await Promise.race([
+      doPreContext(userId, appName, toolName, params, executeQuery, token),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), PRE_CONTEXT_TIMEOUT_MS)),
+    ]);
+    return result;
+  } catch (err) {
+    console.error("Pre-context query failed:", err);
+    return null;
+  }
+}
+
+/** 實際的 pre-context 查詢邏輯 */
+async function doPreContext(
+  userId: string,
+  appName: string,
+  toolName: string,
+  params: Record<string, unknown>,
+  executeQuery: ((toolName: string, params: Record<string, unknown>, token: string) => Promise<unknown>) | null,
+  token: string | null,
+): Promise<PreContextResult | null> {
+  const context: PreContextResult = {};
+  let hasData = false;
+
+  for (const rule of PRE_CONTEXT_RULES) {
+    if (!rule.pattern.test(toolName)) continue;
+
+    // ── 查今天寄給同一收件人幾封（從 operations 表查）──
+    if (rule.queryType === "sent_today" && params[rule.paramKey]) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const count = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(operations)
+        .where(
+          and(
+            eq(operations.userId, userId),
+            eq(operations.appName, appName),
+            eq(operations.toolName, toolName),
+            eq(operations.success, true),
+            gte(operations.createdAt, todayStart),
+            sql`params->>'to' = ${String(params[rule.paramKey])}`,
+          ),
+        );
+      context.todaySentToRecipient = Number(count[0]?.count ?? 0);
+      hasData = true;
+      continue;
+    }
+
+    // 以下查詢需要 executeQuery + token
+    if (!executeQuery || !token) continue;
+    const targetId = params[rule.paramKey];
+    if (!targetId || typeof targetId !== "string") continue;
+
+    // ── 查兄弟頁面（create_page 時查 parent 的子頁面）──
+    if (rule.queryType === "siblings" && appName === "notion") {
+      try {
+        const result = await executeQuery(
+          "notion_get_block_children",
+          { block_id: targetId, page_size: 10 },
+          token,
+        ) as { content: Array<{ text: string }> };
+        const text = result?.content?.[0]?.text;
+        if (text) {
+          const data = JSON.parse(text);
+          const siblings = (data.results ?? [])
+            .filter((b: Record<string, unknown>) => b.type === "child_page" || b.object === "page")
+            .slice(0, 10)
+            .map((b: Record<string, unknown>) => ({
+              title: (b as Record<string, unknown>).child_page
+                ? ((b as Record<string, { title: string }>).child_page?.title ?? "(untitled)")
+                : "(untitled)",
+              createdAt: (b as Record<string, string>).created_time ?? "",
+            }));
+          if (siblings.length > 0) {
+            context.existingSiblings = siblings;
+            // C4: 從兄弟頁面標題推斷命名慣例
+            context.namingConvention = inferNamingConvention(siblings.map((s: { title: string }) => s.title));
+            hasData = true;
+          }
+        }
+      } catch (err) {
+        console.error("Pre-context siblings query failed:", err);
+      }
+      continue;
+    }
+
+    // ── 查目標資訊（delete/replace 時查目標頁面基本資訊）──
+    if (rule.queryType === "target" && appName === "notion") {
+      try {
+        const result = await executeQuery(
+          "notion_get_page",
+          { page_id: targetId },
+          token,
+        ) as { content: Array<{ text: string }> };
+        const text = result?.content?.[0]?.text;
+        if (text) {
+          const data = JSON.parse(text);
+          const page = data.page ?? data;
+          const title = page.properties?.title?.title?.[0]?.plain_text
+            ?? page.properties?.Name?.title?.[0]?.plain_text
+            ?? "(untitled)";
+          if (toolName.includes("delete") || toolName.includes("trash")) {
+            context.targetInfo = { title, createdAt: page.created_time ?? "" };
+          } else {
+            context.currentContent = { title, lastEdited: page.last_edited_time ?? "" };
+          }
+          hasData = true;
+        }
+      } catch (err) {
+        console.error("Pre-context target query failed:", err);
+      }
+    }
+  }
+
+  // C3 回饋：查 memory 表有沒有相關的 detected pattern
+  try {
+    const { memory } = await import("@/db/schema");
+    const detectedPatterns = await db
+      .select({ key: memory.key, value: memory.value })
+      .from(memory)
+      .where(
+        and(
+          eq(memory.userId, userId),
+          eq(memory.category, "pattern"),
+          sql`value LIKE ${"%" + appName + "%"}`,
+        ),
+      )
+      .limit(3);
+
+    if (detectedPatterns.length > 0) {
+      context.patterns = detectedPatterns.map((p) => {
+        try {
+          const v = JSON.parse(p.value);
+          return { name: p.key, count: v.count ?? 0 };
+        } catch {
+          return { name: p.key, count: 0 };
+        }
+      });
+      hasData = true;
+    }
+  } catch (err) {
+    console.error("Pre-context pattern query failed:", err);
+  }
+
+  return hasData ? context : null;
+}
+
+/**
+ * C4: 從兄弟頁面標題推斷命名慣例
+ * 檢查是否有日期前綴、常見類型詞等模式
+ */
+function inferNamingConvention(titles: string[]): {
+  datePrefix: boolean;
+  commonTypes: string[];
+  examples: string[];
+} | undefined {
+  if (titles.length < 2) return undefined;
+
+  // 檢查是否超過 70% 標題以日期開頭
+  const datePattern = /^\d{4}-\d{2}-\d{2}/;
+  const dateCount = titles.filter((t) => datePattern.test(t)).length;
+  const datePrefix = dateCount / titles.length >= 0.7;
+
+  // 從標題中提取冒號前的類型詞
+  const typeWords = new Map<string, number>();
+  for (const title of titles) {
+    const colonIdx = title.indexOf("：") !== -1 ? title.indexOf("：") : title.indexOf(":");
+    if (colonIdx > 0 && colonIdx < 20) {
+      // 去掉日期前綴後取類型詞
+      const typeWord = title.slice(0, colonIdx).replace(/^\d{4}-\d{2}-\d{2}\s*/, "").trim();
+      if (typeWord) {
+        typeWords.set(typeWord, (typeWords.get(typeWord) ?? 0) + 1);
+      }
+    }
+  }
+
+  // 取出現超過 1 次的類型詞
+  const commonTypes = [...typeWords.entries()]
+    .filter(([, count]) => count > 1)
+    .sort((a, b) => b[1] - a[1])
+    .map(([word]) => word);
+
+  if (!datePrefix && commonTypes.length === 0) return undefined;
+
+  return {
+    datePrefix,
+    commonTypes,
+    examples: titles.slice(0, 3),
+  };
+}

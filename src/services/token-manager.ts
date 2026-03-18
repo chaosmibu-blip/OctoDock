@@ -4,6 +4,12 @@ import { and, eq } from "drizzle-orm";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { getAdapter } from "@/mcp/registry";
 
+// B2: Per-user-per-app refresh lock，防止並發 refresh 競爭
+// key: `${userId}:${appName}`，value: 正在進行的 refresh Promise
+const refreshLocks = new Map<string, Promise<string>>();
+/** refresh lock 逾時時間（毫秒），超時自動釋放避免死鎖 */
+const REFRESH_LOCK_TIMEOUT_MS = 10_000;
+
 export async function getValidToken(
   userId: string,
   appName: string,
@@ -35,7 +41,23 @@ export async function getValidToken(
     // For Meta apps (threads/instagram), the access_token itself is the refresh token
     const refreshSource = app.refreshToken ?? app.accessToken;
     if (refreshSource) {
-      return await refreshAndUpdateToken(userId, appName, refreshSource);
+      // B2: 用 lock 確保同一 user+app 的並發 refresh 只執行一次
+      const lockKey = `${userId}:${appName}`;
+      const existingLock = refreshLocks.get(lockKey);
+      if (existingLock) {
+        return await existingLock; // 等待已在進行的 refresh
+      }
+      const refreshPromise = refreshAndUpdateToken(userId, appName, refreshSource);
+      // 設定逾時自動清除 lock，防止死鎖
+      const timeoutId = setTimeout(() => refreshLocks.delete(lockKey), REFRESH_LOCK_TIMEOUT_MS);
+      refreshLocks.set(lockKey, refreshPromise);
+      try {
+        const token = await refreshPromise;
+        return token;
+      } finally {
+        clearTimeout(timeoutId);
+        refreshLocks.delete(lockKey);
+      }
     }
     // Mark as expired in DB
     await db

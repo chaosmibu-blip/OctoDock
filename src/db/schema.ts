@@ -95,6 +95,7 @@ export const operations = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     taskId: uuid("task_id"),
     sourceAgent: text("source_agent"), // 'claude' | 'gpt' | 'gemini' | 'other'
+    agentInstanceId: text("agent_instance_id"), // 區分同類型下的不同 Agent 實例（從 header 提取）
     appName: text("app_name").notNull(),
     toolName: text("tool_name").notNull(),
     action: text("action").notNull(),
@@ -103,6 +104,7 @@ export const operations = pgTable(
     intent: text("intent"),
     success: boolean("success").default(true),
     durationMs: integer("duration_ms"),
+    recordHash: text("record_hash"), // 預留：未來 audit trail 防竄改用（varchar 64）
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [

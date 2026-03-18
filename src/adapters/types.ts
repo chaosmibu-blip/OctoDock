@@ -69,8 +69,15 @@ export interface DoResult {
   url?: string; // 相關連結（例如建立的頁面 URL）
   title?: string; // 資源標題（例如頁面標題）
   error?: string; // 錯誤訊息（失敗時）
+  errorCode?: string; // B1: 結構化錯誤碼（TOKEN_EXPIRED、RATE_LIMITED 等）
+  retryable?: boolean; // B1: Agent 可據此決定是否重試
+  retryAfterMs?: number; // B1: 建議重試間隔（毫秒）
   suggestions?: string[]; // 建議（失敗時提供替代方案）
   context?: string; // 用戶上下文摘要（僅 session 首次 do() 附帶）
+  summary?: Record<string, unknown>; // C5: 操作結果可驗證摘要
+  warnings?: string[]; // C2: 異常偵測警告
+  nextSuggestion?: { app: string; action: string; reason: string; probability: number }; // E1: 操作鏈建議
+  recoveryHint?: { lastSuccessfulParams: Record<string, unknown>; note: string }; // E2: 失敗修復建議
 }
 
 // ============================================================
@@ -126,6 +133,9 @@ export interface AppAdapter {
     params: Record<string, unknown>,
     token: string,
   ): Promise<ToolResult>;
+
+  /** C5: 從操作結果中提取結構化摘要（optional，有預設 fallback） */
+  extractSummary?(action: string, rawResult: unknown): Record<string, unknown> | null;
 
   /** OAuth token 過期時的自動刷新（Notion 不需要，Google 等需要） */
   refreshToken?(refreshToken: string): Promise<TokenSet>;
