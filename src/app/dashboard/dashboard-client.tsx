@@ -42,6 +42,7 @@ const APP_KEYS = [
   { name: "line", displayName: "LINE", descKey: "app.line.desc" },
   { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc" },
   { name: "discord", displayName: "Discord", descKey: "app.discord.desc" },
+  { name: "slack", displayName: "Slack", descKey: "app.slack.desc" },
   // 社群
   { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
   { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },

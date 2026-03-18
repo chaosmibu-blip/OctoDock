@@ -81,6 +81,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.line.desc": "發送訊息、廣播和管理追蹤者",
     "app.telegram.desc": "發送訊息、照片和管理 Bot Webhook",
     "app.discord.desc": "發送訊息、管理頻道、成員和角色",
+    "app.slack.desc": "發送訊息、管理頻道、使用者和釘選",
     "app.canva.desc": "管理設計、匯出 PDF/PNG、素材和資料夾",
 
     // Bots
@@ -479,6 +480,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.line.desc": "Send messages, broadcast, and manage followers",
     "app.telegram.desc": "Send messages, photos, and manage Bot webhooks",
     "app.discord.desc": "Send messages, manage channels, members, and roles",
+    "app.slack.desc": "Send messages, manage channels, users, and pins",
     "app.canva.desc": "Manage designs, export PDF/PNG, assets, and folders",
 
     // Bots

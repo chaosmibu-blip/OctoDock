@@ -34,6 +34,7 @@ async function importAllAdapters(): Promise<void> {
     import("@/adapters/line"),
     import("@/adapters/telegram"),
     import("@/adapters/discord"),
+    import("@/adapters/slack"),
     import("@/adapters/threads"),
     import("@/adapters/instagram"),
     // 設計
