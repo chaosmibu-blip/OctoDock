@@ -38,6 +38,7 @@ export interface PreContextResult {
   targetInfo?: { title: string; createdAt: string };
   namingConvention?: { datePrefix: boolean; commonTypes: string[]; examples: string[] };
   patterns?: Array<{ name: string; count: number }>;
+  crossAppContext?: Array<{ app: string; type: string; title: string; date?: string }>; // O1+U9: 跨 App 相關資源
 }
 
 /**
@@ -204,6 +205,72 @@ async function doPreContext(
     }
   } catch (err) {
     console.error("Pre-context pattern query failed:", err);
+  }
+
+  // O1+U9: 跨 App 上下文 — create_page 時從 title 提取關鍵字查其他 App
+  if (/create_page/.test(toolName) && executeQuery && token) {
+    const title = params.title as string | undefined;
+    if (title && title.length > 2) {
+      try {
+        const crossResults: Array<{ app: string; type: string; title: string; date?: string }> = [];
+        // 查 Google Calendar 今天事件（如果不是 calendar App 本身）
+        if (appName !== "google_calendar") {
+          try {
+            const today = new Date().toISOString().substring(0, 10);
+            const { getAdapter } = await import("@/mcp/registry");
+            const { getValidToken } = await import("@/services/token-manager");
+            const calAdapter = getAdapter("google_calendar");
+            if (calAdapter) {
+              const calToken = await getValidToken(userId, "google_calendar");
+              const calResult = await calAdapter.execute(
+                calAdapter.actionMap?.["get_events"] ?? "gcal_get_events",
+                { timeMin: `${today}T00:00:00Z`, timeMax: `${today}T23:59:59Z`, maxResults: 5 },
+                calToken,
+              );
+              const calText = calResult.content[0]?.text;
+              if (calText) {
+                // 從事件中找跟 title 關鍵字匹配的
+                const keyword = title.substring(0, 20).toLowerCase();
+                if (calText.toLowerCase().includes(keyword)) {
+                  crossResults.push({ app: "google_calendar", type: "event", title: `今天有「${title}」相關的行事曆事件`, date: today });
+                }
+              }
+            }
+          } catch {
+            // Calendar 查詢失敗不影響
+          }
+        }
+        // 查 Gmail 最近信件（如果不是 gmail App 本身）
+        if (appName !== "gmail") {
+          try {
+            const { getAdapter } = await import("@/mcp/registry");
+            const { getValidToken } = await import("@/services/token-manager");
+            const gmailAdapter = getAdapter("gmail");
+            if (gmailAdapter) {
+              const gmailToken = await getValidToken(userId, "gmail");
+              const keyword = title.substring(0, 30);
+              const gmailResult = await gmailAdapter.execute(
+                gmailAdapter.actionMap?.["search"] ?? "gmail_search",
+                { query: keyword, max_results: 2 },
+                gmailToken,
+              );
+              const gmailText = gmailResult.content[0]?.text;
+              if (gmailText && !gmailText.includes("No results")) {
+                crossResults.push({ app: "gmail", type: "email", title: `有「${keyword}」相關的郵件` });
+              }
+            }
+          } catch {
+            // Gmail 查詢失敗不影響
+          }
+        }
+        if (crossResults.length > 0) {
+          context.crossAppContext = crossResults;
+          hasData = true;
+        }
+      } catch (err) {
+        console.error("Cross-app context query failed:", err);
+      }
+    }
   }
 
   return hasData ? context : null;

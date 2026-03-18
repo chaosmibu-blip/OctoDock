@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/db";
 import { connectedApps, storedResults } from "@/db/schema";
-import { eq, lt, or, isNull } from "drizzle-orm";
+import { eq, lt, or, isNull, and, gte, desc, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware, type MiddlewareOptions } from "./middleware/logger";
@@ -197,7 +197,7 @@ function registerDoTool(
 ): void {
   server.tool(
     "octodock_do",
-    "Execute an action on a connected app. Use octodock_help first to see available apps and actions.",
+    "Execute a single action on a connected app (e.g. notion, gmail, github). Requires app, action, and params. If you don't know the action name or params, call octodock_help first. If the task matches a saved workflow, call octodock_sop first — it's faster.",
     {
       app: z.string().describe("App name (e.g. 'notion', 'gmail', 'system')"),
       action: z.string().describe("Action to perform (e.g. 'create_page', 'search')"),
@@ -457,6 +457,11 @@ function registerDoTool(
             contextParts.push(`Detected patterns: ${activePatterns.map((p) => `${p.name}(×${p.count})`).join(", ")}`);
           }
         }
+        // U9: 跨 App 上下文附在 context 裡
+        if (preContext.crossAppContext && preContext.crossAppContext.length > 0) {
+          const crossText = preContext.crossAppContext.map((c) => `- [${c.app}] ${c.title}${c.date ? ` (${c.date})` : ""}`).join("\n");
+          contextParts.push(`Related across apps:\n${crossText}`);
+        }
         if (contextParts.length > 0) {
           // 合併既有的 context（session 用戶摘要），不覆蓋
           const existing = result.context ? result.context + "\n\n" : "";
@@ -615,7 +620,7 @@ function registerHelpTool(
 ): void {
   server.tool(
     "octodock_help",
-    "Get help about available apps and actions. Without app: list all connected apps. With app: show actions. With app+action: show detailed params and example.",
+    "Look up available apps and actions. No args: list all connected apps. With app: list actions for that app. With app+action: show required params and usage example.",
     {
       app: z
         .string()
@@ -806,6 +811,7 @@ function registerHelpTool(
 
       // 優先用 getSkill()（精簡版）
       // I9: 對破壞性 action 加 ⚠️ destructive 標記
+      // U5: 在 getSkill 回傳後附加頻率排序摘要
       if (adapter.getSkill) {
         let skillText = adapter.getSkill();
         // I9: 在 action 列表中標注破壞性操作
@@ -813,6 +819,29 @@ function registerHelpTool(
         for (const pattern of destructivePatterns) {
           const regex = new RegExp(`(- \\*\\*[^*]*${pattern}[^*]*\\*\\*)`, "g");
           skillText = skillText.replace(regex, `$1 ⚠️`);
+        }
+        // U5: 從 operations 表查使用頻率，附加在開頭
+        try {
+          const { operations: opsTable } = await import("@/db/schema");
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          const freqRows = await db
+            .select({ action: opsTable.action, count: sql<number>`count(*)` })
+            .from(opsTable)
+            .where(and(
+              eq(opsTable.userId, userId),
+              eq(opsTable.appName, app),
+              eq(opsTable.success, true),
+              gte(opsTable.createdAt, thirtyDaysAgo),
+            ))
+            .groupBy(opsTable.action)
+            .orderBy(desc(sql`count(*)`))
+            .limit(5);
+          if (freqRows.length > 0) {
+            const freqText = freqRows.map((r) => `- ${r.action} (${r.count} 次)`).join("\n");
+            skillText = `**常用：**\n${freqText}\n\n---\n\n${skillText}`;
+          }
+        } catch {
+          // 頻率查詢失敗不影響
         }
         // J5b: 新 App 首次使用引導 — 從 memory 判斷是否第一次用這個 App
         try {

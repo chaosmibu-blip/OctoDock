@@ -429,7 +429,9 @@ export async function executeSystemAction(
         `- **${m.app}.${m.action}** — ${m.description}`
       ).join("\n");
 
-      return { ok: true, data: `Found ${matches.length} matching tools:\n\n${result}\n\nUse octodock_do(app:"APP", action:"ACTION", params:{...}) to execute.` };
+      // U11: 修正文字矛盾 — 顯示 "Top 3 of X" 而不是 "Found X"
+      const countText = matches.length > top.length ? `Top ${top.length} of ${matches.length}` : `Found ${top.length}`;
+      return { ok: true, data: `${countText} matching tools:\n\n${result}\n\nUse octodock_do(app:"APP", action:"ACTION", params:{...}) to execute.` };
     }
 
     // ============================================================
@@ -646,6 +648,7 @@ export async function executeSystemAction(
       const { executeWithMiddleware } = await import("@/mcp/middleware/logger");
       const { getValidToken } = await import("@/services/token-manager");
 
+      // U13: 走完整 middleware 管線（包含 formatter、rate limit、logging），不直接呼叫 adapter.execute
       const executeSingle = async (a: { app: string; action: string; params?: Record<string, unknown> }): Promise<DoResult> => {
         // system action 遞迴呼叫
         if (a.app === "system") {
@@ -657,8 +660,26 @@ export async function executeSystemAction(
         if (!toolName) return { ok: false, error: `Unknown action "${a.action}" for ${a.app}` };
         try {
           const token = await getValidToken(userId, a.app);
-          const result = await adapter.execute(toolName, a.params ?? {}, token);
-          return { ok: !result.isError, data: result.content[0]?.text };
+          // 走 executeWithMiddleware 而不是直接 adapter.execute
+          const toolResult = await executeWithMiddleware(
+            userId, a.app, toolName, a.params ?? {},
+            (p, t) => adapter.execute(toolName, p, t),
+            { prefetchedToken: token },
+          );
+          // 轉成 DoResult（從 middleware 回傳的 ToolResult）
+          const text = toolResult.content[0]?.text ?? "";
+          const isErr = toolResult.isError === true;
+          // 嘗試經過 formatResponse
+          let formattedData = text;
+          if (!isErr && adapter.formatResponse) {
+            try {
+              const parsed = JSON.parse(text);
+              formattedData = adapter.formatResponse(a.action, parsed);
+            } catch {
+              // JSON parse 失敗就用原始文字
+            }
+          }
+          return { ok: !isErr, data: formattedData };
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
         }

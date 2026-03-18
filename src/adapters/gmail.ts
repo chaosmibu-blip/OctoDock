@@ -1104,10 +1104,15 @@ async function refreshGmailToken(refreshToken: string): Promise<TokenSet> {
 // ── 錯誤格式化：攔截常見 API 錯誤，回傳雙語提示 ────────
 function formatError(action: string, errorMessage: string): string | null {
   const msg = errorMessage.toLowerCase();
-  if (msg.includes("invalid_grant") || msg.includes("token")) return "Gmail token 已過期。請到 Dashboard 重新連結 Gmail。";
-  if (msg.includes("not found")) return "找不到指定的郵件。請確認 message_id 是否正確。";
-  if (msg.includes("rate") || msg.includes("quota")) return "Gmail API 速率限制。請稍後再試。";
-  if (msg.includes("forbidden") || msg.includes("insufficient")) return "權限不足。請確認 Gmail OAuth 包含必要的 scope（readonly, send, compose, modify）。";
+  if (msg.includes("invalid_grant") || msg.includes("token")) return "「Gmail 授權已過期 (TOKEN_EXPIRED)」— 請到 Dashboard 重新連結 Gmail";
+  if (msg.includes("invalid id") || msg.includes("not found") || msg.includes("404"))
+    return "「找不到這封郵件 (NOT_FOUND)」— 請確認 message_id 是否正確。可用 octodock_do(app:\"gmail\", action:\"search\") 搜尋";
+  if (msg.includes("rate") || msg.includes("quota") || msg.includes("429"))
+    return "「Gmail API 請求過於頻繁 (RATE_LIMITED)」— 請稍後 30 秒再試";
+  if (msg.includes("forbidden") || msg.includes("insufficient") || msg.includes("403"))
+    return "「權限不足 (PERMISSION_DENIED)」— 請到 Dashboard 重新連結 Gmail 以取得所需權限";
+  if (msg.includes("invalid") || msg.includes("400"))
+    return `「參數格式錯誤 (INVALID_PARAMS)」— ${errorMessage}。Use octodock_help(app:"gmail", action:"${action}") 查看正確格式`;
   return null;
 }
 
