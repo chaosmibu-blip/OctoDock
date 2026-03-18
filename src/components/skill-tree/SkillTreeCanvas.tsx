@@ -492,10 +492,16 @@ export function SkillTreeCanvas() {
     }
 
     /* ── Action（中圈）── 小圓點 */
+    /* U17: 區分已解鎖（用過 = 綠色實心）和未解鎖（沒用過 = 淡色） */
+    /* U20: 連線顏色跟節點狀態同步 */
     const dotR = isHovered ? 10 : 8;
     const clusterConnected = node.app ? connectedApps.has(node.app) : false;
     const clusterPreviewing = node.app ? previewApp === node.app : false;
-    const showActionLit = clusterConnected || clusterPreviewing; // 連接或預覽中
+    const isUnlocked = node.status === 'unlocked';
+    const showActionLit = clusterConnected || clusterPreviewing;
+    // U17: 已解鎖 = 綠色實心 0.9，連接但未解鎖 = 綠色淡 0.3，未連接 = 灰色 0.3
+    const dotColor = showActionLit ? TEAL : GRAY;
+    const dotOpacity = isUnlocked ? 0.9 : (showActionLit ? 0.3 : 0.2);
     const baseOpacity = showActionLit ? 1 : 0.3;
     const finalOpacity = dimmedBySearch ? 0.08 : dimmedByHover ? 0.1 : baseOpacity;
 
@@ -506,13 +512,13 @@ export function SkillTreeCanvas() {
         onMouseLeave={() => setHoveredNode(null)}
       >
         <circle cx={node.x} cy={node.y} r={dotR}
-          fill={showActionLit ? TEAL : GRAY}
-          opacity={showActionLit ? (clusterPreviewing ? 0.5 : 0.7) : 0.5}
+          fill={dotColor}
+          opacity={dotOpacity}
           style={{ transition: 'r 150ms, fill 300ms, opacity 300ms' }}
         />
         {isHovered && (
           <circle cx={node.x} cy={node.y} r={dotR + 4}
-            fill="none" stroke={showActionLit ? TEAL : GRAY}
+            fill="none" stroke={dotColor}
             strokeWidth={1.5} opacity={0.5}
           />
         )}

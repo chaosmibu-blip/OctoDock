@@ -41,7 +41,7 @@ export interface SkillsApiApp {
   authType: string;
   connected: boolean;
   connectedAt: string | null;
-  actions: Array<{ name: string; description: { zh: string; en: string } }>;
+  actions: Array<{ name: string; description: { zh: string; en: string }; unlocked?: boolean; usageCount?: number }>;
 }
 
 /** API 回傳的自動發現候選組合技 */
@@ -197,7 +197,8 @@ export function buildSkillTree(
         id: actionId,
         label: action.description.zh || action.name,
         type: 'skill',
-        status: app.connected ? 'unlocked' : 'locked',
+        // U17: action 用過至少 1 次 = unlocked，否則 locked（不只看 App 是否連接）
+        status: action.unlocked ? 'unlocked' : 'locked',
         x: actionPositions[i].x,
         y: actionPositions[i].y,
         description: action.description.zh,

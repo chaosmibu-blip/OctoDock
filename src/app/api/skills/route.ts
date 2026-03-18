@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { connectedApps } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { connectedApps, operations } from "@/db/schema";
+import { eq, and, sql } from "drizzle-orm";
 import { loadAdapters, getAllAdapters } from "@/mcp/registry";
 import { loadCombos, getCombosWithStatus } from "@/combos/registry";
 import { discoverCombos } from "@/combos/auto-discover";
@@ -42,6 +42,34 @@ export async function GET() {
       .map((a) => [a.appName, a]),
   );
 
+  /* U17: 查詢每個 action 的使用次數（用於區分已解鎖/未解鎖） */
+  let actionUsage = new Map<string, number>();
+  if (session?.user?.id) {
+    try {
+      const usageRows = await db
+        .select({
+          appName: operations.appName,
+          action: operations.action,
+          count: sql<number>`count(*)`,
+        })
+        .from(operations)
+        .where(
+          and(
+            eq(operations.userId, session.user.id),
+            eq(operations.success, true),
+          ),
+        )
+        .groupBy(operations.appName, operations.action);
+      for (const row of usageRows) {
+        if (row.action) {
+          actionUsage.set(`${row.appName}.${row.action}`, Number(row.count));
+        }
+      }
+    } catch {
+      // 使用次數查詢失敗不影響回傳
+    }
+  }
+
   /* 組合回傳資料 */
   const apps = adapters.map((adapter) => {
     const conn = connectedMap.get(adapter.name);
@@ -51,12 +79,16 @@ export async function GET() {
       /* 嘗試從 tools 找到對應的 description */
       const internalToolName = adapter.actionMap[actionName];
       const tool = adapter.tools.find((t) => t.name === internalToolName);
+      // U17: action 使用次數 ≥ 1 = 已解鎖
+      const usageCount = actionUsage.get(`${adapter.name}.${actionName}`) ?? 0;
       return {
         name: actionName,
         description: {
           zh: getActionZh(adapter.name, actionName),
           en: tool?.description ?? actionName,
         },
+        unlocked: usageCount > 0,  // U17: 用過至少 1 次 = 已解鎖
+        usageCount,                  // U17: 使用次數（供前端決定節點大小/亮度）
       };
     });
 

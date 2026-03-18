@@ -1271,16 +1271,37 @@ function extractTitleFromItem(item: Record<string, unknown>): string | undefined
  * adapter 沒實作 extractSummary 時使用
  */
 function extractDefaultSummary(rawData: unknown): Record<string, unknown> | null {
-  if (typeof rawData !== "object" || rawData === null) return null;
-  const obj = rawData as Record<string, unknown>;
+  // U12: 統一 summary 提取 — 支援物件和 JSON 字串
+  let obj: Record<string, unknown>;
+  if (typeof rawData === "object" && rawData !== null) {
+    obj = rawData as Record<string, unknown>;
+  } else if (typeof rawData === "string") {
+    // formatResponse 後的 data 是字串，嘗試 JSON.parse
+    try { obj = JSON.parse(rawData); } catch { return null; }
+    if (typeof obj !== "object" || obj === null) return null;
+  } else {
+    return null;
+  }
+
   const summary: Record<string, unknown> = {};
   let hasData = false;
 
-  if (typeof obj.id === "string") { summary.id = obj.id; hasData = true; }
-  if (typeof obj.url === "string") { summary.url = obj.url; hasData = true; }
+  // 從多層結構中找 id（支援 { page: { id } } 和 { id } 兩種格式）
+  const id = obj.id ?? (obj.page as Record<string, unknown>)?.id
+    ?? (obj.design as Record<string, unknown>)?.id
+    ?? (obj.result as Record<string, unknown>)?.id;
+  if (typeof id === "string") { summary.id = id; hasData = true; }
 
-  // 嘗試取 title
-  const title = extractTitle(obj);
+  // 找 url
+  const url = obj.url ?? (obj.page as Record<string, unknown>)?.url
+    ?? obj.webViewLink ?? obj.html_url
+    ?? (obj.urls as Record<string, unknown>)?.edit_url;
+  if (typeof url === "string") { summary.url = url; hasData = true; }
+
+  // 找 title
+  const title = extractTitle(obj)
+    ?? (typeof obj.subject === "string" ? obj.subject : undefined)
+    ?? (typeof obj.summary === "string" ? obj.summary : undefined);
   if (title) { summary.title = title; hasData = true; }
 
   // 嘗試取 name（非 Notion 類 App 常用）

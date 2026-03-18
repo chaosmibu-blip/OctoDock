@@ -36,6 +36,15 @@ export function Legend() {
           </div>
           <span className="text-gray-600 text-xs">組合技</span>
         </div>
+        {/* U18/U19: 健康燈號說明 */}
+        <div className="flex items-center gap-2.5 mt-1 pt-1 border-t border-gray-200">
+          <div className="w-5 flex justify-center gap-0.5">
+            <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
+            <div className="w-2 h-2 rounded-full bg-[#EAB308]" />
+            <div className="w-2 h-2 rounded-full bg-[#EF4444]" />
+          </div>
+          <span className="text-gray-600 text-xs">App 健康燈號</span>
+        </div>
       </div>
     </div>
   );
