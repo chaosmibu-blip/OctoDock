@@ -580,6 +580,7 @@ async function execute(
     }
 
     // 查詢事件清單：支援時間範圍與最大筆數
+    // F1: 支援 page_token 分頁
     case "gcal_get_events": {
       const calendarId = encodeURIComponent((params.calendar_id as string) || "primary");
       const defaults = getDefaultTimeRange();
@@ -594,6 +595,7 @@ async function execute(
         singleEvents: "true",
         orderBy: "startTime",
       });
+      if (params.page_token) queryParams.set("pageToken", params.page_token as string);
 
       const result = await gcalFetch(
         `/calendars/${calendarId}/events?${queryParams.toString()}`,

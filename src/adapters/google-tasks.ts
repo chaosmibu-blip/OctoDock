@@ -461,6 +461,7 @@ async function execute(
     }
 
     // 列出某個清單中的任務
+    // F1: 支援 page_token 分頁
     case "gtasks_list_tasks": {
       const tasklist = params.tasklist as string;
       const maxResults = Math.min((params.max_results as number) ?? 20, 100);
@@ -470,6 +471,7 @@ async function execute(
         showCompleted: String(showCompleted),
         showHidden: String(showCompleted), // 顯示隱藏的已完成任務
       });
+      if (params.page_token) queryParams.set("pageToken", params.page_token as string);
       const result = await gtasksFetch(
         `/lists/${encodeURIComponent(tasklist)}/tasks?${queryParams.toString()}`,
         token,

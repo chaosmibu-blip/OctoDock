@@ -225,10 +225,12 @@ async function execute(
       };
     }
 
+    // F1: 支援 after cursor 分頁
     case "threads_get_posts": {
       const limit = Math.min((params.limit as number) ?? 10, 25);
+      const afterParam = params.after ? `&after=${encodeURIComponent(params.after as string)}` : "";
       const result = await threadsFetch(
-        `/me/threads?fields=id,text,timestamp,media_type,permalink&limit=${limit}`,
+        `/me/threads?fields=id,text,timestamp,media_type,permalink&limit=${limit}${afterParam}`,
         token,
       );
       return {

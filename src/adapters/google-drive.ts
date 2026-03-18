@@ -607,21 +607,24 @@ async function execute(
 ): Promise<ToolResult> {
   switch (toolName) {
     // 搜尋檔案：使用 Drive 查詢語法，回傳檔案清單
+    // F1: 支援 page_token 分頁
     case "gdrive_search": {
       const maxResults = Math.min((params.max_results as number) ?? 10, 100);
       const query = encodeURIComponent(params.query as string);
       const fields = encodeURIComponent(
-        "files(id,name,mimeType,webViewLink,modifiedTime,size)",
+        "nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,size)",
       );
+      const pageToken = params.page_token ? `&pageToken=${encodeURIComponent(params.page_token as string)}` : "";
       const result = (await driveFetch(
-        `/files?q=${query}&fields=${fields}&pageSize=${maxResults}&orderBy=modifiedTime desc`,
+        `/files?q=${query}&fields=${fields}&pageSize=${maxResults}&orderBy=modifiedTime desc${pageToken}`,
         token,
-      )) as { files?: Array<Record<string, unknown>> };
+      )) as { files?: Array<Record<string, unknown>>; nextPageToken?: string };
 
-      const files = result.files ?? [];
+      const response: Record<string, unknown> = { files: result.files ?? [] };
+      if (result.nextPageToken) response.nextPageToken = result.nextPageToken;
       return {
         content: [
-          { type: "text", text: JSON.stringify(files, null, 2) },
+          { type: "text", text: JSON.stringify(response, null, 2) },
         ],
       };
     }

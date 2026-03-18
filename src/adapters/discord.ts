@@ -524,7 +524,13 @@ async function execute(
   switch (toolName) {
     // ── 訊息 ──
     case "discord_send_message": { const b: Record<string, unknown> = {}; if (params.content) b.content = params.content; if (params.embeds) b.embeds = params.embeds; return json(await post(`/channels/${params.channel_id}/messages`, b)); }
-    case "discord_get_messages": return json(await get(`/channels/${params.channel_id}/messages?limit=${params.limit ?? 50}`));
+    // F1: 支援 before/after 分頁
+    case "discord_get_messages": {
+      let url = `/channels/${params.channel_id}/messages?limit=${params.limit ?? 50}`;
+      if (params.before) url += `&before=${params.before}`;
+      if (params.after) url += `&after=${params.after}`;
+      return json(await get(url));
+    }
     case "discord_get_message": return json(await get(`/channels/${params.channel_id}/messages/${params.message_id}`));
     case "discord_edit_message": { const b: Record<string, unknown> = {}; if (params.content !== undefined) b.content = params.content; if (params.embeds) b.embeds = params.embeds; return json(await patch(`/channels/${params.channel_id}/messages/${params.message_id}`, b)); }
     case "discord_delete_message": return json(await del(`/channels/${params.channel_id}/messages/${params.message_id}`));
@@ -559,7 +565,12 @@ async function execute(
 
     // ── 成員 ──
     case "discord_get_member": return json(await get(`/guilds/${params.guild_id}/members/${params.user_id}`));
-    case "discord_list_members": return json(await get(`/guilds/${params.guild_id}/members?limit=${params.limit ?? 100}`));
+    // F1: 支援 after 分頁（Discord 用 user ID 做 cursor）
+    case "discord_list_members": {
+      let url = `/guilds/${params.guild_id}/members?limit=${params.limit ?? 100}`;
+      if (params.after) url += `&after=${params.after}`;
+      return json(await get(url));
+    }
     case "discord_search_members": return json(await get(`/guilds/${params.guild_id}/members/search?query=${encodeURIComponent(params.query as string)}&limit=${params.limit ?? 100}`));
     case "discord_modify_member": { const b: Record<string, unknown> = {}; if (params.nick !== undefined) b.nick = params.nick; if (params.mute !== undefined) b.mute = params.mute; if (params.deaf !== undefined) b.deaf = params.deaf; return json(await patch(`/guilds/${params.guild_id}/members/${params.user_id}`, b)); }
     case "discord_add_role": return json(await put(`/guilds/${params.guild_id}/members/${params.user_id}/roles/${params.role_id}`));

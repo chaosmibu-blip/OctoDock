@@ -629,11 +629,13 @@ async function execute(
 ): Promise<ToolResult> {
   switch (toolName) {
     // 搜尋影片
+    // F1: 支援 page_token 分頁
     case "youtube_search": {
       const maxResults = Math.min((params.max_results as number) ?? 10, 50);
       const q = encodeURIComponent(params.query as string);
+      const pageToken = params.page_token ? `&pageToken=${encodeURIComponent(params.page_token as string)}` : "";
       const result = await ytFetch(
-        `/search?part=snippet&q=${q}&type=video&maxResults=${maxResults}`,
+        `/search?part=snippet&q=${q}&type=video&maxResults=${maxResults}${pageToken}`,
         token,
       );
       return {
@@ -653,10 +655,12 @@ async function execute(
     }
 
     // 列出使用者的播放清單
+    // F1: 支援 page_token 分頁
     case "youtube_list_playlists": {
       const maxResults = Math.min((params.max_results as number) ?? 25, 50);
+      const pageToken = params.page_token ? `&pageToken=${encodeURIComponent(params.page_token as string)}` : "";
       const result = await ytFetch(
-        `/playlists?part=snippet&mine=true&maxResults=${maxResults}`,
+        `/playlists?part=snippet&mine=true&maxResults=${maxResults}${pageToken}`,
         token,
       );
       return {
@@ -665,11 +669,13 @@ async function execute(
     }
 
     // 列出播放清單中的影片
+    // F1: 支援 page_token 分頁
     case "youtube_list_playlist_items": {
       const maxResults = Math.min((params.max_results as number) ?? 25, 50);
       const playlistId = encodeURIComponent(params.playlist_id as string);
+      const pageToken = params.page_token ? `&pageToken=${encodeURIComponent(params.page_token as string)}` : "";
       const result = await ytFetch(
-        `/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=${maxResults}`,
+        `/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=${maxResults}${pageToken}`,
         token,
       );
       return {
@@ -697,11 +703,13 @@ async function execute(
     }
 
     // 取得影片留言
+    // F1: 支援 page_token 分頁
     case "youtube_get_comments": {
       const maxResults = Math.min((params.max_results as number) ?? 20, 100);
       const videoId = encodeURIComponent(params.video_id as string);
+      const pageToken = params.page_token ? `&pageToken=${encodeURIComponent(params.page_token as string)}` : "";
       const result = await ytFetch(
-        `/commentThreads?part=snippet&videoId=${videoId}&maxResults=${maxResults}`,
+        `/commentThreads?part=snippet&videoId=${videoId}&maxResults=${maxResults}${pageToken}`,
         token,
       );
       return {

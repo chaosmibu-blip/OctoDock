@@ -638,12 +638,14 @@ async function execute(
 ): Promise<ToolResult> {
   switch (toolName) {
     // 搜尋郵件：使用 Gmail 搜尋語法，並行取得摘要
+    // F1: 支援 page_token 分頁
     case "gmail_search": {
       const maxResults = Math.min((params.max_results as number) ?? 10, 50);
+      const pageToken = params.page_token ? `&pageToken=${encodeURIComponent(params.page_token as string)}` : "";
       const list = (await gmailFetch(
-        `/messages?q=${encodeURIComponent(params.query as string)}&maxResults=${maxResults}`,
+        `/messages?q=${encodeURIComponent(params.query as string)}&maxResults=${maxResults}${pageToken}`,
         token,
-      )) as { messages?: Array<{ id: string }> };
+      )) as { messages?: Array<{ id: string }>; nextPageToken?: string };
 
       if (!list.messages?.length) {
         return { content: [{ type: "text", text: "No emails found." }] };
@@ -670,9 +672,12 @@ async function execute(
         }),
       );
 
+      // F1: 回傳帶 nextPageToken，讓 AI 可以翻頁
+      const response: Record<string, unknown> = { messages: summaries };
+      if (list.nextPageToken) response.nextPageToken = list.nextPageToken;
       return {
         content: [
-          { type: "text", text: JSON.stringify(summaries, null, 2) },
+          { type: "text", text: JSON.stringify(response, null, 2) },
         ],
       };
     }
@@ -864,14 +869,16 @@ async function execute(
     }
 
     // 對話串列表：搜尋並列出對話串
+    // F1: 支援 page_token 分頁
     case "gmail_list_threads": {
       const maxResults = Math.min((params.max_results as number) ?? 10, 50);
       const query = (params.query as string) ?? "";
       const qParam = query ? `&q=${encodeURIComponent(query)}` : "";
+      const pageToken = params.page_token ? `&pageToken=${encodeURIComponent(params.page_token as string)}` : "";
       const list = (await gmailFetch(
-        `/threads?maxResults=${maxResults}${qParam}`,
+        `/threads?maxResults=${maxResults}${qParam}${pageToken}`,
         token,
-      )) as { threads?: Array<{ id: string; snippet: string }> };
+      )) as { threads?: Array<{ id: string; snippet: string }>; nextPageToken?: string };
 
       if (!list.threads?.length) {
         return { content: [{ type: "text", text: "No threads found." }] };
@@ -901,8 +908,11 @@ async function execute(
         }),
       );
 
+      // F1: 回傳帶 nextPageToken
+      const threadResponse: Record<string, unknown> = { threads: summaries };
+      if (list.nextPageToken) threadResponse.nextPageToken = list.nextPageToken;
       return {
-        content: [{ type: "text", text: JSON.stringify(summaries, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(threadResponse, null, 2) }],
       };
     }
 

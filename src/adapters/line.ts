@@ -534,13 +534,25 @@ async function execute(
 
     // ── 用戶與群組 ──
     case "line_get_profile": return json(await get(`/bot/profile/${params.user_id}`));
-    case "line_get_followers_ids": return json(await get("/bot/followers/ids"));
+    // F1: 支援 start cursor 分頁
+    case "line_get_followers_ids": {
+      const startParam = params.start ? `?start=${encodeURIComponent(params.start as string)}` : "";
+      return json(await get(`/bot/followers/ids${startParam}`));
+    }
     case "line_get_group_summary": return json(await get(`/bot/group/${params.group_id}/summary`));
     case "line_get_group_member_count": return json(await get(`/bot/group/${params.group_id}/members/count`));
-    case "line_get_group_members": return json(await get(`/bot/group/${params.group_id}/members/ids`));
+    // F1: 支援 start cursor 分頁
+    case "line_get_group_members": {
+      const startParam = params.start ? `?start=${encodeURIComponent(params.start as string)}` : "";
+      return json(await get(`/bot/group/${params.group_id}/members/ids${startParam}`));
+    }
     case "line_get_group_member_profile": return json(await get(`/bot/group/${params.group_id}/members/${params.user_id}`));
     case "line_leave_group": return json(await post(`/bot/group/${params.group_id}/leave`, {}));
-    case "line_get_room_members": return json(await get(`/bot/room/${params.room_id}/members/ids`));
+    // F1: 支援 start cursor 分頁
+    case "line_get_room_members": {
+      const startParam = params.start ? `?start=${encodeURIComponent(params.start as string)}` : "";
+      return json(await get(`/bot/room/${params.room_id}/members/ids${startParam}`));
+    }
     case "line_get_room_member_profile": return json(await get(`/bot/room/${params.room_id}/members/${params.user_id}`));
     case "line_leave_room": return json(await post(`/bot/room/${params.room_id}/leave`, {}));
 
@@ -563,7 +575,12 @@ async function execute(
       return json(await post("/bot/audienceGroup/upload", body));
     }
     case "line_get_audience": return json(await get(`/bot/audienceGroup/${params.audience_group_id}`));
-    case "line_list_audiences": return json(await get("/bot/audienceGroup/list?page=1&size=40"));
+    // F1: 支援 page 參數分頁（不再硬編碼 page=1）
+    case "line_list_audiences": {
+      const page = (params.page as number) ?? 1;
+      const size = Math.min((params.size as number) ?? 40, 40);
+      return json(await get(`/bot/audienceGroup/list?page=${page}&size=${size}`));
+    }
     case "line_delete_audience": return json(await del(`/bot/audienceGroup/${params.audience_group_id}`));
 
     // ── 統計與配額 ──

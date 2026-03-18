@@ -288,11 +288,13 @@ async function execute(
       };
     }
 
+    // F1: 支援 after cursor 分頁
     case "instagram_get_posts": {
       const igId = await getIgAccountId(token);
       const limit = Math.min((params.limit as number) ?? 10, 25);
+      const afterParam = params.after ? `&after=${encodeURIComponent(params.after as string)}` : "";
       const result = await igFetch(
-        `/${igId}/media?fields=id,caption,timestamp,media_type,media_url,permalink,like_count,comments_count&limit=${limit}`,
+        `/${igId}/media?fields=id,caption,timestamp,media_type,media_url,permalink,like_count,comments_count&limit=${limit}${afterParam}`,
         token,
       );
       return {
@@ -313,10 +315,12 @@ async function execute(
       };
     }
 
+    // F1: 支援 after cursor 分頁
     case "instagram_get_comments": {
       const limit = (params.limit as number) ?? 20;
+      const afterParam = params.after ? `&after=${encodeURIComponent(params.after as string)}` : "";
       const result = await igFetch(
-        `/${params.media_id}/comments?fields=id,text,username,timestamp,like_count&limit=${limit}`,
+        `/${params.media_id}/comments?fields=id,text,username,timestamp,like_count&limit=${limit}${afterParam}`,
         token,
       );
       return {
