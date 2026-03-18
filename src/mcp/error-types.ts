@@ -98,8 +98,8 @@ export function classifyError(
   return { ...base, code: "UNKNOWN", retryable: false };
 }
 
-/** 從錯誤訊息中提取 HTTP 狀態碼 */
-function extractHttpStatus(message: string): number | null {
+/** 從錯誤訊息中提取 HTTP 狀態碼（共用工具函式） */
+export function extractHttpStatus(message: string): number | null {
   // 常見格式："HTTP 429"、"status 429"、"Error 429"、"(429)"
   const match = message.match(/(?:HTTP|status|Error)\s*:?\s*(\d{3})|[(\s](\d{3})[)\s]/i);
   if (match) {

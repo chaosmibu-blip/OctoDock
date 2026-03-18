@@ -45,6 +45,8 @@ const APP_KEYS = [
   // 社群
   { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
   { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
+  // 設計
+  { name: "canva", displayName: "Canva", descKey: "app.canva.desc" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {

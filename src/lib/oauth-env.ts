@@ -16,6 +16,8 @@ const ENV_PREFIX_MAP: Record<string, string> = {
   youtube: "GOOGLE",
   // GitHub 獨立
   github: "GITHUB_APP",
+  // Canva 獨立
+  canva: "CANVA",
 };
 
 /**

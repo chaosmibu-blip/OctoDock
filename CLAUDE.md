@@ -191,6 +191,7 @@ AI 可以用名稱（不用 ID）操作：
 - `.claude/skills/setup-threads.md` — Threads
 - `.claude/skills/setup-instagram.md` — Instagram
 - `.claude/skills/setup-discord.md` — Discord
+- `.claude/skills/setup-canva.md` — Canva
 
 ### Agents
 - **開發指南**：`.claude/agents/octodock-dev.md`

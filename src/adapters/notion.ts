@@ -94,6 +94,16 @@ async function fetchAllBlocks(
   };
 }
 
+/** 把 fetchAllBlocks 結果包裝成標準回傳格式（含 truncation 標註） */
+function wrapBlockResults(allBlocks: { results: unknown[]; truncated: boolean; totalCount: number }) {
+  return {
+    results: allBlocks.results,
+    ...(allBlocks.truncated
+      ? { _truncated: true, _note: `Showing ${allBlocks.results.length} of ${allBlocks.totalCount}+ blocks` }
+      : {}),
+  };
+}
+
 // ============================================================
 // 簡化 Action → 內部工具名稱對應表
 // octodock_do 收到 action 後查這張表，找到要呼叫的內部工具
@@ -1155,12 +1165,7 @@ async function execute(
         notionFetch(`/pages/${params.page_id}`, token),
         fetchAllBlocks(params.page_id as string, token),
       ]);
-      const blocks = {
-        results: allBlocks.results,
-        ...(allBlocks.truncated
-          ? { _truncated: true, _note: `Showing ${allBlocks.results.length} of ${allBlocks.totalCount}+ blocks` }
-          : {}),
-      };
+      const blocks = wrapBlockResults(allBlocks);
       return {
         content: [
           { type: "text", text: JSON.stringify({ page, blocks }, null, 2) },
@@ -1344,12 +1349,7 @@ async function execute(
     // F1: 用 fetchAllBlocks 處理分頁
     case "notion_get_block_children": {
       const allBlocks = await fetchAllBlocks(params.block_id as string, token);
-      const result = {
-        results: allBlocks.results,
-        ...(allBlocks.truncated
-          ? { _truncated: true, _note: `Showing ${allBlocks.results.length} of ${allBlocks.totalCount}+ blocks` }
-          : {}),
-      };
+      const result = wrapBlockResults(allBlocks);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };

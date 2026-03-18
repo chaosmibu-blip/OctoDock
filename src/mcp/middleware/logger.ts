@@ -3,13 +3,12 @@ import { operations } from "@/db/schema";
 import { getValidToken } from "@/services/token-manager";
 import { analyzePatterns } from "@/mcp/pattern-analyzer";
 import { runMaintenanceIfNeeded } from "@/services/memory-maintenance";
-import type { ToolResult } from "@/adapters/types";
+import { type ToolResult, extractNotionTitle } from "@/adapters/types";
 import { classifyError, type OctoDockError } from "@/mcp/error-types";
 import {
   checkCircuitBreaker,
   recordSuccess,
   recordFailure,
-  isCircuitBreakerRelevant,
 } from "@/mcp/middleware/circuit-breaker";
 
 // ============================================================
@@ -24,6 +23,7 @@ import {
 /** 操作執行器的額外選項（A1：傳遞 agent 實例資訊） */
 export interface MiddlewareOptions {
   agentInstanceId?: string | null; // 從 HTTP header 提取的 Agent 實例 ID
+  prefetchedToken?: string | null; // 預取的 token，避免重複呼叫 getValidToken
 }
 
 /**
@@ -66,8 +66,8 @@ export async function executeWithMiddleware(
   }
 
   try {
-    // 取得有效的 OAuth token（如果過期會自動 refresh）
-    const token = await getValidToken(userId, appName);
+    // 取得有效的 OAuth token（優先用預取的，避免重複 DB 查詢）
+    const token = options?.prefetchedToken ?? await getValidToken(userId, appName);
 
     // 執行實際的 API 呼叫
     const result = await handler(params, token);
@@ -105,8 +105,8 @@ export async function executeWithMiddleware(
     const classified = classifyError(error, appName, toolName);
 
     // B4: 只有 5xx / timeout / network 錯誤才計入 circuit breaker
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    if (isCircuitBreakerRelevant(errorMsg)) {
+    // 用 classified.code 判斷，不重新 parse error message
+    if (classified.code === "NETWORK_ERROR" || classified.code === "UPSTREAM_ERROR") {
       recordFailure(appName);
     }
 
@@ -154,10 +154,7 @@ function buildResultSummary(
     const data = JSON.parse(text);
     return {
       ok,
-      title: data.properties?.title?.title?.[0]?.plain_text
-        ?? data.properties?.Name?.title?.[0]?.plain_text
-        ?? data.title?.[0]?.plain_text
-        ?? undefined,
+      title: extractNotionTitle(data) ?? data.title?.[0]?.plain_text ?? undefined,
       url: typeof data.url === "string" ? data.url : undefined,
     };
   } catch {

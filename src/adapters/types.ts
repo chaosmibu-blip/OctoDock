@@ -146,6 +146,24 @@ export interface AppAdapter {
 // Adapter Registry 掃描模組時用來判斷是否為合法的 AppAdapter
 // ============================================================
 
+/**
+ * 從 Notion 物件的 properties 中提取標題文字（共用工具函式）
+ * 檢查 title 屬性和 Name 屬性（資料庫項目常用）
+ */
+export function extractNotionTitle(obj: Record<string, unknown>): string | undefined {
+  const props = obj.properties as Record<string, unknown> | undefined;
+  if (!props) return undefined;
+  if (props.title) {
+    const titleProp = props.title as { title?: Array<{ plain_text: string }> };
+    if (titleProp.title?.[0]?.plain_text) return titleProp.title[0].plain_text;
+  }
+  if (props.Name) {
+    const nameProp = props.Name as { title?: Array<{ plain_text: string }> };
+    if (nameProp.title?.[0]?.plain_text) return nameProp.title[0].plain_text;
+  }
+  return undefined;
+}
+
 /** 檢查一個物件是否實作了 AppAdapter 介面的所有必要屬性 */
 export function isAppAdapter(obj: unknown): obj is AppAdapter {
   return (

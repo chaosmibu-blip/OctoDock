@@ -301,8 +301,8 @@ function registerDoTool(
         // 移除 dryRun 參數避免傳給上游 API
         const { dryRun: _, ...cleanParams } = translatedParams;
         try {
-          const { getValidToken } = await import("@/services/token-manager");
-          const dryToken = await getValidToken(userId, app);
+          const { getValidToken: gvt } = await import("@/services/token-manager");
+          const dryToken = await gvt(userId, app);
           const dryContext = await getPreContext(
             userId, app, toolName, cleanParams,
             (tn, p, t) => adapter.execute(tn, p, t),
@@ -330,19 +330,22 @@ function registerDoTool(
         delete translatedParams.dryRun;
       }
 
-      // C1+C4: 操作前自動查目標現狀（不阻塞主操作，失敗就跳過）
+      // 取 token 一次，pre-context 和 executeWithMiddleware 共用
+      const { getValidToken } = await import("@/services/token-manager");
+      const token = await getValidToken(userId, app).catch(() => null);
+
+      // C1+C4: 操作前自動查目標現狀（只在有匹配 rule 時才跑）
       let preContext: Awaited<ReturnType<typeof getPreContext>> = null;
-      try {
-        // 需要 token 來查上游 API，先用 getValidToken 取
-        const { getValidToken } = await import("@/services/token-manager");
-        const preToken = await getValidToken(userId, app).catch(() => null);
-        preContext = await getPreContext(
-          userId, app, toolName, translatedParams,
-          preToken ? (tn, p, t) => adapter.execute(tn, p, t) : null,
-          preToken,
-        );
-      } catch (err) {
-        console.error("Pre-context failed:", err);
+      if (/create_page|replace_content|update|delete|trash|send/.test(toolName)) {
+        try {
+          preContext = await getPreContext(
+            userId, app, toolName, translatedParams,
+            token ? (tn, p, t) => adapter.execute(tn, p, t) : null,
+            token,
+          );
+        } catch (err) {
+          console.error("Pre-context failed:", err);
+        }
       }
 
       // 透過 middleware 執行（取 token → 呼叫 API → 記錄日誌）
@@ -351,8 +354,8 @@ function registerDoTool(
         app,
         toolName,
         translatedParams,
-        (p, token) => adapter.execute(toolName, p, token),
-        { agentInstanceId },
+        (p, t) => adapter.execute(toolName, p, t),
+        { agentInstanceId, prefetchedToken: token },
       );
 
       // 轉換成標準化的 DoResult
@@ -455,50 +458,32 @@ function registerDoTool(
       if (result.ok) {
         learnFromResult(userId, app, action, params, result).catch(() => {});
 
-        // C2+C3: 操作後基線比對 + 修正 pattern 偵測
-        try {
-          const postCheck = await runPostCheck(userId, app, toolName, translatedParams);
-          if (postCheck?.warnings && postCheck.warnings.length > 0) {
-            result.warnings = postCheck.warnings;
-          }
-        } catch (err) {
-          console.error("Post-check failed:", err);
-        }
+        // 並行執行 post-success 的 DB 查詢（C2、SOP、E1、E4），避免串行拖慢回應
+        const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string);
+        const [postCheckResult, sopResult, nextSuggestionResult, crossAppResult] = await Promise.allSettled([
+          runPostCheck(userId, app, toolName, translatedParams),
+          detectSopCandidate(userId),
+          suggestNextAction(userId, app, toolName),
+          keyword ? findCrossAppContext(userId, app, keyword) : Promise.resolve([]),
+        ]);
 
-        // ── Phase 8：SOP 自動辨識 ──
-        // 非同步偵測重複操作模式，有候選 SOP 時附在 suggestions 裡
-        try {
-          const sopCandidate = await detectSopCandidate(userId);
-          if (sopCandidate) {
-            result.suggestions = [sopCandidate.message];
-          }
-        } catch {
-          // 偵測失敗不影響主流程
+        // C2+C3: 操作後基線比對結果
+        if (postCheckResult.status === "fulfilled" && postCheckResult.value?.warnings?.length) {
+          result.warnings = postCheckResult.value.warnings;
         }
-
-        // E1: 操作鏈自動補全（非同步，但需結果放進 response）
-        try {
-          const nextSuggestion = await suggestNextAction(userId, app, toolName);
-          if (nextSuggestion) {
-            result.nextSuggestion = nextSuggestion;
-          }
-        } catch {
-          // 建議失敗不影響主流程
+        // SOP 自動辨識
+        if (sopResult.status === "fulfilled" && sopResult.value) {
+          result.suggestions = [sopResult.value.message];
         }
-
-        // E4: 跨 App 上下文連結
-        try {
-          const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string);
-          if (keyword) {
-            const crossApp = await findCrossAppContext(userId, app, keyword);
-            if (crossApp.length > 0) {
-              const existing = result.context ? result.context + "\n\n" : "";
-              const crossAppText = crossApp.map((c) => `- [${c.app}] ${c.action}: ${c.title} (${c.date})`).join("\n");
-              result.context = existing + "Related across apps:\n" + crossAppText;
-            }
-          }
-        } catch {
-          // 跨 App 查詢失敗不影響主流程
+        // E1: 操作鏈建議
+        if (nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
+          result.nextSuggestion = nextSuggestionResult.value;
+        }
+        // E4: 跨 App 關聯
+        if (crossAppResult.status === "fulfilled" && crossAppResult.value.length > 0) {
+          const existing = result.context ? result.context + "\n\n" : "";
+          const crossAppText = crossAppResult.value.map((c) => `- [${c.app}] ${c.action}: ${c.title} (${c.date})`).join("\n");
+          result.context = existing + "Related across apps:\n" + crossAppText;
         }
 
         // ── 回傳壓縮（Level 3）──

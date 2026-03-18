@@ -106,6 +106,8 @@ const APP_HINTS: Record<string, Record<string, ErrorHint>> = {
   },
 };
 
+import { extractHttpStatus } from "./error-types";
+
 /**
  * G8: 根據 error code 和 App 名稱取得最佳的錯誤提示
  * 優先用 per-app hint，fallback 到通用 hint
@@ -116,7 +118,7 @@ export function getErrorHint(
   errorMessage: string,
 ): string | null {
   // 1. 嘗試從 per-app hints 找 HTTP status
-  const httpStatus = extractStatusFromMessage(errorMessage);
+  const httpStatus = extractHttpStatus(errorMessage);
   if (httpStatus) {
     const appHint = APP_HINTS[appName]?.[String(httpStatus)];
     if (appHint) {
@@ -130,15 +132,5 @@ export function getErrorHint(
     return `💡 ${genericHint.explanation}\n→ ${genericHint.suggestion}`;
   }
 
-  return null;
-}
-
-/** 從錯誤訊息中提取 HTTP 狀態碼 */
-function extractStatusFromMessage(message: string): number | null {
-  const match = message.match(/(?:HTTP|status|Error)\s*:?\s*(\d{3})|[(\s](\d{3})[)\s]/i);
-  if (match) {
-    const code = parseInt(match[1] ?? match[2], 10);
-    if (code >= 400 && code < 600) return code;
-  }
   return null;
 }

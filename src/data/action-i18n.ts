@@ -214,6 +214,25 @@ const ACTION_ZH: Record<string, string> = {
   "threads.get_insights": "取得數據",
   "threads.get_profile": "取得個人檔案",
 
+  /* ── Canva ── */
+  "canva.list_designs": "設計列表",
+  "canva.get_design": "取得設計",
+  "canva.create_design": "建立設計",
+  "canva.export_design": "匯出設計",
+  "canva.get_export": "取得匯出狀態",
+  "canva.upload_asset": "上傳素材",
+  "canva.get_asset": "取得素材",
+  "canva.update_asset": "更新素材",
+  "canva.delete_asset": "刪除素材",
+  "canva.list_folder_items": "資料夾內容",
+  "canva.create_folder": "建立資料夾",
+  "canva.move_to_folder": "移動到資料夾",
+  "canva.delete_folder": "刪除資料夾",
+  "canva.get_comments": "取得留言",
+  "canva.create_comment": "新增留言",
+  "canva.reply_comment": "回覆留言",
+  "canva.get_profile": "取得個人檔案",
+
   /* ── Instagram ── */
   "instagram.publish": "發佈貼文",
   "instagram.get_posts": "取得貼文",

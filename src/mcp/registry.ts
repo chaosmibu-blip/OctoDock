@@ -36,6 +36,8 @@ async function importAllAdapters(): Promise<void> {
     import("@/adapters/discord"),
     import("@/adapters/threads"),
     import("@/adapters/instagram"),
+    // 設計
+    import("@/adapters/canva"),
   ]);
 
   for (const result of modules) {
