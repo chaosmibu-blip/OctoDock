@@ -89,15 +89,38 @@ export function checkParams(
     }
   }
 
-  // ── J3d: 日期格式檢查（Google Calendar） ──
+  // ── J3d: 日期格式檢查 + 時區自動補全（Google Calendar） ──
   if (app === "google_calendar") {
-    for (const key of ["start", "end", "timeMin", "timeMax"]) {
+    /** 偵測日期字串是否已帶時區（+HH:MM / -HH:MM / Z） */
+    const HAS_TZ = /([+-]\d{2}:\d{2}|Z)$/;
+    /** 預設時區偏移（台灣 UTC+8） */
+    const DEFAULT_TZ = "+08:00";
+
+    for (const key of ["start", "end", "timeMin", "timeMax", "time_min", "time_max"]) {
       const val = params[key];
-      if (val && typeof val === "string" && !ISO_DATE_REGEX.test(val)) {
+      if (!val || typeof val !== "string") continue;
+
+      // 格式不對 → 攔截
+      if (!ISO_DATE_REGEX.test(val)) {
         return {
           blocked: true,
-          error: `Invalid date format for ${key}: "${val}". Expected ISO 8601 format: 2026-03-18T10:00 or 2026-03-18`,
+          error: `Invalid date format for ${key}: "${val}". Expected ISO 8601 format: 2026-03-18T10:00+08:00 or 2026-03-18`,
         };
+      }
+
+      // 有時間但沒帶時區 → 自動補上預設時區
+      if (val.includes("T") && !HAS_TZ.test(val)) {
+        params[key] = `${val}${DEFAULT_TZ}`;
+        warnings.push(`Auto-appended timezone ${DEFAULT_TZ} to ${key}: ${params[key]}`);
+      }
+
+      // 純日期（2026-03-18）→ 補成完整的 ISO 時間戳
+      if (!val.includes("T")) {
+        const isEnd = key === "end" || key === "timeMax" || key === "time_max";
+        params[key] = isEnd
+          ? `${val}T23:59:00${DEFAULT_TZ}`
+          : `${val}T00:00:00${DEFAULT_TZ}`;
+        warnings.push(`Auto-expanded date-only ${key} to full timestamp: ${params[key]}`);
       }
     }
   }
