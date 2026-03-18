@@ -43,7 +43,7 @@ export async function GET() {
   );
 
   /* U17: 查詢每個 action 的使用次數（用於區分已解鎖/未解鎖） */
-  let actionUsage = new Map<string, number>();
+  const actionUsage = new Map<string, number>();
   if (session?.user?.id) {
     try {
       const usageRows = await db
