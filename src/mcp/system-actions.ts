@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { conversations, storedResults } from "@/db/schema";
+import { conversations, storedResults, operations } from "@/db/schema";
 import { eq, and, desc, lt, gt, or, isNull } from "drizzle-orm";
 import {
   queryMemory,
@@ -591,6 +591,306 @@ export async function executeSystemAction(
     case "schedule_delete": {
       await deleteSchedule(userId, params.schedule_id as string);
       return { ok: true, data: "Schedule deleted." };
+    }
+
+    // ============================================================
+    // G 組：System API — AI 操作輔助層
+    // ============================================================
+
+    // ── G1: batch_do — 批次執行多個 action ──
+    case "batch_do": {
+      const actions = params.actions as Array<{ app: string; action: string; params?: Record<string, unknown> }>;
+      if (!actions || !Array.isArray(actions) || actions.length === 0) {
+        return { ok: false, error: "actions array is required. Each item: {app, action, params?}" };
+      }
+      // 安全：禁止遞迴 batch
+      if (actions.some((a) => a.app === "system" && a.action === "batch_do")) {
+        return { ok: false, error: "Recursive batch_do is not allowed." };
+      }
+      const maxBatch = 20; // 批次上限
+      if (actions.length > maxBatch) {
+        return { ok: false, error: `Maximum ${maxBatch} actions per batch.` };
+      }
+
+      const mode = (params.mode as string) ?? "parallel";
+      const onError = (params.on_error as string) ?? "continue";
+
+      // 取得 executeDoAction 函式（避免循環 import，動態取得）
+      const { getAdapter } = await import("@/mcp/registry");
+      const { executeWithMiddleware } = await import("@/mcp/middleware/logger");
+      const { getValidToken } = await import("@/services/token-manager");
+
+      const executeSingle = async (a: { app: string; action: string; params?: Record<string, unknown> }): Promise<DoResult> => {
+        // system action 遞迴呼叫
+        if (a.app === "system") {
+          return executeSystemAction(userId, a.action, a.params ?? {});
+        }
+        const adapter = getAdapter(a.app);
+        if (!adapter) return { ok: false, error: `Adapter "${a.app}" not found` };
+        const toolName = adapter.actionMap?.[a.action];
+        if (!toolName) return { ok: false, error: `Unknown action "${a.action}" for ${a.app}` };
+        try {
+          const token = await getValidToken(userId, a.app);
+          const result = await adapter.execute(toolName, a.params ?? {}, token);
+          return { ok: !result.isError, data: result.content[0]?.text };
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
+        }
+      };
+
+      const results: DoResult[] = [];
+
+      if (mode === "sequential") {
+        for (const a of actions) {
+          const r = await executeSingle(a);
+          results.push(r);
+          if (!r.ok && onError === "abort") {
+            return { ok: false, data: results, error: `Aborted at step ${results.length}: ${r.error}` };
+          }
+        }
+      } else {
+        // parallel
+        const promises = actions.map((a) => executeSingle(a));
+        const settled = await Promise.allSettled(promises);
+        for (const s of settled) {
+          if (s.status === "fulfilled") results.push(s.value);
+          else results.push({ ok: false, error: s.reason?.message ?? "Unknown error" });
+        }
+      }
+
+      const successCount = results.filter((r) => r.ok).length;
+      return {
+        ok: successCount === results.length,
+        data: { results, summary: `${successCount}/${results.length} succeeded` },
+      };
+    }
+
+    // ── G5: resolve_name — 名稱解析為 ID ──
+    case "resolve_name": {
+      const name = params.name as string;
+      if (!name) return { ok: false, error: "name parameter is required." };
+      const targetApp = params.app as string | undefined;
+      const entityType = (params.type as string) ?? "page";
+
+      const { resolveIdentifier, learnIdentifier } = await import("@/services/memory-engine");
+      const { getAdapter, getAllAdapters } = await import("@/mcp/registry");
+      const { getValidToken } = await import("@/services/token-manager");
+
+      // 1. 先查 memory
+      if (targetApp) {
+        const resolved = await resolveIdentifier(userId, name, targetApp);
+        if (resolved) {
+          return { ok: true, data: { id: resolved.id, source: "memory", app: targetApp } };
+        }
+      }
+
+      // 2. 打 search API
+      const appsToSearch = targetApp ? [targetApp] : getAllAdapters().map((a) => a.name);
+      const candidates: Array<{ app: string; id: string; title: string; type: string }> = [];
+
+      for (const appName of appsToSearch) {
+        const adapter = getAdapter(appName);
+        if (!adapter) continue;
+        // 找 search action
+        const searchTool = adapter.actionMap?.["search"];
+        if (!searchTool) continue;
+
+        try {
+          const token = await getValidToken(userId, appName);
+          const result = await adapter.execute(searchTool, { query: name, filter: entityType }, token);
+          const text = result.content[0]?.text;
+          if (!text) continue;
+          const data = JSON.parse(text);
+          const items = (data.results ?? data.files ?? data.messages ?? []) as Array<Record<string, unknown>>;
+
+          for (const item of items.slice(0, 5)) {
+            const itemId = item.id as string;
+            if (!itemId) continue;
+            // 嘗試取標題
+            const props = item.properties as Record<string, unknown> | undefined;
+            const title =
+              (props?.title as { title?: Array<{ plain_text: string }> })?.title?.[0]?.plain_text ??
+              (props?.Name as { title?: Array<{ plain_text: string }> })?.title?.[0]?.plain_text ??
+              (item.name as string) ?? (item.subject as string) ?? "(untitled)";
+
+            if (title.toLowerCase().includes(name.toLowerCase())) {
+              candidates.push({ app: appName, id: itemId, title, type: (item.object as string) ?? entityType });
+            }
+          }
+        } catch {
+          // search 失敗不影響其他 App
+        }
+      }
+
+      if (candidates.length === 0) {
+        return { ok: false, error: `Could not resolve "${name}" to an ID.` };
+      }
+
+      // 精確匹配或唯一候選
+      if (candidates.length === 1) {
+        const c = candidates[0];
+        // 自動學習
+        learnIdentifier(userId, c.app, name, c.id, c.type).catch(() => {});
+        return { ok: true, data: { id: c.id, app: c.app, title: c.title, source: "search" } };
+      }
+
+      // 多個候選 → 回傳列表讓 AI 選
+      return {
+        ok: true,
+        data: {
+          ambiguous: true,
+          candidates: candidates.map((c) => ({ app: c.app, id: c.id, title: c.title })),
+          note: `Found ${candidates.length} candidates for "${name}". Pick one and call resolve_name again with the specific app.`,
+        },
+      };
+    }
+
+    // ── G6: param_suggest — 根據記憶和歷史建議參數 ──
+    case "param_suggest": {
+      const app = params.app as string;
+      const action = params.action as string;
+      if (!app || !action) return { ok: false, error: "app and action parameters are required." };
+
+      const { queryMemory: qm } = await import("@/services/memory-engine");
+      const { operations } = await import("@/db/schema");
+      const { getAdapter } = await import("@/mcp/registry");
+      const adapter = getAdapter(app);
+      const toolName = adapter?.actionMap?.[action];
+
+      const suggested: Record<string, unknown> = {};
+
+      // 1. 從 memory 找 pattern（default_parent、frequent_actions 等）
+      try {
+        const patterns = await qm(userId, `${app} ${action}`, "pattern");
+        for (const p of patterns) {
+          if (p.key === "default_parent" && p.appName === app) {
+            suggested.parent_id = p.value;
+          }
+          if (p.key.startsWith("default_") && p.appName === app) {
+            const paramName = p.key.replace("default_", "");
+            suggested[paramName] = p.value;
+          }
+        }
+      } catch {
+        // 記憶查詢失敗不影響
+      }
+
+      // 2. 從 operations 表找最近成功的同 action params
+      if (toolName) {
+        try {
+          const lastOp = await db
+            .select({ params: operations.params })
+            .from(operations)
+            .where(
+              and(
+                eq(operations.userId, userId),
+                eq(operations.appName, app),
+                eq(operations.toolName, toolName),
+                eq(operations.success, true),
+              ),
+            )
+            .orderBy(desc(operations.createdAt))
+            .limit(1);
+
+          if (lastOp.length > 0 && lastOp[0].params) {
+            const lastParams = lastOp[0].params as Record<string, unknown>;
+            // 只建議 ID 類參數（parent_id、database_id 等），不建議內容
+            for (const [k, v] of Object.entries(lastParams)) {
+              if (k.endsWith("_id") && typeof v === "string" && !(k in suggested)) {
+                suggested[k] = v;
+              }
+            }
+          }
+        } catch {
+          // 查詢失敗不影響
+        }
+      }
+
+      if (Object.keys(suggested).length === 0) {
+        return { ok: true, data: `No parameter suggestions for ${app}.${action} yet. Use it a few times first.` };
+      }
+
+      return { ok: true, data: { app, action, suggestedParams: suggested } };
+    }
+
+    // ── G7: multi_search — 跨 App 搜尋 ──
+    case "multi_search": {
+      const query = params.query as string;
+      if (!query) return { ok: false, error: "query parameter is required." };
+
+      const targetApps = params.apps as string[] | undefined;
+      const { getAdapter, getAllAdapters } = await import("@/mcp/registry");
+      const { getValidToken } = await import("@/services/token-manager");
+
+      // 決定要搜哪些 App
+      const { connectedApps: caTable } = await import("@/db/schema");
+      const connected = await db.select({ appName: caTable.appName })
+        .from(caTable)
+        .where(and(eq(caTable.userId, userId), eq(caTable.status, "active")));
+      const connectedNames = connected.map((c) => c.appName);
+      const appsToSearch = targetApps
+        ? targetApps.filter((a) => connectedNames.includes(a))
+        : connectedNames;
+
+      // 並行搜尋，每個 App 設 5 秒 timeout
+      const SEARCH_TIMEOUT_MS = 5_000;
+      const results: Array<{ app: string; type: string; title: string; url?: string; snippet?: string; updated_at?: string }> = [];
+
+      const searchPromises = appsToSearch.map(async (appName) => {
+        const adapter = getAdapter(appName);
+        if (!adapter) return;
+        const searchTool = adapter.actionMap?.["search"];
+        if (!searchTool) return;
+
+        try {
+          const token = await getValidToken(userId, appName);
+          const result = await Promise.race([
+            adapter.execute(searchTool, { query, max_results: 5 }, token),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), SEARCH_TIMEOUT_MS)),
+          ]);
+          if (!result) return; // timeout
+
+          const text = result.content[0]?.text;
+          if (!text) return;
+          const data = JSON.parse(text);
+
+          // 統一格式化
+          const items = (data.results ?? data.files ?? data.messages ?? data.items ?? []) as Array<Record<string, unknown>>;
+          for (const item of items.slice(0, 5)) {
+            const props = item.properties as Record<string, unknown> | undefined;
+            const title =
+              (props?.title as { title?: Array<{ plain_text: string }> })?.title?.[0]?.plain_text ??
+              (props?.Name as { title?: Array<{ plain_text: string }> })?.title?.[0]?.plain_text ??
+              (item.name as string) ?? (item.subject as string) ?? (item.snippet as string) ?? "(untitled)";
+            results.push({
+              app: appName,
+              type: (item.object as string) ?? (item.mimeType as string) ?? "item",
+              title,
+              url: (item.url as string) ?? (item.webViewLink as string) ?? (item.permalink as string),
+              snippet: (item.snippet as string)?.substring(0, 100),
+              updated_at: (item.last_edited_time as string) ?? (item.modifiedTime as string) ?? (item.date as string),
+            });
+          }
+        } catch {
+          // 搜尋失敗不影響其他 App
+        }
+      });
+
+      await Promise.allSettled(searchPromises);
+
+      if (results.length === 0) {
+        return { ok: true, data: `No results found for "${query}" across ${appsToSearch.length} apps.` };
+      }
+
+      return {
+        ok: true,
+        data: {
+          query,
+          totalResults: results.length,
+          searchedApps: appsToSearch,
+          results,
+        },
+      };
     }
 
     // ── 未知操作 ──
