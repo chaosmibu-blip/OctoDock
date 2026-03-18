@@ -1161,6 +1161,15 @@ async function execute(
     // ── 取得頁面（同時拉頁面屬性和完整內容區塊）──
     // F1: 用 fetchAllBlocks 處理分頁，確保超過 100 blocks 的頁面不會被截斷
     case "notion_get_page": {
+      // _metadataOnly: pre-context / dry-run 只需要頁面 metadata，跳過 block 抓取
+      if (params._metadataOnly) {
+        const page = await notionFetch(`/pages/${params.page_id}`, token);
+        return {
+          content: [
+            { type: "text", text: JSON.stringify({ page }, null, 2) },
+          ],
+        };
+      }
       const [page, allBlocks] = await Promise.all([
         notionFetch(`/pages/${params.page_id}`, token),
         fetchAllBlocks(params.page_id as string, token),
@@ -1226,9 +1235,19 @@ async function execute(
     }
 
     // ── 更新頁面屬性 ──
+    // H2 修正：支援 title 快捷參數，自動轉成 Notion properties 格式
+    // I2: 加 read-back 驗證，確認標題確實改了
     case "notion_update_page": {
       const body: Record<string, unknown> = {};
-      if (params.properties) body.properties = params.properties;
+      // 處理 properties（原生格式或快捷格式）
+      const props: Record<string, unknown> = (params.properties as Record<string, unknown>) ?? {};
+      // 快捷參數：title 自動轉成 Notion title property 格式
+      if (params.title && typeof params.title === "string") {
+        props.title = {
+          title: [{ type: "text", text: { content: params.title } }],
+        };
+      }
+      if (Object.keys(props).length > 0) body.properties = props;
       if (params.icon) body.icon = params.icon;
       if (params.cover) body.cover = params.cover;
 
@@ -1236,6 +1255,18 @@ async function execute(
         method: "PATCH",
         body: JSON.stringify(body),
       });
+      // I2: read-back 驗證 — 如果有改標題，確認標題確實變了
+      if (params.title && typeof params.title === "string") {
+        const verify = await notionFetch(`/pages/${params.page_id}`, token) as Record<string, unknown>;
+        const verifyProps = verify.properties as Record<string, unknown> | undefined;
+        const titleProp = verifyProps?.title as { title?: Array<{ plain_text: string }> } | undefined;
+        const actualTitle = titleProp?.title?.[0]?.plain_text;
+        if (actualTitle && actualTitle !== params.title) {
+          throw new Error(
+            `Update verification failed: title is "${actualTitle}", expected "${params.title}" (NOTION_UPDATE_VERIFY_FAILED)`,
+          );
+        }
+      }
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
@@ -1303,13 +1334,43 @@ async function execute(
     }
 
     // ── 移動頁面到不同父頁面 ──
+    // H1 修正：PATCH /pages 不支援改 parent（parent 是 read-only）
+    // 改用專用的 POST /pages/{id}/move endpoint（需 API version 2025-09-03+）
+    // I1: 加 read-back 驗證，確認 parent 確實改了
     case "notion_move_page": {
-      const result = await notionFetch(`/pages/${params.page_id}`, token, {
-        method: "PATCH",
-        body: JSON.stringify({
-          parent: { page_id: params.new_parent_id },
-        }),
-      });
+      const parentType = (params.parent_type as string) ?? "page_id";
+      const moveRes = await fetch(
+        `${NOTION_API}/pages/${params.page_id}/move`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Notion-Version": "2025-09-03",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            parent: { [parentType]: params.new_parent_id },
+          }),
+        },
+      );
+      if (!moveRes.ok) {
+        const error = await moveRes.json().catch(() => ({
+          message: moveRes.statusText,
+        }));
+        throw new Error(
+          `Notion API error (${moveRes.status}): ${(error as { message: string }).message} (NOTION_MOVE_ERROR)`,
+        );
+      }
+      const result = await moveRes.json();
+      // I1: read-back 驗證 — 確認 parent 確實變了
+      const verify = await notionFetch(`/pages/${params.page_id}`, token) as Record<string, unknown>;
+      const actualParent = verify.parent as Record<string, unknown> | undefined;
+      const actualParentId = actualParent?.[parentType] as string | undefined;
+      if (actualParentId && actualParentId !== params.new_parent_id) {
+        throw new Error(
+          `Move verification failed: parent is still "${actualParentId}", expected "${params.new_parent_id}" (NOTION_MOVE_VERIFY_FAILED)`,
+        );
+      }
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };

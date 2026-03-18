@@ -148,11 +148,12 @@ async function doPreContext(
     }
 
     // ── 查目標資訊（delete/replace 時查目標頁面基本資訊）──
+    // _metadataOnly: 跳過 block 抓取，避免大頁面超過 pre-context timeout
     if (rule.queryType === "target" && appName === "notion") {
       try {
         const result = await executeQuery(
           "notion_get_page",
-          { page_id: targetId },
+          { page_id: targetId, _metadataOnly: true },
           token,
         ) as { content: Array<{ text: string }> };
         const text = result?.content?.[0]?.text;

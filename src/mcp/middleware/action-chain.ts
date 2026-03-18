@@ -127,6 +127,34 @@ export async function getRecoveryHint(
  * E3: Action 推薦引擎
  * 統計用戶最常用的前 3 個 action + 最常用的參數
  */
+
+/** 需要從 suggestedParams 過濾掉的大型內容欄位（避免灌爆 context window） */
+const CONTENT_PARAM_EXCLUDE_LIST = new Set([
+  "content", "text", "body", "description", "message",
+  "markdown", "html", "raw", "data", "payload", "children",
+  "blocks", "rich_text", "caption",
+]);
+
+/** 過濾 suggestedParams，只保留 structural params（ID、名稱等） */
+function filterStructuralParams(
+  params: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    // 跳過大型內容欄位
+    if (CONTENT_PARAM_EXCLUDE_LIST.has(key)) continue;
+    // 跳過值是長字串的欄位（超過 200 字元視為內容）
+    if (typeof value === "string" && value.length > 200) continue;
+    // 跳過大型物件/陣列
+    if (typeof value === "object" && value !== null) {
+      const serialized = JSON.stringify(value);
+      if (serialized.length > 200) continue;
+    }
+    filtered[key] = value;
+  }
+  return Object.keys(filtered).length > 0 ? filtered : undefined;
+}
+
 export async function getLikelyNextActions(
   userId: string,
 ): Promise<Array<{ app: string; action: string; reason: string; suggestedParams?: Record<string, unknown> }>> {
@@ -170,11 +198,13 @@ export async function getLikelyNextActions(
         .limit(1);
 
       const actionName = row.toolName.replace(/^[^_]+_/, "");
+      // 過濾掉大型內容欄位，只保留 structural params
+      const rawParams = (lastParams[0]?.params as Record<string, unknown>) ?? {};
       results.push({
         app: row.appName,
         action: actionName,
         reason: `Used ${row.count} times in the past 30 days`,
-        suggestedParams: (lastParams[0]?.params as Record<string, unknown>) ?? undefined,
+        suggestedParams: filterStructuralParams(rawParams),
       });
     }
 

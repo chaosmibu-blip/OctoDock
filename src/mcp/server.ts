@@ -11,6 +11,8 @@ import { getPreContext } from "./middleware/pre-context";
 import { runPostCheck } from "./middleware/post-check";
 import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
 import { getErrorHint } from "./error-hints";
+import { checkParams } from "./middleware/param-guard";
+import { buildSmartHints } from "./middleware/suggestion-engine";
 import { learnIdentifier, resolveIdentifier, listMemory, queryMemory } from "@/services/memory-engine";
 import { detectSopCandidate } from "@/services/sop-detector";
 import {
@@ -294,6 +296,15 @@ function registerDoTool(
         params,
       );
 
+      // J3: 參數防呆 — 在執行前攔截明顯錯誤的參數
+      const guardResult = checkParams(app, toolName, translatedParams);
+      if (guardResult?.blocked) {
+        result = { ok: false, error: guardResult.error };
+        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+      }
+      // J3: 非攔截的警告，暫存到 guardWarnings，等 result 初始化後再合併
+      const guardWarnings = guardResult?.warnings;
+
       // C6: Dry-run 模式 — 破壞性操作預覽，不實際執行
       const isDryRun = translatedParams.dryRun === true;
       const isDryRunEligible = /delete|trash|replace|update/.test(toolName);
@@ -361,6 +372,12 @@ function registerDoTool(
       // 轉換成標準化的 DoResult
       result = toolResultToDoResult(toolResult, app);
 
+      // J3: 合併 param-guard 的警告到 result
+      if (guardWarnings && guardWarnings.length > 0) {
+        if (!result.warnings) result.warnings = [];
+        result.warnings.push(...guardWarnings);
+      }
+
       // C1: 把 pre-context 附在 DoResult 上（只在有資料時）
       if (preContext && result.ok) {
         const contextParts: string[] = [];
@@ -380,8 +397,12 @@ function registerDoTool(
         if (preContext.currentContent) {
           contextParts.push(`Current: "${preContext.currentContent.title}" (last edited ${preContext.currentContent.lastEdited})`);
         }
+        // I10: 只顯示有值的 pattern（count > 0），避免浪費 token
         if (preContext.patterns && preContext.patterns.length > 0) {
-          contextParts.push(`Detected patterns: ${preContext.patterns.map((p) => `${p.name}(×${p.count})`).join(", ")}`);
+          const activePatterns = preContext.patterns.filter((p) => p.count > 0);
+          if (activePatterns.length > 0) {
+            contextParts.push(`Detected patterns: ${activePatterns.map((p) => `${p.name}(×${p.count})`).join(", ")}`);
+          }
         }
         if (contextParts.length > 0) {
           // 合併既有的 context（session 用戶摘要），不覆蓋
@@ -471,10 +492,8 @@ function registerDoTool(
         if (postCheckResult.status === "fulfilled" && postCheckResult.value?.warnings?.length) {
           result.warnings = postCheckResult.value.warnings;
         }
-        // SOP 自動辨識
-        if (sopResult.status === "fulfilled" && sopResult.value) {
-          result.suggestions = [sopResult.value.message];
-        }
+        // SOP 自動辨識 — I8/J4 最終修正：靜默自動存 SOP，不產生 suggestion
+        // detectSopCandidate 現在直接自動存 SOP 並回傳 null，不再需要處理回傳值
         // E1: 操作鏈建議
         if (nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
           result.nextSuggestion = nextSuggestionResult.value;
@@ -516,6 +535,17 @@ function registerDoTool(
         }
       } catch {
         // Session 偵測失敗不影響主流程
+      }
+
+      // J4+I8 最終修正：SOP 已靜默自動存，suggestions 不再主動推送
+      // 只保留跨 App 下一步提示（user_notices）和 AI 決策輔助（ai_hints）
+      if (result.ok) {
+        const hints = buildSmartHints(userId, app, action, result.suggestions);
+        // ai_hints 和 user_notices 只在有值時才帶
+        if (hints.ai_hints.length > 0) result.ai_hints = hints.ai_hints;
+        if (hints.user_notices.length > 0) result.user_notices = hints.user_notices;
+        // suggestions 完全清除（SOP 不再推、跨 App 提示走 user_notices）
+        delete result.suggestions;
       }
 
       return {
@@ -652,8 +682,21 @@ function registerHelpTool(
 
         // 優先用 adapter.getSkill(action) — 包含完整範例
         if (adapterForAction.getSkill) {
-          const skillText = adapterForAction.getSkill(action);
+          let skillText = adapterForAction.getSkill(action);
           if (skillText) {
+            // I11: 跨 App 參數命名差異注意事項
+            const ACTION_WARNINGS: Record<string, Record<string, string>> = {
+              google_drive: {
+                search: "⚠️ Uses Google Drive query syntax, not natural language. Example: name contains 'report'",
+              },
+              google_calendar: {
+                quick_add: "⚠️ Chinese natural language parsing is unreliable. Use create_event with exact times instead.",
+              },
+            };
+            const warning = ACTION_WARNINGS[app]?.[action];
+            if (warning) {
+              skillText += `\n\n${warning}`;
+            }
             return {
               content: [{ type: "text" as const, text: skillText }],
             };
@@ -716,9 +759,49 @@ function registerHelpTool(
       }
 
       // 優先用 getSkill()（精簡版）
+      // I9: 對破壞性 action 加 ⚠️ destructive 標記
       if (adapter.getSkill) {
+        let skillText = adapter.getSkill();
+        // I9: 在 action 列表中標注破壞性操作
+        const destructivePatterns = ["delete", "trash", "replace_content", "clear", "archive"];
+        for (const pattern of destructivePatterns) {
+          const regex = new RegExp(`(- \\*\\*[^*]*${pattern}[^*]*\\*\\*)`, "g");
+          skillText = skillText.replace(regex, `$1 ⚠️`);
+        }
+        // J5b: 新 App 首次使用引導 — 從 memory 判斷是否第一次用這個 App
+        try {
+          const appPatterns = await queryMemory(userId, `frequent_actions:${app}`, "pattern");
+          const hasUsed = appPatterns.some((m) => m.value && m.value !== "0");
+          if (!hasUsed) {
+            // 首次使用引導：附加該 App 的 top 3 常用 action
+            const TOP3_HINTS: Record<string, string> = {
+              notion: "search（搜尋頁面）、create_page（建立頁面）、get_page（讀取頁面內容）",
+              gmail: "search（搜尋信件）、send（寄信）、read（讀取信件）",
+              google_calendar: "get_events（查詢事件）、create_event（建立事件）、quick_add（快速新增）",
+              google_drive: "search（搜尋檔案）、create（建立檔案）、download（下載）",
+              google_sheets: "read（讀取儲存格）、write（寫入儲存格）、append（追加資料列）",
+              google_tasks: "list_tasks（工作項目列表）、create_task（建立工作項目）、complete_task（完成工作項目）",
+              google_docs: "get（讀取文件）、create（建立文件）、append_text（追加文字）",
+              youtube: "search（搜尋影片）、get_video（取得影片資訊）、get_comments（取得留言）",
+              github: "list_repos（Repo 列表）、search_code（搜尋程式碼）、create_issue（建立 Issue）",
+              line: "send_text（發送文字）、broadcast（廣播訊息）、get_profile（取得用戶資料）",
+              telegram: "send_message（發送訊息）、send_photo（發送照片）、get_updates（取得更新）",
+              discord: "send_message（發送訊息）、get_messages（訊息列表）、create_channel（建立頻道）",
+              threads: "publish（發佈貼文）、get_posts（取得貼文）、reply（回覆貼文）",
+              instagram: "publish（發佈貼文）、get_posts（取得貼文）、get_comments（取得留言）",
+              canva: "list_designs（設計列表）、create_design（建立設計）、export_design（匯出設計）",
+              slack: "send_message（發送訊息）、list_channels（頻道列表）、get_messages（訊息歷史）",
+            };
+            const hint = TOP3_HINTS[app];
+            if (hint) {
+              skillText += `\n\n💡 第一次使用 ${adapter.displayName?.zh ?? app}？常用操作：${hint}`;
+            }
+          }
+        } catch {
+          // 記憶查詢失敗不影響
+        }
         return {
-          content: [{ type: "text" as const, text: adapter.getSkill() }],
+          content: [{ type: "text" as const, text: skillText }],
         };
       }
 

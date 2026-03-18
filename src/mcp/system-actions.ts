@@ -45,6 +45,7 @@ export const systemActionMap: Record<string, string> = {
   // 記憶批量操作
   memory_delete_app: "system_memory_delete_app",
   memory_delete_all: "system_memory_delete_all",
+  memory_delete_key: "system_memory_delete_key", // I7: 單筆記憶刪除
   memory_export: "system_memory_export",
   // 回傳壓縮：取得暫存的完整回傳
   get_stored: "system_get_stored",
@@ -294,6 +295,27 @@ export async function executeSystemAction(
       return { ok: true, data: `Deleted all ${count} memories.` };
     }
 
+    // ── I7: 單筆記憶刪除（用 key 刪除特定記憶） ──
+    case "memory_delete_key": {
+      const key = params.key as string;
+      if (!key) {
+        return { ok: false, error: "key parameter is required. Use memory_query to find the key first." };
+      }
+      try {
+        const { memory } = await import("@/db/schema");
+        const deleted = await db.delete(memory).where(
+          and(eq(memory.userId, userId), eq(memory.key, key)),
+        );
+        const count = deleted.rowCount ?? 0;
+        if (count === 0) {
+          return { ok: false, error: `No memory found with key "${key}".` };
+        }
+        return { ok: true, data: `Deleted memory with key "${key}".` };
+      } catch (err) {
+        return { ok: false, error: `Failed to delete memory: ${err instanceof Error ? err.message : "Unknown error"}` };
+      }
+    }
+
     // ── 導出用戶的所有記憶 ──
     case "memory_export": {
       const memories = await exportMemory(userId);
@@ -396,9 +418,9 @@ export async function executeSystemAction(
         return { ok: true, data: `No matching tools found for "${params.task}". Try octodock_help() to see all available apps.` };
       }
 
-      // 按分數排序，取前 5 個
+      // I6: 按分數排序，只取前 3 個（減少 AI 選擇困難）
       matches.sort((a, b) => b.score - a.score);
-      const top = matches.slice(0, 5);
+      const top = matches.slice(0, 3);
       const result = top.map(m =>
         `- **${m.app}.${m.action}** — ${m.description}`
       ).join("\n");

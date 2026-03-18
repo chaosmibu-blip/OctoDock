@@ -5,14 +5,13 @@ import { eq, and, desc, gte } from "drizzle-orm";
 // ============================================================
 // SOP 自動辨識引擎（Phase 8）
 // 從用戶的操作記錄中自動偵測重複的操作流程
-// 偵測到時，在 octodock_do 的回傳裡塞 suggestions
-// 讓正在連接的 AI 自然地問用戶「要不要存成 SOP？」
 //
-// 核心設計：OctoDock 負責觀察和記錄，AI 負責理解和溝通
-// 不需要內部 AI — 用規則引擎（LCS 序列比對）就能偵測
+// I8/J4 最終修正：偵測到重複 pattern → 靜默自動存成 SOP
+// 不問、不提示、不通知。AI 不會看通知，存就存了。
+// 下次 AI 做類似事時自然會從 SOP 裡找到。
 // ============================================================
 
-/** SOP 候選建議 */
+/** SOP 候選建議（保留介面向下相容） */
 export interface SopSuggestion {
   type: "sop_candidate";
   message: string;
@@ -79,20 +78,50 @@ export async function detectSopCandidate(
     // 過濾太短的模式（至少 2 步）
     if (candidate.pattern.length < 2) return null;
 
-    // 產生人類可讀的描述
+    // 產生 SOP 名稱（從序列的 app + action 組合命名）
     const steps = candidate.pattern
       .map((p) => {
         const [app, action] = p.split(".");
         return `${app} ${action}`;
       })
       .join(" → ");
+    const sopName = candidate.pattern
+      .map((p) => {
+        const parts = p.split(".");
+        return `${parts[0]}-${parts[1] ?? ""}`;
+      })
+      .join("_")
+      .replace(/[^a-zA-Z0-9_-]/g, "");
 
-    return {
-      type: "sop_candidate",
-      message: `你已經第 ${candidate.count} 次執行「${steps}」的流程。要存成 SOP 自動執行嗎？`,
-      pattern: candidate.pattern,
-      frequency: candidate.count,
-    };
+    // I8/J4 最終修正：靜默自動存成 SOP，不問不提示
+    try {
+      const { storeMemory, queryMemory } = await import("@/services/memory-engine");
+      // 檢查是否已存過這個 SOP（避免重複儲存）
+      const existing = await queryMemory(userId, sopName, "sop");
+      if (!existing.find((r) => r.key === sopName)) {
+        // 自動產生 SOP 內容（Markdown 格式）
+        const sopContent = [
+          `# ${sopName}`,
+          ``,
+          `自動偵測的操作流程（出現 ${candidate.count} 次）`,
+          ``,
+          `## 步驟`,
+          ...candidate.pattern.map((p, i) => {
+            const [app, action] = p.split(".");
+            return `${i + 1}. \`octodock_do(app:"${app}", action:"${action}")\``;
+          }),
+          ``,
+          `---`,
+          `*自動產生於 ${new Date().toISOString().substring(0, 10)}*`,
+        ].join("\n");
+        await storeMemory(userId, sopName, sopContent, "sop");
+      }
+    } catch (err) {
+      console.error("Auto SOP creation failed:", err);
+    }
+
+    // 回傳 null — 不再產生 suggestion 推給 AI
+    return null;
   } catch {
     return null;
   }

@@ -21,6 +21,9 @@ export type OctoDockErrorCode =
   | "TOKEN_REFRESH_FAILED"
   | "PERMISSION_DENIED"
   | "RATE_LIMITED"
+  | "NOT_FOUND"
+  | "INVALID_PARAMS"
+  | "CONFLICT"
   | "UPSTREAM_ERROR"
   | "NETWORK_ERROR"
   | "SERVICE_UNAVAILABLE"
@@ -69,6 +72,15 @@ export function classifyError(
   if (httpStatus === 403) {
     return { ...base, code: "PERMISSION_DENIED", retryable: false };
   }
+  if (httpStatus === 404) {
+    return { ...base, code: "NOT_FOUND", retryable: false };
+  }
+  if (httpStatus === 409) {
+    return { ...base, code: "CONFLICT", retryable: false };
+  }
+  if (httpStatus === 422) {
+    return { ...base, code: "INVALID_PARAMS", retryable: false };
+  }
   if (httpStatus === 429) {
     const retryAfterMs = extractRetryAfter(message) ?? DEFAULT_RATE_LIMIT_RETRY_MS;
     return { ...base, code: "RATE_LIMITED", retryable: true, retryAfterMs };
@@ -80,6 +92,26 @@ export function classifyError(
       retryable: true,
       upstream: { status: httpStatus, body: message },
     };
+  }
+
+  // ── 文字模式匹配（無 HTTP 狀態碼時的 fallback）──
+  if (
+    message.includes("not found") ||
+    message.includes("not_found") ||
+    message.includes("object not found") ||
+    message.includes("Could not find")
+  ) {
+    return { ...base, code: "NOT_FOUND", retryable: false };
+  }
+  if (
+    message.includes("validation_error") ||
+    message.includes("invalid") ||
+    message.includes("Invalid")
+  ) {
+    return { ...base, code: "INVALID_PARAMS", retryable: false };
+  }
+  if (message.includes("conflict") || message.includes("already exists")) {
+    return { ...base, code: "CONFLICT", retryable: false };
   }
 
   // ── 網路錯誤 ──

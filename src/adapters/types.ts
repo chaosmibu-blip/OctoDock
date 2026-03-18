@@ -72,7 +72,9 @@ export interface DoResult {
   errorCode?: string; // B1: 結構化錯誤碼（TOKEN_EXPIRED、RATE_LIMITED 等）
   retryable?: boolean; // B1: Agent 可據此決定是否重試
   retryAfterMs?: number; // B1: 建議重試間隔（毫秒）
-  suggestions?: string[]; // 建議（失敗時提供替代方案）
+  suggestions?: string[]; // 建議（已降級，僅供 debug / 向下相容）
+  ai_hints?: string[]; // I8修正: 給 AI 的決策輔助（偵測到重複模式、quota 剩餘等），AI 自己判斷要不要行動
+  user_notices?: string[]; // I8修正: 要轉達給使用者的通知（新 App 連接提醒等），AI 應在回覆中提及
   context?: string; // 用戶上下文摘要（僅 session 首次 do() 附帶）
   summary?: Record<string, unknown>; // C5: 操作結果可驗證摘要
   warnings?: string[]; // C2: 異常偵測警告
