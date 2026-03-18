@@ -89,11 +89,6 @@ export async function detectSopCandidate(
     const lastStep = candidate.pattern[candidate.pattern.length - 1];
     const [lastApp, lastAction] = lastStep.split(".");
     const verb = VERB_MAP[lastAction] ?? lastAction;
-    // 退化方案：提取不到目標時用 action 序列
-    const fallbackName = candidate.pattern.map((p) => {
-      const [a, act] = p.split(".");
-      return `${a} ${act}`;
-    }).join(" → ");
     const sopName = `${lastApp}: ${verb}`;  // 例如 "notion: 追加內容"
 
     // I8/J4 最終修正：靜默自動存成 SOP，不問不提示

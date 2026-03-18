@@ -385,9 +385,25 @@ function registerDoTool(
               // 取不到內容不阻塞主操作
             }
           }
-          // delete_page → 存 parent_id
-          if (toolName.includes("delete") && preContext.targetInfo) {
-            snapshot.parentId = translatedParams.parent_id;
+          // delete_page → 存 parent_id（從 GET 查詢取得，因為 delete 參數裡通常沒有 parent_id）
+          if (toolName.includes("delete") && token) {
+            try {
+              const pageData = await adapter.execute(
+                adapter.actionMap?.["get_page"] ?? `${app}_get_page`,
+                { page_id: translatedParams.page_id, _metadataOnly: true },
+                token,
+              );
+              const pageText = pageData.content[0]?.text;
+              if (pageText) {
+                const parsed = JSON.parse(pageText);
+                const page = parsed.page ?? parsed;
+                const parent = page.parent as Record<string, unknown> | undefined;
+                snapshot.parentId = parent?.page_id ?? parent?.database_id ?? parent?.workspace;
+                if (!snapshot.content) snapshot.content = pageText;
+              }
+            } catch {
+              // 取不到 parent 不阻塞
+            }
           }
           const undoKey = `undo:${app}:${toolName}:${Date.now()}`;
           await sm(userId, undoKey, JSON.stringify(snapshot), "context");
