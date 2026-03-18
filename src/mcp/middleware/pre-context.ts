@@ -51,6 +51,9 @@ export interface PreContextResult {
  * @param executeQuery 查詢上游 API 的函式（不直接 import adapter）
  * @param token OAuth token
  */
+/** 跨 App 查詢函式類型（由 server.ts 提供，避免 pre-context 直接 import adapter） */
+export type CrossAppQueryFn = (app: string, toolName: string, params: Record<string, unknown>) => Promise<unknown>;
+
 export async function getPreContext(
   userId: string,
   appName: string,
@@ -58,11 +61,12 @@ export async function getPreContext(
   params: Record<string, unknown>,
   executeQuery: ((toolName: string, params: Record<string, unknown>, token: string) => Promise<unknown>) | null,
   token: string | null,
+  crossAppQuery?: CrossAppQueryFn | null,
 ): Promise<PreContextResult | null> {
   // 帶 timeout 的包裝
   try {
     const result = await Promise.race([
-      doPreContext(userId, appName, toolName, params, executeQuery, token),
+      doPreContext(userId, appName, toolName, params, executeQuery, token, crossAppQuery),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), PRE_CONTEXT_TIMEOUT_MS)),
     ]);
     return result;
@@ -80,6 +84,7 @@ async function doPreContext(
   params: Record<string, unknown>,
   executeQuery: ((toolName: string, params: Record<string, unknown>, token: string) => Promise<unknown>) | null,
   token: string | null,
+  crossAppQuery?: CrossAppQueryFn | null,
 ): Promise<PreContextResult | null> {
   const context: PreContextResult = {};
   let hasData = false;
@@ -208,60 +213,45 @@ async function doPreContext(
   }
 
   // O1+U9: 跨 App 上下文 — create_page 時從 title 提取關鍵字查其他 App
-  if (/create_page/.test(toolName) && executeQuery && token) {
+  // 透過 crossAppQuery 回調查詢，不直接 import adapter/token-manager
+  if (/create_page/.test(toolName) && crossAppQuery) {
     const title = params.title as string | undefined;
     if (title && title.length > 2) {
       try {
         const crossResults: Array<{ app: string; type: string; title: string; date?: string }> = [];
-        // 查 Google Calendar 今天事件（如果不是 calendar App 本身）
+        // 查 Google Calendar 今天事件
         if (appName !== "google_calendar") {
           try {
             const today = new Date().toISOString().substring(0, 10);
-            const { getAdapter } = await import("@/mcp/registry");
-            const { getValidToken } = await import("@/services/token-manager");
-            const calAdapter = getAdapter("google_calendar");
-            if (calAdapter) {
-              const calToken = await getValidToken(userId, "google_calendar");
-              const calResult = await calAdapter.execute(
-                calAdapter.actionMap?.["get_events"] ?? "gcal_get_events",
-                { timeMin: `${today}T00:00:00Z`, timeMax: `${today}T23:59:59Z`, maxResults: 5 },
-                calToken,
-              );
-              const calText = calResult.content[0]?.text;
-              if (calText) {
-                // 從事件中找跟 title 關鍵字匹配的
-                const keyword = title.substring(0, 20).toLowerCase();
-                if (calText.toLowerCase().includes(keyword)) {
-                  crossResults.push({ app: "google_calendar", type: "event", title: `今天有「${title}」相關的行事曆事件`, date: today });
-                }
+            const calResult = await crossAppQuery(
+              "google_calendar", "gcal_get_events",
+              { timeMin: `${today}T00:00:00Z`, timeMax: `${today}T23:59:59Z`, maxResults: 5 },
+            ) as { content?: Array<{ text: string }> } | null;
+            const calText = (calResult as Record<string, unknown>)?.content
+              ? ((calResult as { content: Array<{ text: string }> }).content[0]?.text)
+              : null;
+            if (calText) {
+              const keyword = title.substring(0, 20).toLowerCase();
+              if (calText.toLowerCase().includes(keyword)) {
+                crossResults.push({ app: "google_calendar", type: "event", title: `今天有「${title}」相關的行事曆事件`, date: today });
               }
             }
-          } catch {
-            // Calendar 查詢失敗不影響
-          }
+          } catch { /* Calendar 查詢失敗不影響 */ }
         }
-        // 查 Gmail 最近信件（如果不是 gmail App 本身）
+        // 查 Gmail 最近信件
         if (appName !== "gmail") {
           try {
-            const { getAdapter } = await import("@/mcp/registry");
-            const { getValidToken } = await import("@/services/token-manager");
-            const gmailAdapter = getAdapter("gmail");
-            if (gmailAdapter) {
-              const gmailToken = await getValidToken(userId, "gmail");
-              const keyword = title.substring(0, 30);
-              const gmailResult = await gmailAdapter.execute(
-                gmailAdapter.actionMap?.["search"] ?? "gmail_search",
-                { query: keyword, max_results: 2 },
-                gmailToken,
-              );
-              const gmailText = gmailResult.content[0]?.text;
-              if (gmailText && !gmailText.includes("No results")) {
-                crossResults.push({ app: "gmail", type: "email", title: `有「${keyword}」相關的郵件` });
-              }
+            const keyword = title.substring(0, 30);
+            const gmailResult = await crossAppQuery(
+              "gmail", "gmail_search", { query: keyword, max_results: 2 },
+            ) as { content?: Array<{ text: string }> } | null;
+            const gmailText = (gmailResult as Record<string, unknown>)?.content
+              ? ((gmailResult as { content: Array<{ text: string }> }).content[0]?.text)
+              : null;
+            if (gmailText && !gmailText.includes("No results")) {
+              crossResults.push({ app: "gmail", type: "email", title: `有「${keyword}」相關的郵件` });
             }
-          } catch {
-            // Gmail 查詢失敗不影響
-          }
+          } catch { /* Gmail 查詢失敗不影響 */ }
         }
         if (crossResults.length > 0) {
           context.crossAppContext = crossResults;

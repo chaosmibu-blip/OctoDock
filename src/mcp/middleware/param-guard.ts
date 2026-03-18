@@ -45,22 +45,24 @@ export function checkParams(
       const val = params[key];
       if (!val || typeof val !== "string") continue;
 
-      // 短 UUID → 提示需要完整格式
-      if (NOTION_SHORT_UUID_REGEX.test(val) && !NOTION_UUID_REGEX.test(val)) {
-        // 嘗試自動補 dash
+      // 已經是完整 UUID → 通過
+      if (NOTION_UUID_REGEX.test(val)) continue;
+
+      // 短 UUID（32 hex 無 dash）→ 嘗試自動補 dash
+      if (NOTION_SHORT_UUID_REGEX.test(val)) {
         const formatted = `${val.slice(0, 8)}-${val.slice(8, 12)}-${val.slice(12, 16)}-${val.slice(16, 20)}-${val.slice(20)}`;
         if (NOTION_UUID_REGEX.test(formatted)) {
-          // 自動補全成功
           params[key] = formatted;
           warnings.push(`Auto-formatted ${key} from short UUID to full format: ${formatted}`);
+          continue;
         }
       }
 
-      // 格式明顯不對
-      if (val.length > 0 && val.length < 32 && !val.includes("-")) {
+      // 不完整的 UUID（含 dash 但不足 36 字元，或不含 dash 但不足 32 字元）→ 攔截
+      if (val.length > 0 && val.length < 36) {
         return {
           blocked: true,
-          error: `Invalid ${key} format. Notion requires full 36-char UUID (e.g., 320a9617-875f-81cd-ba5b-c6ceeb441de2). Use octodock_do(app:"notion", action:"search", params:{query:"..."}) to find the correct ID.`,
+          error: `Invalid ${key} format: "${val}" (${val.length} chars). Notion requires full 36-char UUID (e.g., 320a9617-875f-81cd-ba5b-c6ceeb441de2). Use octodock_do(app:"notion", action:"search", params:{query:"..."}) to find the correct ID.`,
         };
       }
     }

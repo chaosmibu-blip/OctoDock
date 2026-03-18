@@ -418,6 +418,41 @@ export async function executeSystemAction(
         }
       }
 
+      // U10: 也搜尋 system actions（undo_last、batch_do、sop_list 等）
+      const SYSTEM_ACTION_DESCS: Record<string, string> = {
+        memory_query: "Search user memories and preferences",
+        memory_store: "Store a memory or preference",
+        memory_delete_key: "Delete a specific memory by key",
+        memory_delete_app: "Delete all memories for an app",
+        memory_export: "Export all user memories",
+        import_memory: "Import memories from AI conversation",
+        batch_do: "Execute multiple actions in parallel or sequence",
+        resolve_name: "Resolve a human name to an ID across apps",
+        param_suggest: "Get suggested params based on history",
+        multi_search: "Search across multiple apps at once",
+        find_tool: "Find the right tool for a task",
+        undo_last: "Undo the last destructive operation (replace_content, delete_page)",
+        resource_group_create: "Create a cross-app resource group",
+        resource_group_get: "Get or list resource groups",
+        sop_list: "List saved SOPs",
+        sop_create: "Create a new SOP workflow",
+        sop_get: "Get SOP details",
+        note: "Quick note to memory",
+      };
+      for (const [actionName, desc] of Object.entries(SYSTEM_ACTION_DESCS)) {
+        const descLower = desc.toLowerCase();
+        let score = 0;
+        const words = task.split(/\s+/);
+        for (const word of words) {
+          if (word.length < 2) continue;
+          if (descLower.includes(word)) score += 2;
+          if (actionName.includes(word)) score += 3;
+        }
+        if (score > 0) {
+          matches.push({ app: "system", action: actionName, description: desc, score });
+        }
+      }
+
       if (matches.length === 0) {
         return { ok: true, data: `No matching tools found for "${params.task}". Try octodock_help() to see all available apps.` };
       }

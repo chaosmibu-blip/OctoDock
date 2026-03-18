@@ -92,16 +92,20 @@ export async function detectSopCandidate(
     const sopName = `${lastApp}: ${verb}`;  // 例如 "notion: 追加內容"
 
     // I8/J4 最終修正：靜默自動存成 SOP，不問不提示
+    // U15: 去重用 action 序列比對，不用名稱比對（名稱格式可能改變）
+    const patternKey = candidate.pattern.join(" → ");
     try {
       const { storeMemory, queryMemory } = await import("@/services/memory-engine");
-      // 檢查是否已存過這個 SOP（避免重複儲存）
-      const existing = await queryMemory(userId, sopName, "sop");
-      if (!existing.find((r) => r.key === sopName)) {
+      // 檢查是否已存過相同 action 序列的 SOP（不管名稱格式）
+      const allSops = await queryMemory(userId, "", "sop");
+      const hasSameSequence = allSops.some((r) => r.value.includes(patternKey) || r.value.includes(candidate.pattern.join("→")));
+      if (!hasSameSequence) {
         // 自動產生 SOP 內容（Markdown 格式）
         const sopContent = [
           `# ${sopName}`,
           ``,
           `自動偵測的操作流程（出現 ${candidate.count} 次）`,
+          `序列：${patternKey}`,
           ``,
           `## 步驟`,
           ...candidate.pattern.map((p, i) => {

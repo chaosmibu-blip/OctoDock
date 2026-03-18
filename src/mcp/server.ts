@@ -352,10 +352,20 @@ function registerDoTool(
       let preContext: Awaited<ReturnType<typeof getPreContext>> = null;
       if (/create_page|replace_content|update|delete|trash|send/.test(toolName)) {
         try {
+          // U9: 提供跨 App 查詢回調（不讓 pre-context 直接 import adapter）
+          const crossAppQuery = async (targetApp: string, targetTool: string, targetParams: Record<string, unknown>) => {
+            const { getAdapter: ga } = await import("@/mcp/registry");
+            const { getValidToken: gvt } = await import("@/services/token-manager");
+            const targetAdapter = ga(targetApp);
+            if (!targetAdapter) return null;
+            const t = await gvt(userId, targetApp);
+            return targetAdapter.execute(targetTool, targetParams, t);
+          };
           preContext = await getPreContext(
             userId, app, toolName, translatedParams,
             token ? (tn, p, t) => adapter.execute(tn, p, t) : null,
             token,
+            crossAppQuery,
           );
         } catch (err) {
           console.error("Pre-context failed:", err);
