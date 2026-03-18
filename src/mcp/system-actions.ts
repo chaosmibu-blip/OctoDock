@@ -55,6 +55,11 @@ export const systemActionMap: Record<string, string> = {
   schedule_create: "system_schedule_create",
   schedule_toggle: "system_schedule_toggle",
   schedule_delete: "system_schedule_delete",
+  // G 組：System API — AI 操作輔助層
+  batch_do: "system_batch_do",         // G1: 批次執行
+  resolve_name: "system_resolve_name", // G5: 名稱解析為 ID
+  param_suggest: "system_param_suggest", // G6: 參數建議
+  multi_search: "system_multi_search", // G7: 跨 App 搜尋
 };
 
 /**
@@ -86,6 +91,10 @@ export function getSystemSkill(): string {
   get_stored(ref, lines?) — retrieve full content of a truncated response (e.g. ref:"abc123", lines:"50-100")
   find_tool(task) — find the right app and action for a task (e.g. "send an email", "create a note")
   http_request(url, method?, headers?, body?) — make a generic HTTP request to any API (requires user's connected app token)
+  batch_do(actions, mode?, on_error?) — execute multiple actions at once. actions:[{app,action,params}], mode:"sequential"|"parallel"(default), on_error:"continue"(default)|"abort"
+  resolve_name(name, app?, type?) — resolve a human-readable name to an ID (e.g. "MIBU-Notes" → page ID). Searches memory first, then app APIs.
+  param_suggest(app, action) — get suggested default params for an action based on user's history and patterns
+  multi_search(query, apps?) — search across multiple apps at once. Returns unified format results. apps: array of app names (default: all connected)
 SOPs and schedules persist across agents and sessions.`;
 }
 

@@ -38,15 +38,13 @@ const APP_KEYS = [
   { name: "youtube", displayName: "YouTube", descKey: "app.youtube.desc" },
   // 開發
   { name: "github", displayName: "GitHub", descKey: "app.github.desc" },
-];
-
-/* 即將推出的 App — adapter 已寫好但尚未開放 */
-const COMING_SOON_APPS = [
-  { name: "line", displayName: "LINE" },
-  { name: "telegram", displayName: "Telegram" },
-  { name: "discord", displayName: "Discord" },
-  { name: "threads", displayName: "Threads" },
-  { name: "instagram", displayName: "Instagram" },
+  // 通訊
+  { name: "line", displayName: "LINE", descKey: "app.line.desc" },
+  { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc" },
+  { name: "discord", displayName: "Discord", descKey: "app.discord.desc" },
+  // 社群
+  { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
+  { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {
@@ -308,21 +306,6 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           </div>
         )}
 
-        {/* ── 即將推出 App ── */}
-        {COMING_SOON_APPS.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-gray-300 mb-3">
-              即將推出
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-              {COMING_SOON_APPS.map((app) => (
-                <div key={app.name} className="rounded-[10px] border border-dashed border-gray-200 bg-gray-50 p-3 text-center">
-                  <h3 className="text-xs text-gray-300">{app.displayName}</h3>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

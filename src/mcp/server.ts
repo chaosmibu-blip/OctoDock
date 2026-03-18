@@ -10,6 +10,7 @@ import { checkMcpRateLimit } from "@/lib/rate-limit";
 import { getPreContext } from "./middleware/pre-context";
 import { runPostCheck } from "./middleware/post-check";
 import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
+import { getErrorHint } from "./error-hints";
 import { learnIdentifier, resolveIdentifier, listMemory, queryMemory } from "@/services/memory-engine";
 import { detectSopCandidate } from "@/services/sop-detector";
 import {
@@ -418,6 +419,16 @@ function registerDoTool(
         if (betterError) {
           result.error = betterError;
         }
+        // G8: 錯誤說明 hint — 從 mapping table 取 App-specific 建議
+        try {
+          const hint = getErrorHint(app, result.errorCode ?? "", result.error ?? "");
+          if (hint) {
+            result.error = (result.error ?? "") + "\n\n" + hint;
+          }
+        } catch {
+          // hint 查詢失敗不影響錯誤回傳
+        }
+
         // E2: 失敗自動修復建議（結構化，從 operations 表查）
         try {
           const hint = await getRecoveryHint(userId, app, toolName);

@@ -164,6 +164,62 @@ const ACTION_ZH: Record<string, string> = {
   "github.list_runs": "Workflow 執行列表",
   "github.get_run": "取得 Workflow 執行",
   "github.create_review": "建立 PR Review",
+
+  /* ── LINE ── */
+  "line.send_text": "發送文字",
+  "line.send_image": "發送圖片",
+  "line.send_sticker": "發送貼圖",
+  "line.send_flex": "發送 Flex 訊息",
+  "line.reply": "回覆訊息",
+  "line.multicast": "群發訊息",
+  "line.broadcast": "廣播訊息",
+  "line.get_profile": "取得用戶資料",
+  "line.get_group_summary": "取得群組資訊",
+  "line.get_group_members": "群組成員列表",
+  "line.create_rich_menu": "建立圖文選單",
+  "line.get_message_content": "取得訊息內容",
+
+  /* ── Telegram ── */
+  "telegram.send_message": "發送訊息",
+  "telegram.send_photo": "發送照片",
+  "telegram.send_document": "發送檔案",
+  "telegram.send_location": "發送位置",
+  "telegram.edit_message": "編輯訊息",
+  "telegram.delete_message": "刪除訊息",
+  "telegram.pin_message": "釘選訊息",
+  "telegram.get_chat": "取得聊天資訊",
+  "telegram.get_chat_admins": "管理員列表",
+  "telegram.set_webhook": "設定 Webhook",
+  "telegram.get_updates": "取得更新",
+  "telegram.answer_callback": "回應按鈕",
+
+  /* ── Discord ── */
+  "discord.send_message": "發送訊息",
+  "discord.edit_message": "編輯訊息",
+  "discord.delete_message": "刪除訊息",
+  "discord.get_messages": "訊息列表",
+  "discord.add_reaction": "新增反應",
+  "discord.create_channel": "建立頻道",
+  "discord.get_guild": "取得伺服器",
+  "discord.get_guild_channels": "頻道列表",
+  "discord.list_members": "成員列表",
+  "discord.create_thread": "建立討論串",
+  "discord.get_roles": "角色列表",
+  "discord.create_webhook": "建立 Webhook",
+
+  /* ── Threads ── */
+  "threads.publish": "發佈貼文",
+  "threads.get_posts": "取得貼文",
+  "threads.reply": "回覆貼文",
+  "threads.get_insights": "取得數據",
+  "threads.get_profile": "取得個人檔案",
+
+  /* ── Instagram ── */
+  "instagram.publish": "發佈貼文",
+  "instagram.get_posts": "取得貼文",
+  "instagram.reply_comment": "回覆留言",
+  "instagram.get_comments": "取得留言",
+  "instagram.get_insights": "取得數據",
 };
 
 /** 自動直譯 fallback：snake_case → 中文（取底線分段用空格連接） */
