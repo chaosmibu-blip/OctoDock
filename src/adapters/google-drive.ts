@@ -314,17 +314,19 @@ function formatResponse(action: string, rawData: unknown): string {
 
   switch (action) {
     // 搜尋結果：檔案清單摘要
+    // F1: rawData 可能是 { files: [...], nextPageToken } 或直接是陣列
     case "search": {
-      if (Array.isArray(rawData)) {
-        if (rawData.length === 0) return "No files found.";
-        return rawData
-          .map(
-            (f: any) =>
-              `- ${f.name} (${mimeToLabel(f.mimeType)}) id:${f.id} url:${f.webViewLink ?? "N/A"}`,
-          )
-          .join("\n");
-      }
-      return String(rawData);
+      const data = rawData as Record<string, unknown>;
+      const files = Array.isArray(rawData) ? rawData : (data.files as any[]);
+      if (!files || files.length === 0) return "No files found.";
+      let result = files
+        .map(
+          (f: any) =>
+            `- ${f.name} (${mimeToLabel(f.mimeType)}) id:${f.id} url:${f.webViewLink ?? "N/A"}`,
+        )
+        .join("\n");
+      if (data.nextPageToken) result += `\n\n_More results available. Use page_token: "${data.nextPageToken}" to see next page._`;
+      return result;
     }
     // 取得檔案：詳細資訊
     case "get_file": {

@@ -372,14 +372,15 @@ function formatResponse(action: string, rawData: unknown): string {
 
   switch (action) {
     // 搜尋結果：精簡摘要列表
+    // F1: rawData 可能是 { messages: [...], nextPageToken } 或直接是陣列
     case "search": {
-      if (Array.isArray(rawData)) {
-        if (rawData.length === 0) return "No emails found.";
-        return rawData.map((e: any) =>
-          `- **${e.subject}** from ${e.from} (${e.date})\n  ID: ${e.id} | ${e.snippet}`
-        ).join("\n");
-      }
-      return String(rawData);
+      const messages = Array.isArray(rawData) ? rawData : (data.messages as any[]);
+      if (!messages || messages.length === 0) return "No emails found.";
+      let result = messages.map((e: any) =>
+        `- **${e.subject}** from ${e.from} (${e.date})\n  ID: ${e.id} | ${e.snippet}`
+      ).join("\n");
+      if (data.nextPageToken) result += `\n\n_More results available. Use page_token: "${data.nextPageToken}" to see next page._`;
+      return result;
     }
     // 閱讀結果：完整郵件格式（含附件列表）
     case "read": {
@@ -424,14 +425,15 @@ function formatResponse(action: string, rawData: unknown): string {
       return `Attachment downloaded. Size: ${size ?? "unknown"} bytes. Data included in response.`;
     }
     // 對話串列表
+    // F1: rawData 可能是 { threads: [...], nextPageToken } 或直接是陣列
     case "list_threads": {
-      if (Array.isArray(rawData)) {
-        if (rawData.length === 0) return "No threads found.";
-        return rawData.map((t: any) =>
-          `- **${t.subject}** from ${t.lastFrom} (${t.lastDate})\n  Thread ID: ${t.id} | ${t.messageCount} messages | ${t.snippet}`
-        ).join("\n");
-      }
-      return JSON.stringify(rawData, null, 2);
+      const threads = Array.isArray(rawData) ? rawData : (data.threads as any[]);
+      if (!threads || threads.length === 0) return "No threads found.";
+      let result = threads.map((t: any) =>
+        `- **${t.subject}** from ${t.lastFrom} (${t.lastDate})\n  Thread ID: ${t.id} | ${t.messageCount} messages | ${t.snippet}`
+      ).join("\n");
+      if (data.nextPageToken) result += `\n\n_More results available. Use page_token: "${data.nextPageToken}" to see next page._`;
+      return result;
     }
     // 對話串完整內容
     case "get_thread": {
