@@ -12,7 +12,7 @@ import { runPostCheck } from "./middleware/post-check";
 import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
 import { getErrorHint } from "./error-hints";
 import { checkParams } from "./middleware/param-guard";
-import { buildSmartHints } from "./middleware/suggestion-engine";
+// suggestion-engine 已廢棄（N 組實測：AI 完全不看 suggestions/ai_hints/user_notices）
 import { learnIdentifier, resolveIdentifier, listMemory, queryMemory } from "@/services/memory-engine";
 import { detectSopCandidate } from "@/services/sop-detector";
 import {
@@ -537,16 +537,9 @@ function registerDoTool(
         // Session 偵測失敗不影響主流程
       }
 
-      // J4+I8 最終修正：SOP 已靜默自動存，suggestions 不再主動推送
-      // 只保留跨 App 下一步提示（user_notices）和 AI 決策輔助（ai_hints）
-      if (result.ok) {
-        const hints = buildSmartHints(userId, app, action, result.suggestions);
-        // ai_hints 和 user_notices 只在有值時才帶
-        if (hints.ai_hints.length > 0) result.ai_hints = hints.ai_hints;
-        if (hints.user_notices.length > 0) result.user_notices = hints.user_notices;
-        // suggestions 完全清除（SOP 不再推、跨 App 提示走 user_notices）
-        delete result.suggestions;
-      }
+      // N 組實測結論：AI 完全不看 suggestions/ai_hints/user_notices
+      // 所有「提示」機制已轉為靜默執行（SOP 自動存）或廢棄
+      delete result.suggestions;
 
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result) }],
