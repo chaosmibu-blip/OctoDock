@@ -176,22 +176,19 @@ AI 可以用名稱（不用 ID）操作：
 - **新增 App 研究**：`.claude/skills/new-app-research.md` — 新增 App 時先研究 API 再寫程式碼
 - **架構思維**：`.claude/skills/architecture-thinking.md` — 架構總覽 + 碰到問題時判斷改架構還是改個別 App
 
-### App 操作手冊（設定 + 維護 + AI 操作指南）
-- `.claude/skills/setup-notion.md` — Notion
-- `.claude/skills/setup-gmail.md` — Gmail
-- `.claude/skills/setup-google-calendar.md` — Google Calendar
-- `.claude/skills/setup-google-drive.md` — Google Drive
-- `.claude/skills/setup-google-sheets.md` — Google Sheets
-- `.claude/skills/setup-google-tasks.md` — Google Tasks
-- `.claude/skills/setup-google-docs.md` — Google Docs
-- `.claude/skills/setup-youtube.md` — YouTube
-- `.claude/skills/setup-github.md` — GitHub
-- `.claude/skills/setup-line.md` — LINE
-- `.claude/skills/setup-telegram.md` — Telegram
-- `.claude/skills/setup-threads.md` — Threads
-- `.claude/skills/setup-instagram.md` — Instagram
-- `.claude/skills/setup-discord.md` — Discord
-- `.claude/skills/setup-canva.md` — Canva
+### App 設定指南（所有 App 的 OAuth / API Key / Bot Token 設定流程）
+- `.claude/skills/setup-guide.md` — 16 個 App 的設定指南（按認證類型分組）
+
+### MCP 中介層（server.ts 管線中的 middleware）
+- `src/mcp/middleware/logger.ts` — 操作中介層：取 token → 執行 → 記錄
+- `src/mcp/middleware/circuit-breaker.ts` — Per-app 斷路器（B4）
+- `src/mcp/middleware/pre-context.ts` — 操作前查目標現狀（C1+C4）
+- `src/mcp/middleware/post-check.ts` — 操作後基線比對（C2+C3）
+- `src/mcp/middleware/action-chain.ts` — 操作鏈建議 + 跨 App 關聯（E1+E4）
+- `src/mcp/middleware/param-guard.ts` — 參數防呆（J3：UUID 補全、查詢語法轉換）
+- `src/mcp/error-types.ts` — 統一錯誤分類（B1）
+- `src/mcp/error-hints.ts` — App-specific 錯誤說明（G8）
+- `src/mcp/response-formatter.ts` — 統一回傳格式（J1）
 
 ### Agents
 - **開發指南**：`.claude/agents/octodock-dev.md`

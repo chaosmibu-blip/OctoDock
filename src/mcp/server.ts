@@ -79,6 +79,9 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   // ── 註冊 octodock_help ──
   registerHelpTool(server, user.id, connectedAppNames);
 
+  // ── R: 註冊 octodock_sop — 流程捷徑（SOP + 組合技） ──
+  registerSopTool(server, user.id);
+
   return server;
 }
 
@@ -356,6 +359,40 @@ function registerDoTool(
           );
         } catch (err) {
           console.error("Pre-context failed:", err);
+        }
+      }
+
+      // K2: 高風險操作執行前自動存快照（replace_content, delete_page）
+      if (/replace_content|delete_page/.test(toolName) && preContext) {
+        try {
+          const { storeMemory: sm } = await import("@/services/memory-engine");
+          const snapshot: Record<string, unknown> = {
+            action: toolName.includes("replace") ? "replace_content" : "delete_page",
+            pageId: translatedParams.page_id as string,
+            title: preContext.currentContent?.title ?? preContext.targetInfo?.title,
+          };
+          // replace_content → 存執行前的完整內容（透過 get_page 取得）
+          if (toolName.includes("replace") && token) {
+            try {
+              const pageResult = await adapter.execute(
+                adapter.actionMap?.["get_page"] ?? `${app}_get_page`,
+                { page_id: translatedParams.page_id, _metadataOnly: false },
+                token,
+              );
+              const text = pageResult.content[0]?.text;
+              if (text) snapshot.content = text;
+            } catch {
+              // 取不到內容不阻塞主操作
+            }
+          }
+          // delete_page → 存 parent_id
+          if (toolName.includes("delete") && preContext.targetInfo) {
+            snapshot.parentId = translatedParams.parent_id;
+          }
+          const undoKey = `undo:${app}:${toolName}:${Date.now()}`;
+          await sm(userId, undoKey, JSON.stringify(snapshot), "context");
+        } catch (err) {
+          console.error("Undo snapshot failed:", err);
         }
       }
 
@@ -1205,4 +1242,72 @@ function extractDefaultSummary(rawData: unknown): Record<string, unknown> | null
   if (typeof obj.name === "string") { summary.name = obj.name; hasData = true; }
 
   return hasData ? summary : null;
+}
+
+// ============================================================
+// R: octodock_sop — 流程捷徑（SOP + 組合技）
+// AI 在執行前先查 sop，有匹配的就直接用（更快）
+// 分層揭露：無參數列 top 5、帶 category 列該 App、帶 name 執行
+// ============================================================
+
+function registerSopTool(
+  server: McpServer,
+  userId: string,
+): void {
+  server.tool(
+    "octodock_sop",
+    "List saved workflows (SOPs and combo actions) that compress multi-step operations into one call. Check here BEFORE using octodock_do — if a matching workflow exists, use it instead. Workflows are auto-generated from repeated usage patterns and user-defined rules.",
+    {
+      category: z.string().optional().describe("Filter by app name (e.g. 'notion', 'gmail')"),
+      name: z.string().optional().describe("Execute a specific SOP by name"),
+    },
+    async (args) => {
+      const { category, name } = args as { category?: string; name?: string };
+
+      // 帶 name → 顯示完整步驟定義
+      if (name) {
+        const results = await queryMemory(userId, name, "sop");
+        const match = results.find((r) => r.key === name);
+        if (!match) {
+          return { content: [{ type: "text" as const, text: `SOP "${name}" not found. Use octodock_sop() to list available workflows.` }] };
+        }
+        return { content: [{ type: "text" as const, text: match.value }] };
+      }
+
+      // 取所有 SOP
+      const allSops = await listMemory(userId);
+      let sops = allSops.filter((m) => m.category === "sop");
+
+      // 帶 category → 過濾該 App 相關的
+      if (category) {
+        sops = sops.filter((s) => s.key.includes(category) || s.value.includes(category));
+      }
+
+      if (sops.length === 0) {
+        const msg = category
+          ? `No workflows found for "${category}". Use OctoDock more — workflows are auto-generated from repeated usage patterns.`
+          : "No workflows saved yet. Use OctoDock more — workflows are auto-generated from repeated usage patterns.";
+        return { content: [{ type: "text" as const, text: msg }] };
+      }
+
+      // R: 依最近 7 天使用頻率排序，只顯示 top 5
+      // TODO: 從 operations 表查使用頻率排序（目前先按建立時間）
+      const top = sops.slice(0, 5);
+      const list = top.map((s) => {
+        // 從 SOP 內容提取摘要（第一行標題或前 80 字元）
+        const firstLine = s.value.split("\n").find((l) => l.trim().length > 0) ?? s.key;
+        const summary = firstLine.replace(/^#\s*/, "").substring(0, 80);
+        return `- **${s.key}** — ${summary}`;
+      }).join("\n");
+
+      const moreText = sops.length > 5 ? `\n\n(${sops.length - 5} more — use octodock_sop(category:"app_name") to filter)` : "";
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: `## Saved Workflows\n\n${list}${moreText}\n\nUse octodock_sop(name:"...") to see full steps and execute.`,
+        }],
+      };
+    },
+  );
 }

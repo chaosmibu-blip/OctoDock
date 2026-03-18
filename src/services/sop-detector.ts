@@ -78,20 +78,23 @@ export async function detectSopCandidate(
     // 過濾太短的模式（至少 2 步）
     if (candidate.pattern.length < 2) return null;
 
-    // 產生 SOP 名稱（從序列的 app + action 組合命名）
-    const steps = candidate.pattern
-      .map((p) => {
-        const [app, action] = p.split(".");
-        return `${app} ${action}`;
-      })
-      .join(" → ");
-    const sopName = candidate.pattern
-      .map((p) => {
-        const parts = p.split(".");
-        return `${parts[0]}-${parts[1] ?? ""}`;
-      })
-      .join("_")
-      .replace(/[^a-zA-Z0-9_-]/g, "");
+    // P: SOP 命名 — 最終動作 + 目標物件（人話）
+    // 中間步驟（search、get_page 等）是手段不是目的，不出現在名稱裡
+    const VERB_MAP: Record<string, string> = {
+      create_page: "建立頁面", append_content: "追加內容", replace_content: "替換內容",
+      send: "寄信", create_event: "建立事件", create_task: "建立任務",
+      create_issue: "建立 Issue", delete_page: "刪除頁面", create: "建立",
+      update: "更新", delete: "刪除", search: "搜尋", get: "讀取",
+    };
+    const lastStep = candidate.pattern[candidate.pattern.length - 1];
+    const [lastApp, lastAction] = lastStep.split(".");
+    const verb = VERB_MAP[lastAction] ?? lastAction;
+    // 退化方案：提取不到目標時用 action 序列
+    const fallbackName = candidate.pattern.map((p) => {
+      const [a, act] = p.split(".");
+      return `${a} ${act}`;
+    }).join(" → ");
+    const sopName = `${lastApp}: ${verb}`;  // 例如 "notion: 追加內容"
 
     // I8/J4 最終修正：靜默自動存成 SOP，不問不提示
     try {

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { conversations, storedResults, operations } from "@/db/schema";
-import { eq, and, desc, lt, gt, or, isNull } from "drizzle-orm";
+import { eq, and, desc, lt, gt, or, isNull, sql } from "drizzle-orm";
 import {
   queryMemory,
   storeMemory,
@@ -61,6 +61,10 @@ export const systemActionMap: Record<string, string> = {
   resolve_name: "system_resolve_name", // G5: 名稱解析為 ID
   param_suggest: "system_param_suggest", // G6: 參數建議
   multi_search: "system_multi_search", // G7: 跨 App 搜尋
+  // K 組：跨 App 資源群組 + undo
+  resource_group_create: "system_resource_group_create", // K1: 建立資源群組
+  resource_group_get: "system_resource_group_get",       // K1: 取得資源群組
+  undo_last: "system_undo_last",                         // K2: 復原最近一次高風險操作
 };
 
 /**
@@ -913,6 +917,128 @@ export async function executeSystemAction(
           results,
         },
       };
+    }
+
+    // ── K1: 跨 App 資源群組 — 建立 ──
+    case "resource_group_create": {
+      const name = params.name as string;
+      const resources = params.resources as Array<{ app: string; id: string; label?: string }>;
+      if (!name) return { ok: false, error: "name parameter is required." };
+      if (!resources || !Array.isArray(resources) || resources.length === 0) {
+        return { ok: false, error: "resources array is required. Each item: {app, id, label?}" };
+      }
+      const key = `resource_group:${name}`;
+      await storeMemory(userId, key, JSON.stringify(resources), "context");
+      return { ok: true, data: `Resource group "${name}" created with ${resources.length} resources.` };
+    }
+
+    // ── K1: 跨 App 資源群組 — 取得 ──
+    case "resource_group_get": {
+      const name = params.name as string;
+      if (!name) {
+        // 不帶 name → 列出所有資源群組
+        const allGroups = await queryMemory(userId, "resource_group:", "context");
+        if (allGroups.length === 0) {
+          return { ok: true, data: "No resource groups defined yet." };
+        }
+        const list = allGroups.map((g) => {
+          const groupName = g.key.replace("resource_group:", "");
+          try {
+            const resources = JSON.parse(g.value) as Array<{ app: string; id: string; label?: string }>;
+            return `- **${groupName}**: ${resources.map((r) => `${r.app}:${r.label ?? r.id}`).join(", ")}`;
+          } catch {
+            return `- **${groupName}**`;
+          }
+        });
+        return { ok: true, data: `Resource groups:\n\n${list.join("\n")}` };
+      }
+      // 帶 name → 取得特定群組
+      const key = `resource_group:${name}`;
+      const results = await queryMemory(userId, key, "context");
+      const match = results.find((r) => r.key === key);
+      if (!match) {
+        return { ok: false, error: `Resource group "${name}" not found.` };
+      }
+      try {
+        const resources = JSON.parse(match.value);
+        return { ok: true, data: { name, resources } };
+      } catch {
+        return { ok: true, data: { name, resources: match.value } };
+      }
+    }
+
+    // ── K2: undo_last — 復原最近一次高風險操作 ──
+    case "undo_last": {
+      const targetApp = (params.app as string) ?? "notion";
+      const { memory } = await import("@/db/schema");
+
+      // 從 memory 找最近的 undo 快照
+      const snapshots = await db.select({ key: memory.key, value: memory.value })
+        .from(memory)
+        .where(
+          and(
+            eq(memory.userId, userId),
+            eq(memory.category, "context"),
+            sql`key LIKE ${"undo:" + targetApp + ":%"}`,
+          ),
+        )
+        .orderBy(desc(memory.createdAt))
+        .limit(1);
+
+      if (snapshots.length === 0) {
+        return { ok: false, error: `No undo snapshot found for "${targetApp}". Only replace_content and delete_page operations create snapshots.` };
+      }
+
+      const snapshot = snapshots[0];
+      try {
+        const data = JSON.parse(snapshot.value) as {
+          action: string;
+          pageId: string;
+          title?: string;
+          content?: string;
+          parentId?: string;
+        };
+
+        const { getAdapter } = await import("@/mcp/registry");
+        const { getValidToken } = await import("@/services/token-manager");
+        const adapter = getAdapter(targetApp);
+        if (!adapter) return { ok: false, error: `Adapter "${targetApp}" not found.` };
+        const token = await getValidToken(userId, targetApp);
+
+        // 根據快照類型執行反向操作
+        if (data.action === "replace_content" && data.content) {
+          // 反向操作：用快照的 content 取代目前內容
+          await adapter.execute(
+            adapter.actionMap?.["replace_content"] ?? `${targetApp}_replace_content`,
+            { page_id: data.pageId, content: data.content },
+            token,
+          );
+          // 刪除已用的快照
+          await db.delete(memory).where(
+            and(eq(memory.userId, userId), eq(memory.key, snapshot.key)),
+          );
+          return { ok: true, data: `Undo successful. Restored content of "${data.title ?? data.pageId}".` };
+        }
+
+        if (data.action === "delete_page" && data.parentId) {
+          // 反向操作：重新建立頁面（無法完全復原，但至少建回標題和 parent）
+          const createTool = adapter.actionMap?.["create_page"] ?? `${targetApp}_create_page`;
+          const result = await adapter.execute(
+            createTool,
+            { title: data.title ?? "Restored page", parent_id: data.parentId, content: data.content ?? "" },
+            token,
+          );
+          await db.delete(memory).where(
+            and(eq(memory.userId, userId), eq(memory.key, snapshot.key)),
+          );
+          const text = result.content[0]?.text;
+          return { ok: true, data: `Undo successful. Re-created "${data.title ?? "page"}" under original parent.\n${text ?? ""}` };
+        }
+
+        return { ok: false, error: `Unsupported undo action: ${data.action}` };
+      } catch (err) {
+        return { ok: false, error: `Undo failed: ${err instanceof Error ? err.message : "Unknown error"}` };
+      }
     }
 
     // ── 未知操作 ──
