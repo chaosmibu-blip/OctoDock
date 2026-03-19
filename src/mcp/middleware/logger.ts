@@ -75,19 +75,17 @@ export async function executeWithMiddleware(
     // 非同步記錄成功的操作日誌（不阻塞回應）
     // A2: result 只存摘要，不存完整 API 回傳（節省 DB 空間）
     const resultSummary = buildResultSummary(true, result);
-    db.insert(operations)
-      .values({
-        userId,
-        appName,
-        toolName,
-        action: toolName,
-        params,
-        result: resultSummary,
-        agentInstanceId: options?.agentInstanceId ?? null,
-        success: true,
-        durationMs: Date.now() - startTime,
-      })
-      .catch((err) => console.error("Failed to log operation:", err));
+    logOperation({
+      userId,
+      appName,
+      toolName,
+      action: toolName,
+      params,
+      result: resultSummary,
+      agentInstanceId: options?.agentInstanceId ?? null,
+      success: true,
+      durationMs: Date.now() - startTime,
+    });
 
     // B4: 操作成功，記錄 circuit breaker 成功
     recordSuccess(appName);
@@ -111,24 +109,22 @@ export async function executeWithMiddleware(
     }
 
     // 非同步記錄失敗的操作日誌（存結構化錯誤）
-    db.insert(operations)
-      .values({
-        userId,
-        appName,
-        toolName,
-        action: toolName,
-        params,
-        result: {
-          ok: false,
-          error: classified.message,
-          code: classified.code,
-          retryable: classified.retryable,
-        },
-        agentInstanceId: options?.agentInstanceId ?? null,
-        success: false,
-        durationMs: Date.now() - startTime,
-      })
-      .catch((err) => console.error("Failed to log operation:", err));
+    logOperation({
+      userId,
+      appName,
+      toolName,
+      action: toolName,
+      params,
+      result: {
+        ok: false,
+        error: classified.message,
+        code: classified.code,
+        retryable: classified.retryable,
+      },
+      agentInstanceId: options?.agentInstanceId ?? null,
+      success: false,
+      durationMs: Date.now() - startTime,
+    });
 
     // 回傳 MCP 格式的錯誤結果（帶結構化錯誤資訊）
     return {
@@ -137,6 +133,26 @@ export async function executeWithMiddleware(
       _classifiedError: classified, // B1: 供 server.ts 的 toolResultToDoResult 使用
     };
   }
+}
+
+/**
+ * 非同步寫入 operations 記錄（不阻塞主請求）
+ * 如果 agent_instance_id 欄位不存在（migration 尚未跑完），自動降級重試
+ */
+function logOperation(values: Record<string, unknown>) {
+  db.insert(operations)
+    .values(values)
+    .catch((err) => {
+      // 若因 agent_instance_id 欄位不存在而失敗，去掉該欄位重試
+      if (String(err).includes("agent_instance_id")) {
+        const { agentInstanceId, ...rest } = values;
+        db.insert(operations)
+          .values(rest)
+          .catch((retryErr) => console.error("Failed to log operation (retry):", retryErr));
+      } else {
+        console.error("Failed to log operation:", err);
+      }
+    });
 }
 
 /**
