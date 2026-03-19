@@ -48,17 +48,29 @@ function verifyState(state: string | null): { userId: string; from?: string } | 
 }
 
 // Exchange authorization code for tokens (spec section 7)
+// codeVerifier: PKCE 用的 code_verifier（Canva 等 App 需要）
 async function exchangeCode(
   config: OAuthConfig,
   code: string,
   appName: string,
+  codeVerifier?: string,
 ) {
   const redirectUri = `${APP_URL}/callback/${appName}`;
 
   if (config.authMethod === "basic") {
-    // Notion uses Basic Auth + JSON body
+    // Notion / Canva uses Basic Auth + JSON body
     const clientId = getOAuthClientId(appName);
     const clientSecret = getOAuthClientSecret(appName);
+
+    // 組裝 body：基本欄位 + PKCE code_verifier（如有）
+    const jsonBody: Record<string, string> = {
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+    };
+    if (codeVerifier) {
+      jsonBody.code_verifier = codeVerifier;
+    }
 
     const response = await fetch(config.tokenUrl, {
       method: "POST",
@@ -66,11 +78,7 @@ async function exchangeCode(
         "Content-Type": "application/json",
         Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
       },
-      body: JSON.stringify({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-      }),
+      body: JSON.stringify(jsonBody),
     });
 
     if (!response.ok) {
@@ -84,13 +92,17 @@ async function exchangeCode(
   }
 
   // Google/Meta use form-urlencoded + POST body credentials
-  const body = new URLSearchParams({
+  const bodyParams: Record<string, string> = {
     grant_type: "authorization_code",
     code,
     redirect_uri: redirectUri,
     client_id: getOAuthClientId(appName),
     client_secret: getOAuthClientSecret(appName),
-  });
+  };
+  if (codeVerifier) {
+    bodyParams.code_verifier = codeVerifier;
+  }
+  const body = new URLSearchParams(bodyParams);
 
   const response = await fetch(config.tokenUrl, {
     method: "POST",
@@ -221,10 +233,14 @@ export async function GET(
   }
 
   try {
+    // PKCE: 從 cookie 取出 code_verifier（Canva 等需要）
+    const codeVerifier = request.cookies.get("pkce_verifier")?.value;
+
     let tokens = await exchangeCode(
       adapter.authConfig as OAuthConfig,
       code!,
       appName,
+      codeVerifier,
     );
 
     // Meta apps: exchange short-lived token for long-lived token (60 days)
@@ -270,8 +286,14 @@ export async function GET(
         },
       });
 
+    // PKCE: 清掉暫存的 code_verifier cookie
+    const clearPkce = (res: NextResponse) => {
+      if (codeVerifier) res.cookies.delete("pkce_verifier");
+      return res;
+    };
+
     if (fromSkillTree) {
-      return new NextResponse(
+      return clearPkce(new NextResponse(
         `<!DOCTYPE html><html><head><title>連接成功</title></head><body>
         <p style="font-family:sans-serif;text-align:center;margin-top:40vh">
           ✅ ${appName} 連接成功，此視窗即將關閉…
@@ -279,12 +301,12 @@ export async function GET(
         <script>window.close();</script>
         </body></html>`,
         { headers: { "Content-Type": "text/html" } },
-      );
+      ));
     }
 
-    return NextResponse.redirect(
+    return clearPkce(NextResponse.redirect(
       new URL(`/dashboard?connected=${appName}`, APP_URL),
-    );
+    ));
   } catch (error) {
     console.error(`OAuth callback error for ${appName}:`, error);
 
