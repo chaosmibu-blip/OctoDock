@@ -55,7 +55,7 @@ async function runPendingMigrations() {
       if (executed.has(m.name)) continue;
       try {
         await client.query(m.sql);
-        await client.query("INSERT INTO _migrations (name) VALUES ($1)", [m.name]);
+        await client.query("INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", [m.name]);
         console.log(`[db] Inline migration executed: ${m.name}`);
       } catch (err) {
         console.warn(`[db] Inline migration failed (${m.name}):`, err);
@@ -80,7 +80,7 @@ async function runPendingMigrations() {
       const sql = fs.readFileSync(path.join(migrationsDir, file), "utf-8");
       try {
         await client.query(sql);
-        await client.query("INSERT INTO _migrations (name) VALUES ($1)", [file]);
+        await client.query("INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", [file]);
         console.log(`[db] Migration executed: ${file}`);
       } catch (err) {
         console.warn(`[db] Migration failed (${file}):`, err);
@@ -94,4 +94,7 @@ async function runPendingMigrations() {
 }
 
 // 啟動時非同步執行 migrations（不阻塞 import）
-runPendingMigrations().catch(() => {});
+// next build 時跳過 migration，避免 build 環境與 production DB 衝突
+if (process.env.NEXT_PHASE !== "phase-production-build") {
+  runPendingMigrations().catch(() => {});
+}
