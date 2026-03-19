@@ -83,6 +83,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.discord.desc": "發送訊息、管理頻道、成員和角色",
     "app.slack.desc": "發送訊息、管理頻道、使用者和釘選",
     "app.canva.desc": "管理設計、匯出 PDF/PNG、素材和資料夾",
+    "app.gamma.desc": "AI 生成簡報、文件，支援匯出 PDF/PPTX/PNG",
 
     // Bots
     "bots.title": "Bot 自動回覆設定",
@@ -494,6 +495,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.discord.desc": "Send messages, manage channels, members, and roles",
     "app.slack.desc": "Send messages, manage channels, users, and pins",
     "app.canva.desc": "Manage designs, export PDF/PNG, assets, and folders",
+    "app.gamma.desc": "AI-generated presentations and documents, export PDF/PPTX/PNG",
 
     // Bots
     "bots.title": "Bot Auto-Reply Settings",

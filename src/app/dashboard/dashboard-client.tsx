@@ -48,6 +48,8 @@ const APP_KEYS = [
   { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
   // 設計
   { name: "canva", displayName: "Canva", descKey: "app.canva.desc" },
+  // 簡報
+  { name: "gamma", displayName: "Gamma", descKey: "app.gamma.desc" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {
