@@ -279,7 +279,7 @@ octodock_do(app:"google_calendar", action:"remove_sharing", params:{email:"someo
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
-  if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `google_calendar actions (${Object.keys(actionMap).length}):
   list_calendars() — list all user's calendars
   get_events(calendar_id?, time_min?, time_max?, max_results?) — list events in a time range

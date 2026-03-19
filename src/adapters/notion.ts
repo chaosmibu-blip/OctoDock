@@ -287,9 +287,7 @@ function getSkill(action?: string): string {
     return ACTION_SKILLS[action];
   }
   // 有 action 但找不到：提示可用的 action
-  if (action) {
-    return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  }
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   // app 級別：全部 21 個 action
   return `notion actions (${Object.keys(actionMap).length}):
   search(query, filter?) — search pages/databases
