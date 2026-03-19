@@ -42,7 +42,7 @@ export interface SkillsApiApp {
   authType: string;
   connected: boolean;
   connectedAt: string | null;
-  actions: Array<{ name: string; description: { zh: string; en: string }; unlocked?: boolean; usageCount?: number }>;
+  actions: Array<{ name: string; description: { zh: string; en: string }; used?: boolean }>;
 }
 
 /** API 回傳的自動發現候選組合技 */
@@ -199,13 +199,13 @@ export function buildSkillTree(
         label: action.description.zh || action.name,
         type: 'skill',
         // U17: action 用過至少 1 次 = unlocked，否則 locked（不只看 App 是否連接）
-        status: action.unlocked ? 'unlocked' : 'locked',
+        status: action.used ? 'unlocked' : 'locked',
         x: actionPositions[i].x,
         y: actionPositions[i].y,
         description: action.description.zh,
         descriptionEn: action.description.en,
         app: app.name,
-        used: (action as { used?: boolean }).used ?? false, // U17: 標記是否已使用
+        used: action.used ?? false, // U17: 標記是否已使用
       });
       edges.push({ from: app.name, to: actionId, type: 'normal' });
     });
