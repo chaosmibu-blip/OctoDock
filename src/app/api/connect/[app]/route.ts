@@ -12,7 +12,7 @@ import { getOAuthClientId } from "@/lib/oauth-env";
 // Google 系列 App 名稱（用於一鍵連接）
 const GOOGLE_APPS = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
 
-import { createHmac } from "crypto";
+import { createHmac, randomBytes, createHash } from "crypto";
 
 /** HMAC 簽名用的 key — 用 TOKEN_ENCRYPTION_KEY 派生，確保無法偽造 state */
 function getStateKey(): string {
@@ -98,11 +98,36 @@ export async function GET(
     // 讓 adapter 自己聲明需要的額外 OAuth 參數（access_type, prompt, owner 等）
     if (config.extraParams) {
       for (const [key, value] of Object.entries(config.extraParams)) {
+        // PKCE: code_challenge_method 需要搭配動態產生的 code_challenge
+        if (key === "code_challenge_method") continue; // 下面單獨處理
         authUrl.searchParams.set(key, value);
       }
     }
 
-    return NextResponse.redirect(authUrl.toString());
+    // ── PKCE 支援（Canva 等要求 S256 code challenge）──
+    let response: NextResponse;
+    if (config.extraParams?.code_challenge_method === "S256") {
+      // 產生 code_verifier（43-128 字元的隨機字串）
+      const codeVerifier = randomBytes(32).toString("base64url");
+      // SHA-256 hash → base64url = code_challenge
+      const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+      authUrl.searchParams.set("code_challenge_method", "S256");
+      authUrl.searchParams.set("code_challenge", codeChallenge);
+
+      // 用 httpOnly cookie 暫存 code_verifier，callback 時取出來做 token exchange
+      response = NextResponse.redirect(authUrl.toString());
+      response.cookies.set("pkce_verifier", codeVerifier, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 600, // 10 分鐘過期
+      });
+    } else {
+      response = NextResponse.redirect(authUrl.toString());
+    }
+
+    return response;
   }
 
   // API key / Bot token — return instructions
