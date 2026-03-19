@@ -130,6 +130,12 @@ async function getYoutubeTranscript() {
 ```
 不能降版到 1.2.x，因為 1.3.0 的 InnerTube API（模擬 Android app）才能繞過 Replit IP 被 YouTube reCAPTCHA 擋的問題。
 
+### getSkill(action) 不可以自己處理「找不到 action」
+
+`getSkill(action)` 在 `ACTION_SKILLS` 找不到 action 時，**必須回傳 `null`**，不能回傳 `"Action not found..."` 的錯誤文字。
+
+**教訓**：之前 15 個 adapter 都在 `getSkill()` 裡回傳 `"Action not found. Available: ${Object.keys(ACTION_SKILLS)...}"`，導致 server.ts 的 fallback（用 `actionMap` 查 `inputSchema`）永遠不會執行。結果就是 `actionMap` 有 21 個 action，但 `octodock_help(app, action)` 只認得 `ACTION_SKILLS` 裡手寫的 12 個。**adapter 只負責「我知道的回傳說明」，不知道的回傳 `null`，讓 server.ts 統一兜底。**
+
 ### formatResponse 收到的是物件不是字串
 
 `server.ts` 的 `toolResultToDoResult` 會把 adapter 回傳的 JSON 字串 `JSON.parse` 成物件，再傳給 `formatResponse(action, data)`。所以 **`formatResponse` 收到的 `rawData` 永遠是已解析的 JS 物件**，不是 JSON 字串。
