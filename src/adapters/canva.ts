@@ -200,7 +200,7 @@ Example: \`octodock_do(app:"canva", action:"get_profile")\``,
 };
 
 // ── getSkill：回傳操作說明 ────────────────────────────────
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   // 有指定 action → 回傳該 action 的詳細說明
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查

@@ -157,7 +157,7 @@ octodock_do(app:"google_sheets", action:"batch_update", params:{
 })`,
 };
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `google_sheets actions (${Object.keys(actionMap).length}):

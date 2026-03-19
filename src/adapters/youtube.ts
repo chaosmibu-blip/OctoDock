@@ -218,7 +218,7 @@ Post a new top-level comment on a YouTube video. Costs 50 quota units.
 octodock_do(app:"youtube", action:"post_comment", params:{video_id:"dQw4w9WgXcQ", text:"Great video!"})`,
 };
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `youtube actions (${Object.keys(actionMap).length}):

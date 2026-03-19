@@ -295,7 +295,7 @@ Remove a specific permission (sharing) from a file.
 octodock_do(app:"google_drive", action:"delete_permission", params:{file_id:"1Bxi...", permission_id:"12345"})`,
 };
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `google_drive actions (${Object.keys(actionMap).length}):
