@@ -125,51 +125,7 @@ export function checkParams(
     }
   }
 
-  // ── U7: 必填參數攔截（不等上游 API 噴不明確的 validation error）──
-  const REQUIRED_PARAMS: Record<string, Record<string, string[]>> = {
-    notion: {
-      create_page: ["title"],
-      get_page: ["page_id"],
-      update_page: ["page_id"],
-      replace_content: ["page_id", "content"],
-      append_content: ["page_id", "content"],
-      move_page: ["page_id", "new_parent_id"],
-      delete_page: ["page_id"],
-      query_database: ["database_id"],
-    },
-    gmail: {
-      send: ["to", "subject"],
-      reply: ["message_id"],
-      read: ["message_id"],
-    },
-    google_calendar: {
-      create_event: ["summary", "start", "end"],
-      get_event: ["event_id"],
-      delete_event: ["event_id"],
-    },
-    google_drive: {
-      get_file: ["file_id"],
-      delete: ["file_id"],
-    },
-    github: {
-      create_issue: ["owner", "repo", "title"],
-      get_file: ["owner", "repo", "path"],
-    },
-  };
-  // 從 toolName 提取 action name（去掉 app prefix）
-  const actionName = toolName.replace(/^[^_]+_/, "");
-  const requiredForAction = REQUIRED_PARAMS[app]?.[actionName];
-  if (requiredForAction) {
-    const missing = requiredForAction.filter((key) => !params[key] && params[key] !== 0 && params[key] !== false);
-    if (missing.length > 0) {
-      return {
-        blocked: true,
-        error: `${app}.${actionName} 缺少必填參數：${missing.join(", ")}。Use octodock_help(app:"${app}", action:"${actionName}") for details.`,
-      };
-    }
-  }
-
-  // ── J3d/U7: 必填參數攔截 — 在打上游 API 前就攔截缺少必填參數的情況 ──
+  // ── U7/J3d: 必填參數攔截 — 在打上游 API 前就攔截缺少必填參數的情況 ──
   const REQUIRED_PARAMS: Record<string, Record<string, string[]>> = {
     notion: {
       notion_create_page: ["title"],
