@@ -182,6 +182,102 @@ async function doPreContext(
     }
   }
 
+  // U9/O1: 跨 App 上下文 — create_page 時從標題提取關鍵字，查 Calendar + Gmail
+  if (/create_page/.test(toolName) && appName === "notion") {
+    const title = params.title as string | undefined;
+    if (title && title.length >= 2) {
+      try {
+        const { getAdapter } = await import("@/mcp/registry");
+        const { getValidToken } = await import("@/services/token-manager");
+
+        // 從標題提取可能的人名或關鍵字（簡單啟發：移除日期前綴和常見詞）
+        const keyword = title
+          .replace(/^\d{4}-\d{2}-\d{2}\s*/, "")
+          .replace(/^(規劃|討論|交辦|筆記|會議|紀錄)[：:]\s*/, "")
+          .trim();
+
+        if (keyword.length >= 2) {
+          const crossAppResults: string[] = [];
+
+          // 查 Google Calendar 今天的相關事件
+          try {
+            const calAdapter = getAdapter("google_calendar");
+            if (calAdapter && executeQuery) {
+              const calToken = await getValidToken(userId, "google_calendar").catch(() => null);
+              if (calToken) {
+                const today = new Date();
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const calResult = await calAdapter.execute(
+                  "gcal_get_events",
+                  { time_min: today.toISOString(), time_max: tomorrow.toISOString(), max_results: 5 },
+                  calToken,
+                ) as { content: Array<{ text: string }> };
+                const calText = calResult?.content?.[0]?.text;
+                if (calText) {
+                  const calData = JSON.parse(calText);
+                  const events = (calData.items ?? []) as Array<Record<string, unknown>>;
+                  const related = events.filter((e) =>
+                    String(e.summary ?? "").includes(keyword) ||
+                    String(e.description ?? "").includes(keyword),
+                  );
+                  if (related.length > 0) {
+                    crossAppResults.push(
+                      `Calendar today: ${related.map((e) => `"${e.summary}"`).join(", ")}`,
+                    );
+                  }
+                }
+              }
+            }
+          } catch {
+            // Calendar 查詢失敗不影響
+          }
+
+          // 查 Gmail 最近相關信件
+          try {
+            const gmailAdapter = getAdapter("gmail");
+            if (gmailAdapter) {
+              const gmailToken = await getValidToken(userId, "gmail").catch(() => null);
+              if (gmailToken) {
+                const searchTool = gmailAdapter.actionMap?.["search"];
+                if (searchTool) {
+                  const gmailResult = await gmailAdapter.execute(
+                    searchTool,
+                    { query: keyword, max_results: 3 },
+                    gmailToken,
+                  ) as { content: Array<{ text: string }> };
+                  const gmailText = gmailResult?.content?.[0]?.text;
+                  if (gmailText) {
+                    const gmailData = JSON.parse(gmailText);
+                    const messages = (gmailData.messages ?? gmailData.results ?? []) as Array<Record<string, unknown>>;
+                    if (messages.length > 0) {
+                      crossAppResults.push(
+                        `Gmail recent: ${messages.slice(0, 2).map((m) => `"${m.subject ?? m.snippet ?? "(no subject)"}"`).join(", ")}`,
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          } catch {
+            // Gmail 查詢失敗不影響
+          }
+
+          if (crossAppResults.length > 0) {
+            if (!context.patterns) context.patterns = [];
+            // 把跨 App 結果存入 context 的特殊欄位（利用 patterns 結構）
+            for (const r of crossAppResults) {
+              context.patterns.push({ name: r, count: 1 });
+            }
+            hasData = true;
+          }
+        }
+      } catch {
+        // 跨 App 查詢失敗不影響
+      }
+    }
+  }
+
   // C3 回饋：查 memory 表有沒有相關的 detected pattern
   try {
     const { memory } = await import("@/db/schema");

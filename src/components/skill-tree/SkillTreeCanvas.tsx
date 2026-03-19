@@ -304,12 +304,16 @@ export function SkillTreeCanvas() {
       if (highlighted) stroke = GOLD;
     } else {
       /* App → action 細線 */
+      // U20: 區分已使用/未使用的 action 連線色彩
       const edgeLit = isActive || isPreviewing;
-      stroke = edgeLit ? TEAL : GRAY_LIGHT;
+      const targetUsed = to.used === true;
+      stroke = edgeLit
+        ? (targetUsed ? TEAL : '#A7D8C8') // U20: 已用深綠, 未用淡綠
+        : GRAY_LIGHT;
       if (highlighted) stroke = TEAL;
       opacity = hoveredNode
         ? (highlighted ? 0.8 : isPreviewing ? 0.3 : 0.05)
-        : (isActive ? 0.25 : 0.08);
+        : (isActive ? (targetUsed ? 0.4 : 0.15) : 0.08); // U20: 已用較深
     }
 
     return (
@@ -492,16 +496,20 @@ export function SkillTreeCanvas() {
     }
 
     /* ── Action（中圈）── 小圓點 */
-    /* U17: 區分已解鎖（用過 = 綠色實心）和未解鎖（沒用過 = 淡色） */
-    /* U20: 連線顏色跟節點狀態同步 */
+    // U17: 區分已使用（實心深色）和未使用（淡色）的 action
+    // U20: 連線顏色跟節點狀態同步
     const dotR = isHovered ? 10 : 8;
     const clusterConnected = node.app ? connectedApps.has(node.app) : false;
     const clusterPreviewing = node.app ? previewApp === node.app : false;
-    const isUnlocked = node.status === 'unlocked';
-    const showActionLit = clusterConnected || clusterPreviewing;
-    // U17: 已解鎖 = 綠色實心 0.9，連接但未解鎖 = 綠色淡 0.3，未連接 = 灰色 0.3
-    const dotColor = showActionLit ? TEAL : GRAY;
-    const dotOpacity = isUnlocked ? 0.9 : (showActionLit ? 0.3 : 0.2);
+    const showActionLit = clusterConnected || clusterPreviewing; // 連接或預覽中
+    const actionUsed = node.used === true; // U17: 是否曾使用過
+    // U17: 已使用 = 實心深色，未使用 = 淡色（同 App 已連接時）
+    const actionColor = showActionLit
+      ? (actionUsed ? TEAL : '#A7D8C8') // 已用:深綠, 未用:淡綠
+      : GRAY;
+    const actionOpacity = showActionLit
+      ? (actionUsed ? 0.9 : (clusterPreviewing ? 0.4 : 0.5))
+      : 0.5;
     const baseOpacity = showActionLit ? 1 : 0.3;
     const finalOpacity = dimmedBySearch ? 0.08 : dimmedByHover ? 0.1 : baseOpacity;
 
@@ -512,13 +520,13 @@ export function SkillTreeCanvas() {
         onMouseLeave={() => setHoveredNode(null)}
       >
         <circle cx={node.x} cy={node.y} r={dotR}
-          fill={dotColor}
-          opacity={dotOpacity}
+          fill={actionColor}
+          opacity={actionOpacity}
           style={{ transition: 'r 150ms, fill 300ms, opacity 300ms' }}
         />
         {isHovered && (
           <circle cx={node.x} cy={node.y} r={dotR + 4}
-            fill="none" stroke={dotColor}
+            fill="none" stroke={actionColor}
             strokeWidth={1.5} opacity={0.5}
           />
         )}

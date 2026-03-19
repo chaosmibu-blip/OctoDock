@@ -63,6 +63,10 @@ const APP_HINTS: Record<string, Record<string, ErrorHint>> = {
     },
   },
   gmail: {
+    "400": {
+      explanation: "找不到這封郵件，請確認 message_id 是否正確。",
+      suggestion: "Use octodock_do(app:'gmail', action:'search', params:{query:'...'}) to find the correct message ID.",
+    },
     "403": {
       explanation: "Gmail API scope insufficient or quota exceeded.",
       suggestion: "User may need to reconnect Gmail with additional scopes. Check Google API Console for quota.",
@@ -123,6 +127,32 @@ export function getErrorHint(
     const appHint = APP_HINTS[appName]?.[String(httpStatus)];
     if (appHint) {
       return `💡 ${appHint.explanation}\n→ ${appHint.suggestion}`;
+    }
+  }
+
+  // U14: 文字模式匹配 — 攔截常見 raw API error 轉人話
+  const TEXT_PATTERNS: Array<{ pattern: RegExp; app?: string; hint: ErrorHint }> = [
+    {
+      pattern: /Invalid id value/i,
+      app: "gmail",
+      hint: {
+        explanation: "找不到這封郵件，請確認 message_id 是否正確。",
+        suggestion: "Use octodock_do(app:'gmail', action:'search', params:{query:'...'}) to find the correct message ID.",
+      },
+    },
+    {
+      pattern: /body\.properties\.title/i,
+      app: "notion",
+      hint: {
+        explanation: "建立頁面需要提供標題。",
+        suggestion: "Add title parameter: octodock_do(app:'notion', action:'create_page', params:{title:'...'})",
+      },
+    },
+  ];
+
+  for (const tp of TEXT_PATTERNS) {
+    if (tp.pattern.test(errorMessage) && (!tp.app || tp.app === appName)) {
+      return `💡 ${tp.hint.explanation}\n→ ${tp.hint.suggestion}`;
     }
   }
 

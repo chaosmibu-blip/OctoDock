@@ -21,6 +21,8 @@ export const metadata: Metadata = {
       { url: "/icon-512.svg", type: "image/svg+xml" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      // U25: 標準 favicon（讓 Google favicon service 正確抓取）
+      { url: "/icon-192.png", sizes: "32x32", type: "image/png" },
     ],
     shortcut: "/icon-512.svg",
     apple: "/apple-touch-icon.png",

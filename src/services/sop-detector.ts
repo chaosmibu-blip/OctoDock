@@ -92,14 +92,34 @@ export async function detectSopCandidate(
     const sopName = `${lastApp}: ${verb}`;  // 例如 "notion: 追加內容"
 
     // I8/J4 最終修正：靜默自動存成 SOP，不問不提示
-    // U15: 去重用 action 序列比對，不用名稱比對（名稱格式可能改變）
+    // U15: 存 SOP 前比對現有 SOP 的 action 序列，避免重複
     const patternKey = candidate.pattern.join(" → ");
     try {
-      const { storeMemory, queryMemory } = await import("@/services/memory-engine");
-      // 檢查是否已存過相同 action 序列的 SOP（不管名稱格式）
-      const allSops = await queryMemory(userId, "", "sop");
-      const hasSameSequence = allSops.some((r) => r.value.includes(patternKey) || r.value.includes(candidate.pattern.join("→")));
-      if (!hasSameSequence) {
+      const { storeMemory, queryMemory, listMemory: lm } = await import("@/services/memory-engine");
+
+      // U15: 去重 — 比對現有 SOP 的 action 序列
+      const existingSops = await lm(userId, "sop");
+      const candidateSequence = candidate.pattern.join(" → ");
+      const isDuplicate = existingSops.some((sop) => {
+        // 從 SOP 內容提取步驟序列
+        const stepMatches = sop.value.match(/`octodock_do\(app:"([^"]+)", action:"([^"]+)"\)`/g);
+        if (!stepMatches) return false;
+        const existingSequence = stepMatches.map((m) => {
+          const appMatch = m.match(/app:"([^"]+)"/);
+          const actionMatch = m.match(/action:"([^"]+)"/);
+          return `${appMatch?.[1]}.${actionMatch?.[1]}`;
+        }).join(" → ");
+        return existingSequence === candidateSequence;
+      });
+
+      if (isDuplicate) {
+        // 已有相同序列的 SOP，跳過
+        return null;
+      }
+
+      // 檢查是否已存過同名的 SOP
+      const existing = await queryMemory(userId, sopName, "sop");
+      if (!existing.find((r) => r.key === sopName)) {
         // 自動產生 SOP 內容（Markdown 格式）
         const sopContent = [
           `# ${sopName}`,

@@ -36,14 +36,26 @@ export function Legend() {
           </div>
           <span className="text-gray-600 text-xs">組合技</span>
         </div>
-        {/* U18/U19: 健康燈號說明 */}
-        <div className="flex items-center gap-2.5 mt-1 pt-1 border-t border-gray-200">
-          <div className="w-5 flex justify-center gap-0.5">
-            <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
-            <div className="w-2 h-2 rounded-full bg-[#EAB308]" />
-            <div className="w-2 h-2 rounded-full bg-[#EF4444]" />
+        {/* U18/U19: 健康狀態燈號 */}
+        <div className="border-t border-gray-200 pt-2 mt-1" />
+        <span className="font-mono text-[10px] text-gray-400 mb-1 block tracking-wider">健康狀態</span>
+        <div className="flex items-center gap-2.5">
+          <div className="w-5 flex justify-center">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#22C55E]" />
           </div>
-          <span className="text-gray-600 text-xs">App 健康燈號</span>
+          <span className="text-gray-600 text-xs">運作良好 (≥95%)</span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <div className="w-5 flex justify-center">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#EAB308]" />
+          </div>
+          <span className="text-gray-600 text-xs">偶有錯誤 (80-94%)</span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <div className="w-5 flex justify-center">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#EF4444]" />
+          </div>
+          <span className="text-gray-600 text-xs">頻繁出錯 (&lt;80%)</span>
         </div>
       </div>
     </div>

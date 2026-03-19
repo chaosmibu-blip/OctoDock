@@ -20,7 +20,7 @@ function getStateKey(): string {
 }
 
 /** 驗證帶 HMAC 簽名的 OAuth state 參數，防止 CSRF 偽造 */
-function verifyState(state: string | null): { userId: string; from?: string } | null {
+function verifyState(state: string | null): { userId: string; from?: string; codeVerifier?: string } | null {
   if (!state) return null;
   try {
     /* state 格式：base64url(payload).base64url(hmac) */
@@ -38,17 +38,18 @@ function verifyState(state: string | null): { userId: string; from?: string } | 
     if (sigBuf.length !== expectedBuf.length) return null;
     if (!timingSafeEqual(sigBuf, expectedBuf)) return null;
 
-    const payload = JSON.parse(Buffer.from(data, "base64url").toString());
-    /* 檢查 15 分鐘有效期 */
-    if (Date.now() - payload.ts > 15 * 60 * 1000) return null;
-    return { userId: payload.userId, from: payload.from };
+    const decoded = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
+    /* 檢查過期（15 分鐘） */
+    if (Date.now() - decoded.ts > 15 * 60 * 1000) return null;
+    // U21: 提取 PKCE code_verifier（如果有的話）
+    return { userId: decoded.userId, from: decoded.from, codeVerifier: decoded.cv };
   } catch {
     return null;
   }
 }
 
 // Exchange authorization code for tokens (spec section 7)
-// codeVerifier: PKCE 用的 code_verifier（Canva 等 App 需要）
+// U21: codeVerifier — PKCE 用的 code_verifier（Canva 等 App 需要）
 async function exchangeCode(
   config: OAuthConfig,
   code: string,
@@ -70,9 +71,8 @@ async function exchangeCode(
       code,
       redirect_uri: redirectUri,
     };
-    if (codeVerifier) {
-      bodyParams.code_verifier = codeVerifier;
-    }
+    // U21: PKCE — 如果有 code_verifier 就加入
+    if (codeVerifier) bodyParams.code_verifier = codeVerifier;
 
     const response = await fetch(config.tokenUrl, {
       method: "POST",
@@ -101,9 +101,9 @@ async function exchangeCode(
     client_id: getOAuthClientId(appName),
     client_secret: getOAuthClientSecret(appName),
   };
-  if (codeVerifier) {
-    bodyParams.code_verifier = codeVerifier;
-  }
+  // U21: PKCE — 如果有 code_verifier 就加入
+  if (codeVerifier) bodyParams.code_verifier = codeVerifier;
+
   const body = new URLSearchParams(bodyParams);
 
   const response = await fetch(config.tokenUrl, {
@@ -235,14 +235,12 @@ export async function GET(
   }
 
   try {
-    // PKCE: 從 cookie 取出 code_verifier（Canva 等需要）
-    const codeVerifier = request.cookies.get("pkce_verifier")?.value;
-
+    // U21: 從 verified state 提取 PKCE code_verifier（如果有的話）
     let tokens = await exchangeCode(
       adapter.authConfig as OAuthConfig,
       code!,
       appName,
-      codeVerifier,
+      stateData.codeVerifier,
     );
 
     // Meta apps: exchange short-lived token for long-lived token (60 days)
@@ -288,14 +286,8 @@ export async function GET(
         },
       });
 
-    // PKCE: 清掉暫存的 code_verifier cookie
-    const clearPkce = (res: NextResponse) => {
-      if (codeVerifier) res.cookies.delete("pkce_verifier");
-      return res;
-    };
-
     if (fromSkillTree) {
-      return clearPkce(new NextResponse(
+      return new NextResponse(
         `<!DOCTYPE html><html><head><title>連接成功</title></head><body>
         <p style="font-family:sans-serif;text-align:center;margin-top:40vh">
           ✅ ${appName} 連接成功，此視窗即將關閉…
@@ -303,12 +295,12 @@ export async function GET(
         <script>window.close();</script>
         </body></html>`,
         { headers: { "Content-Type": "text/html" } },
-      ));
+      );
     }
 
-    return clearPkce(NextResponse.redirect(
+    return NextResponse.redirect(
       new URL(`/dashboard?connected=${appName}`, APP_URL),
-    ));
+    );
   } catch (error) {
     console.error(`OAuth callback error for ${appName}:`, error);
 

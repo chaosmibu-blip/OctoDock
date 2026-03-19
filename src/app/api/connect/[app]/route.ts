@@ -21,10 +21,11 @@ function getStateKey(): string {
   return createHmac("sha256", key).update("oauth-state-signing").digest("hex");
 }
 
-/** 產生帶 HMAC 簽名的 OAuth state 參數（CSRF 保護 + 來源追蹤） */
-function generateState(userId: string, from?: string): string {
+/** 產生帶 HMAC 簽名的 OAuth state 參數（CSRF 保護 + 來源追蹤 + U21 PKCE code_verifier） */
+function generateState(userId: string, from?: string, codeVerifier?: string): string {
   const payload: Record<string, unknown> = { userId, ts: Date.now(), r: Math.random().toString(36) };
   if (from) payload.from = from;
+  if (codeVerifier) payload.cv = codeVerifier; // U21: PKCE code_verifier 嵌入 state
   const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const sig = createHmac("sha256", getStateKey()).update(data).digest("base64url");
   return `${data}.${sig}`;
@@ -98,36 +99,25 @@ export async function GET(
     // 讓 adapter 自己聲明需要的額外 OAuth 參數（access_type, prompt, owner 等）
     if (config.extraParams) {
       for (const [key, value] of Object.entries(config.extraParams)) {
-        // PKCE: code_challenge_method 需要搭配動態產生的 code_challenge
-        if (key === "code_challenge_method") continue; // 下面單獨處理
+        // U21: PKCE — 如果 adapter 聲明需要 code_challenge_method，自動產生 PKCE 參數
+        if (key === "code_challenge_method" && value === "S256") {
+          // 產生 code_verifier（43-128 字元的隨機 base64url 字串）
+          const codeVerifier = randomBytes(32).toString("base64url");
+          // 計算 code_challenge = base64url(sha256(code_verifier))
+          const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+          authUrl.searchParams.set("code_challenge_method", "S256");
+          authUrl.searchParams.set("code_challenge", codeChallenge);
+          // 把 code_verifier 加密嵌入 state 參數（不依賴 cookie，避免跨站丟失）
+          // 重新產生 state，把 code_verifier 放進 payload
+          const pkceState = generateState(session.user.id, from, codeVerifier);
+          authUrl.searchParams.set("state", pkceState);
+          continue;
+        }
         authUrl.searchParams.set(key, value);
       }
     }
 
-    // ── PKCE 支援（Canva 等要求 S256 code challenge）──
-    let response: NextResponse;
-    if (config.extraParams?.code_challenge_method === "S256") {
-      // 產生 code_verifier（43-128 字元的隨機字串）
-      const codeVerifier = randomBytes(32).toString("base64url");
-      // SHA-256 hash → base64url = code_challenge
-      const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
-      authUrl.searchParams.set("code_challenge_method", "S256");
-      authUrl.searchParams.set("code_challenge", codeChallenge);
-
-      // 用 httpOnly cookie 暫存 code_verifier，callback 時取出來做 token exchange
-      response = NextResponse.redirect(authUrl.toString());
-      response.cookies.set("pkce_verifier", codeVerifier, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 600, // 10 分鐘過期
-      });
-    } else {
-      response = NextResponse.redirect(authUrl.toString());
-    }
-
-    return response;
+    return NextResponse.redirect(authUrl.toString());
   }
 
   // API key / Bot token — return instructions
