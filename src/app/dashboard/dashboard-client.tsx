@@ -56,6 +56,11 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
   const [expandedApp, setExpandedApp] = useState<string | null>(null);
   const [toolsCache, setToolsCache] = useState<Record<string, ToolInfo[]>>({});
   const [loadingTools, setLoadingTools] = useState<string | null>(null);
+  // U23: 帳號刪除狀態
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteInput, setDeleteInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const router = useRouter();
   const { t } = useI18n();
 
@@ -124,6 +129,30 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     await fetch(`/api/connect/${appName}`, { method: "DELETE" });
     router.refresh();
   }, [router]);
+
+  /** U23: 帳號刪除處理 — 呼叫 DELETE /api/account 並跳轉 */
+  const handleDeleteAccount = useCallback(async () => {
+    if (deleteInput !== "DELETE") return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch("/api/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      if (res.ok) {
+        window.location.href = "/?deleted=1";
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error || t("account.delete_error"));
+      }
+    } catch {
+      setDeleteError(t("account.delete_error"));
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteInput, t]);
 
   return (
     <div className="min-h-screen bg-[#faf9f6] py-6 px-4">
@@ -305,6 +334,51 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── U23: 危險區域 — 刪除帳號 ── */}
+        <div className="rounded-[10px] border border-red-200 bg-red-50/50 p-4 mt-6">
+          <h2 className="text-sm font-semibold text-red-600 mb-1">{t("account.delete_title")}</h2>
+          <p className="text-[11px] text-red-400 mb-3">{t("account.delete_desc")}</p>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="px-3 py-1.5 text-[11px] border border-red-300 text-red-500 rounded-md hover:bg-red-100 transition-colors"
+          >
+            {t("account.delete_btn")}
+          </button>
+        </div>
+
+        {/* U23: 刪除帳號確認彈窗 */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl max-w-sm w-full p-6 space-y-4">
+              <h3 className="text-base font-semibold text-gray-900">{t("account.delete_confirm_title")}</h3>
+              <p className="text-sm text-gray-500">{t("account.delete_confirm_desc")}</p>
+              <input
+                type="text"
+                value={deleteInput}
+                onChange={(e) => setDeleteInput(e.target.value)}
+                placeholder={t("account.delete_confirm_input")}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400"
+              />
+              {deleteError && <p className="text-xs text-red-500">{deleteError}</p>}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => { setShowDeleteModal(false); setDeleteInput(""); setDeleteError(""); }}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  {t("account.delete_cancel")}
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleteInput !== "DELETE" || deleting}
+                  className="px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {deleting ? "..." : t("account.delete_confirm_btn")}
+                </button>
+              </div>
             </div>
           </div>
         )}
