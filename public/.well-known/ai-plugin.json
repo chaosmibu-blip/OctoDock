@@ -1,0 +1,18 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "OctoDock",
+  "name_for_model": "octodock",
+  "description_for_human": "Connect all your apps through one MCP URL. Works with Notion, Gmail, Calendar, GitHub, Drive, and 10+ more.",
+  "description_for_model": "OctoDock is a universal MCP server. Use octodock_do(app, action, params) to operate any connected app. Use octodock_help() to discover available apps and actions. Supports Notion, Gmail, Google Calendar, GitHub, Google Drive, Sheets, Docs, Tasks, YouTube, Canva, LINE, Telegram, Discord, Slack, Threads, Instagram. Features cross-agent memory that persists preferences and patterns across AI platforms.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "mcp",
+    "url": "https://octo-dock.com/mcp/{api-key}",
+    "transport": "streamable-http"
+  },
+  "logo_url": "https://octo-dock.com/icon-512.png",
+  "contact_email": "s8869420@gmail.com",
+  "legal_info_url": "https://octo-dock.com/terms"
+}

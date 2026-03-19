@@ -1,0 +1,40 @@
+{
+  "name": "OctoDock",
+  "description": "One MCP URL for all your apps. Connect Notion, Gmail, Calendar, GitHub, Drive, and more through a single endpoint.",
+  "url": "https://octo-dock.com",
+  "mcp_endpoint": "https://octo-dock.com/mcp/{api-key}",
+  "transport": "streamable-http",
+  "auth": {
+    "type": "api_key",
+    "location": "path"
+  },
+  "tools": [
+    {
+      "name": "octodock_do",
+      "description": "Execute any action on any connected app"
+    },
+    {
+      "name": "octodock_help",
+      "description": "Get available apps, actions, and parameter schemas"
+    },
+    {
+      "name": "octodock_sop",
+      "description": "List and execute saved workflows"
+    }
+  ],
+  "supported_apps": [
+    "notion", "gmail", "google_calendar", "google_drive",
+    "google_sheets", "google_docs", "google_tasks", "youtube",
+    "github", "canva", "line", "telegram", "discord", "slack",
+    "threads", "instagram"
+  ],
+  "features": [
+    "cross-agent-memory",
+    "auto-sop-detection",
+    "parameter-suggestions",
+    "response-compression",
+    "circuit-breaker",
+    "pre-context-enrichment"
+  ],
+  "contact": "https://github.com/chaosmibu-blip/OctoDock/issues"
+}

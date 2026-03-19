@@ -1,0 +1,88 @@
+# OctoDock — Complete Reference for AI Agents
+
+> One MCP URL. All Apps. Remembers You.
+
+OctoDock is a Model Context Protocol (MCP) server that acts as a universal adapter layer between AI agents and SaaS applications. Users connect their apps once, get a single MCP URL, and any AI agent can operate all authorized apps through that URL.
+
+## Architecture
+
+### MCP Tools (3 tools, ~300 tokens)
+
+1. **octodock_do(app, action, params)** — Unified entry point for all operations
+2. **octodock_help(app?, action?)** — On-demand operation reference
+3. **octodock_sop(category?, name?)** — Saved workflow retrieval and execution
+
+### Memory Engine
+
+- PostgreSQL + pgvector for semantic search
+- Four memory types: preference, pattern, context, sop
+- Automatic identifier resolution (name → ID)
+- Cross-agent memory sharing (works across Claude, ChatGPT, Cursor, etc.)
+
+### Middleware Pipeline
+
+Every operation passes through:
+- Parameter validation and auto-correction
+- Circuit breaker (per-app fault isolation)
+- Pre-context enrichment (shows current state before modifications)
+- Post-check baseline comparison
+- Response compression (large responses stored with ref ID)
+- Operation logging (non-blocking)
+
+## Connected Apps and Actions
+
+### Notion (21 actions)
+search, create_page, get_page, update_page, append_content, replace_content, delete_page, move_page, get_block, update_block, delete_block, query_database, create_database_item, get_database, list_databases, add_comment, get_comments, list_users, get_user, list_pages, get_page_property
+
+### Gmail (18 actions)
+search, read, send, reply, forward, create_draft, update_draft, send_draft, list_drafts, trash, untrash, mark_read, mark_unread, add_label, remove_label, list_labels, create_label, delete_label
+
+### Google Calendar (11 actions)
+get_events, get_event, create_event, update_event, delete_event, quick_add, list_calendars, create_calendar, delete_calendar, share_calendar, freebusy
+
+### Google Drive (15 actions)
+search, list, get_file, download, upload, update_file, delete, create_folder, move, copy, share, get_permissions, remove_permission, get_storage, empty_trash
+
+### Google Sheets (10 actions)
+create, get_values, update_values, append_values, clear_values, list_sheets, add_sheet, delete_sheet, get_metadata, batch_update
+
+### Google Docs (7 actions)
+create, get, append_text, insert_text, replace_text, batch_update, export
+
+### Google Tasks (11 actions)
+list_tasklists, create_tasklist, delete_tasklist, list_tasks, get_task, create_task, update_task, complete_task, uncomplete_task, delete_task, move_task
+
+### YouTube (16 actions)
+search, get_video, list_videos, get_channel, list_subscriptions, list_playlists, get_playlist, create_playlist, update_playlist, delete_playlist, list_playlist_items, add_to_playlist, remove_from_playlist, get_transcript, get_comments, post_comment
+
+### GitHub (32 actions)
+list_repos, get_repo, create_repo, search_code, search_issues, get_file, create_file, update_file, delete_file, list_issues, get_issue, create_issue, update_issue, list_issue_comments, add_issue_comment, list_prs, get_pr, create_pr, merge_pr, list_pr_comments, list_branches, create_branch, list_releases, create_release, list_workflows, trigger_workflow, list_gists, create_gist, star_repo, unstar_repo, list_starred, get_rate_limit
+
+### System Actions
+memory_query, memory_store, memory_delete_key, memory_delete_app, memory_delete_all, memory_export, import_memory, bot_conversations, sop_list, sop_get, sop_create, sop_update, sop_delete, note, find_tool, get_stored, http_request, batch_do, resolve_name, param_suggest, multi_search, resource_group_create, resource_group_get, undo_last, schedule_list, schedule_create, schedule_toggle, schedule_delete
+
+## Authentication
+
+- User auth: Google Sign-In (NextAuth.js)
+- App auth: OAuth 2.0 (per-app), API Key, or Bot Token
+- Token encryption: AES-256-GCM
+- MCP auth: API key in URL path
+
+## Technical Stack
+
+- Language: TypeScript
+- Framework: Next.js (App Router)
+- Database: PostgreSQL + pgvector
+- ORM: Drizzle ORM
+- MCP SDK: @modelcontextprotocol/sdk (Streamable HTTP)
+- Deployment: Replit
+- Domain: octo-dock.com
+- License: BSL 1.1 (free for personal use, no competing hosted service, converts to MIT after 4 years)
+
+## Links
+
+- Website: https://octo-dock.com
+- Dashboard: https://octo-dock.com/dashboard
+- Documentation: https://octo-dock.com/docs
+- GitHub: https://github.com/chaosmibu-blip/OctoDock
+- MCP endpoint: https://octo-dock.com/mcp/{api-key}

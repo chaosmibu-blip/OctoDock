@@ -7,6 +7,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     // 首頁（Landing page）— 最高優先
     { url: base, lastModified: new Date(), changeFrequency: "weekly", priority: 1.0 },
+    // 文件頁（給開發者和 AI 爬蟲）
+    { url: `${base}/docs`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },
+    // AI 可讀格式（讓搜尋引擎索引）
+    { url: `${base}/llms.txt`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.6 },
     // 隱私權政策
     { url: `${base}/privacy`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.3 },
     // 服務條款

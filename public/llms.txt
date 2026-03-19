@@ -1,0 +1,44 @@
+# OctoDock
+
+> One MCP URL. All Apps. Remembers You.
+
+OctoDock is an MCP (Model Context Protocol) server that lets any AI agent control all your authorized apps through a single URL. It provides cross-agent shared memory, so every AI you use knows your preferences and patterns.
+
+## What it does
+
+- Connect once, use everywhere: Notion, Gmail, Google Calendar, GitHub, Google Drive, Sheets, Docs, Tasks, YouTube, Canva, and more
+- Works with Claude, ChatGPT, Cursor, Windsurf, and any MCP-compatible AI tool
+- Cross-agent memory: preferences, patterns, and workflows persist across all AI platforms
+- Auto-detects repeated operations and suggests saving them as SOPs (Standard Operating Procedures)
+- Smart parameter suggestions based on usage history
+
+## How to connect
+
+1. Sign up at https://octo-dock.com
+2. Connect your apps via OAuth (one-click for Google suite)
+3. Copy your MCP URL from the dashboard
+4. Paste it into your AI tool's MCP settings
+
+## MCP endpoint
+
+URL format: `https://octo-dock.com/mcp/{your-api-key}`
+Transport: Streamable HTTP (SSE)
+
+## Tools exposed
+
+OctoDock exposes only 3 tools (minimal token cost):
+
+- `octodock_do(app, action, params)` — Execute any action on any connected app
+- `octodock_help(app?, action?)` — Get available apps, actions, and parameter schemas
+- `octodock_sop(category?, name?)` — List and execute saved workflows
+
+## Supported apps
+
+Notion (21 actions), Gmail (18 actions), Google Calendar (11 actions), Google Drive (15 actions), Google Sheets (10 actions), Google Docs (7 actions), Google Tasks (11 actions), YouTube (16 actions), GitHub (32 actions), Canva, LINE, Telegram, Discord, Slack, Threads, Instagram
+
+## Links
+
+- Website: https://octo-dock.com
+- Documentation: https://octo-dock.com/docs
+- GitHub: https://github.com/chaosmibu-blip/OctoDock
+- Full details: https://octo-dock.com/llms-full.txt
