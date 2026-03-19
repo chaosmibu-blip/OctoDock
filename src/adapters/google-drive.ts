@@ -155,6 +155,7 @@ const actionMap: Record<string, string> = {
   add_comment: "gdrive_add_comment",
   list_comments: "gdrive_list_comments",
   delete_permission: "gdrive_delete_permission",
+  empty_trash: "gdrive_empty_trash",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -203,11 +204,20 @@ Update file metadata (name, description). Does not update file content.
 octodock_do(app:"google_drive", action:"update", params:{file_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", name:"Q1-Report-Final.pdf"})`,
 
   delete: `## google_drive.delete
-Move a file to trash in Google Drive.
+Delete a file in Google Drive. Default: move to trash. Set permanent=true for permanent deletion.
 ### Parameters
   file_id: Google Drive file ID
+  permanent (optional): true = permanently delete (cannot be undone). Default: false (move to trash)
 ### Example
-octodock_do(app:"google_drive", action:"delete", params:{file_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"})`,
+octodock_do(app:"google_drive", action:"delete", params:{file_id:"1Bxi..."})
+octodock_do(app:"google_drive", action:"delete", params:{file_id:"1Bxi...", permanent:true})`,
+
+  empty_trash: `## google_drive.empty_trash ⚠️
+Permanently delete ALL files in Google Drive trash. Cannot be undone.
+### Parameters
+  (none)
+### Example
+octodock_do(app:"google_drive", action:"empty_trash", params:{})`,
 
   share: `## google_drive.share
 Share a file with a specific email or make it accessible to anyone with the link.
@@ -294,7 +304,8 @@ function getSkill(action?: string): string {
   download(file_id) — download text file content
   create(name, content?, mime_type?, parent_id?) — create file or folder
   update(file_id, name?, description?) — update file metadata
-  delete(file_id) — move file to trash
+  delete(file_id, permanent?) — delete file (default: trash, permanent=true: permanent delete)
+  empty_trash() — permanently delete all trashed files
   share(file_id, role, type, email?) — share file with user or anyone
   copy(file_id, name?) — copy a file
   move(file_id, new_parent_id) — move file to another folder
@@ -360,7 +371,11 @@ function formatResponse(action: string, rawData: unknown): string {
       return `Updated: ${u.name}\nID: ${u.id}`;
     }
     case "delete": {
-      return "File moved to trash.";
+      const del = rawData as { action?: string };
+      return del.action === "permanently_deleted" ? "File permanently deleted." : "File moved to trash.";
+    }
+    case "empty_trash": {
+      return "All trashed files permanently deleted.";
     }
     case "share": {
       const s = rawData as any;
@@ -498,10 +513,17 @@ const tools: ToolDefinition[] = [
   {
     name: "gdrive_delete",
     description:
-      "Move a file to trash in Google Drive. The file can be recovered from trash within 30 days.",
+      "Delete a file in Google Drive. Default: move to trash (recoverable 30 days). Set permanent=true for permanent deletion.",
     inputSchema: {
       file_id: z.string().describe("Google Drive file ID"),
+      permanent: z.boolean().optional().describe("Set true to permanently delete (cannot be undone). Default: false (move to trash)"),
     },
+  },
+  {
+    name: "gdrive_empty_trash",
+    description:
+      "Permanently delete ALL files in Google Drive trash. Cannot be undone.",
+    inputSchema: {},
   },
   {
     name: "gdrive_share",
@@ -713,8 +735,25 @@ async function execute(
       };
     }
 
-    // 刪除檔案：移至垃圾桶（透過設定 trashed 屬性）
+    // 刪除檔案：預設移至垃圾桶，permanent=true 永久刪除
     case "gdrive_delete": {
+      if (params.permanent) {
+        // 永久刪除：DELETE /files/{fileId}（不可復原）
+        await driveFetch(
+          `/files/${params.file_id}`,
+          token,
+          { method: "DELETE" },
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ success: true, file_id: params.file_id, action: "permanently_deleted" }, null, 2),
+            },
+          ],
+        };
+      }
+      // 預設：移至垃圾桶（30 天內可復原）
       await driveFetch(
         `/files/${params.file_id}`,
         token,
@@ -728,6 +767,23 @@ async function execute(
           {
             type: "text",
             text: JSON.stringify({ success: true, file_id: params.file_id, action: "moved_to_trash" }, null, 2),
+          },
+        ],
+      };
+    }
+
+    // 清空垃圾桶：一次刪除所有已移至垃圾桶的檔案（不可復原）
+    case "gdrive_empty_trash": {
+      await driveFetch(
+        "/files/trash",
+        token,
+        { method: "DELETE" },
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ success: true, action: "trash_emptied" }, null, 2),
           },
         ],
       };
