@@ -1,11 +1,13 @@
 import { z } from "zod";
-import type { AppAdapter, ToolDefinition, ToolResult, ApiKeyConfig } from "./types";
+import type { AppAdapter, ToolDefinition, ToolResult, OAuthConfig, TokenSet } from "./types";
+import { getOAuthClientId, getOAuthClientSecret } from "@/lib/oauth-env";
 
 // ============================================================
 // Gamma Adapter
 // AI 原生簡報生成工具
 // API 文件：https://developers.gamma.app
-// 認證方式：API Key（X-API-KEY header）
+// 認證方式：OAuth 2.0（Bearer token）
+// OAuth 端點：https://auth.gamma.app
 // ============================================================
 
 /** Gamma API base URL */
@@ -18,16 +20,15 @@ const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_ATTEMPTS = 60;
 
 // ============================================================
-// 認證設定：API Key
+// 認證設定：OAuth 2.0
 // ============================================================
 
-const authConfig: ApiKeyConfig = {
-  type: "api_key",
-  instructions: {
-    zh: "1. 前往 Gamma 帳號設定 > API Keys\n2. 建立新的 API Key\n3. 複製 API Key 貼到這裡\n\n注意：需要 Pro（$18/月）以上方案才能使用 API",
-    en: "1. Go to Gamma Account Settings > API Keys\n2. Create a new API Key\n3. Copy and paste the API Key here\n\nNote: Requires Pro ($18/mo) or higher plan for API access",
-  },
-  validateEndpoint: `${BASE_URL}/themes`,
+const authConfig: OAuthConfig = {
+  type: "oauth2",
+  authorizeUrl: "https://auth.gamma.app/oauth/authorize",
+  tokenUrl: "https://auth.gamma.app/oauth/token",
+  scopes: ["generate"],
+  authMethod: "post",
 };
 
 // ============================================================
@@ -36,7 +37,7 @@ const authConfig: ApiKeyConfig = {
 
 /**
  * Gamma API 請求封裝
- * 所有請求都帶 X-API-KEY header
+ * 所有請求都帶 Authorization: Bearer header
  */
 async function gammaFetch(
   endpoint: string,
@@ -47,7 +48,7 @@ async function gammaFetch(
   const res = await fetch(url, {
     ...options,
     headers: {
-      "X-API-KEY": token,
+      "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
       ...options.headers,
     },
@@ -460,6 +461,38 @@ async function execute(
 }
 
 // ============================================================
+// OAuth token 刷新
+// ============================================================
+
+/**
+ * 用 refresh_token 換新的 access_token
+ * Gamma OAuth 支援 grant_type=refresh_token
+ */
+async function refreshGammaToken(refreshToken: string): Promise<TokenSet> {
+  const res = await fetch("https://auth.gamma.app/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: getOAuthClientId("gamma"),
+      client_secret: getOAuthClientSecret("gamma"),
+    }).toString(),
+  });
+
+  if (!res.ok) {
+    throw new Error("Gamma token refresh failed (GAMMA_REFRESH_FAILED)");
+  }
+
+  const data = await res.json();
+  return {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token ?? refreshToken,
+    expires_in: data.expires_in,
+  };
+}
+
+// ============================================================
 // 匯出 Adapter
 // ============================================================
 
@@ -467,7 +500,7 @@ export const gammaAdapter: AppAdapter = {
   name: "gamma",
   displayName: { zh: "Gamma", en: "Gamma" },
   icon: "gamma",
-  authType: "api_key",
+  authType: "oauth2",
   authConfig,
   tools,
   actionMap,
@@ -475,4 +508,5 @@ export const gammaAdapter: AppAdapter = {
   formatResponse,
   formatError,
   execute,
+  refreshToken: refreshGammaToken,
 };

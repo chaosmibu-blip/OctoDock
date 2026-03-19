@@ -6,7 +6,18 @@
 
 ## 認證
 
-- **方式**：API Key（非 OAuth）
+### OAuth 2.0（OctoDock 使用）
+
+- **Authorize URL**：`https://auth.gamma.app/oauth/authorize`
+- **Token URL**：`https://auth.gamma.app/oauth/token`
+- **Registration**：`https://auth.gamma.app/oauth/register`（Dynamic Client Registration）
+- **Scopes**：`generate`
+- **Grant types**：`authorization_code`, `refresh_token`
+- **PKCE**：S256
+- **Header**：`Authorization: Bearer {access_token}`
+
+### API Key（備選）
+
 - **Header**：`X-API-KEY: {api_key}`
 - **取得方式**：Gamma 帳號 > Account Settings > API Keys
 - **付費限制**：需 Pro（$18/月）以上方案，免費帳號無法使用 API

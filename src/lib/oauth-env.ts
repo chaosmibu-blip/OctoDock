@@ -20,6 +20,8 @@ const ENV_PREFIX_MAP: Record<string, string> = {
   slack: "SLACK",
   // Canva 獨立
   canva: "CANVA",
+  // Gamma 獨立
+  gamma: "GAMMA",
 };
 
 /**
