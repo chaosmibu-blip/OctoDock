@@ -870,7 +870,8 @@ function registerHelpTool(
         }
         // I9/U4: 在 action 列表中標注破壞性操作（⚠️ destructive）
         // 匹配格式：action_name(...) — description 或 - **action_name** 等格式
-        const destructivePatterns = ["delete", "trash", "replace_content", "clear", "archive", "remove"];
+        // V9: 擴展破壞性 action 標記，涵蓋所有 adapter 的檔案覆寫操作
+        const destructivePatterns = ["delete", "trash", "replace_content", "clear", "archive", "remove", "update_file", "bulk_delete", "ban", "kick", "merge_pr", "force"];
         for (const pattern of destructivePatterns) {
           // 匹配 getSkill 總覽中的 action 行（格式：  action_name(...) — description）
           const lineRegex = new RegExp(`(^\\s+${pattern}[^\\n]*)`, "gm");
@@ -1428,9 +1429,38 @@ function registerSopTool(
         return { content: [{ type: "text" as const, text: msg }] };
       }
 
-      // R: 依最近 7 天使用頻率排序，只顯示 top 5
-      // TODO: 從 operations 表查使用頻率排序（目前先按建立時間）
-      const top = sops.slice(0, 5);
+      // V11: 依最近 7 天使用頻率排序，只顯示 top 5
+      // 從 operations 表查 SOP 相關操作頻率，有使用紀錄的排前面
+      let top = sops;
+      try {
+        const { operations: opsTable } = await import("@/db/schema");
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const freqRows = await db
+          .select({ action: opsTable.action, count: sql<number>`count(*)::int` })
+          .from(opsTable)
+          .where(and(
+            eq(opsTable.userId, userId),
+            eq(opsTable.appName, "system"),
+            eq(opsTable.success, true),
+            gte(opsTable.createdAt, sevenDaysAgo),
+          ))
+          .groupBy(opsTable.action)
+          .orderBy(desc(sql`count(*)`));
+        // 建立 SOP key → 使用次數的映射
+        const freqMap = new Map<string, number>();
+        for (const r of freqRows) {
+          freqMap.set(r.action, r.count);
+        }
+        // 依使用次數降冪排序（沒用過的排最後，按建立時間）
+        top = [...sops].sort((a, b) => {
+          const aFreq = freqMap.get(a.key) ?? 0;
+          const bFreq = freqMap.get(b.key) ?? 0;
+          return bFreq - aFreq;
+        });
+      } catch {
+        // 頻率查詢失敗不影響，保持原順序
+      }
+      top = top.slice(0, 5);
       const list = top.map((s) => {
         // 從 SOP 內容提取摘要（第一行標題或前 80 字元）
         const firstLine = s.value.split("\n").find((l) => l.trim().length > 0) ?? s.key;

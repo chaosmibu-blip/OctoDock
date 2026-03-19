@@ -537,6 +537,7 @@ export async function executeSystemAction(
     // ── 通用 HTTP 請求（混合模式）──
     // 讓 AI 可以呼叫未預定義的 API endpoint
     // 用於長尾需求：核心功能用預定義 action，邊緣功能用 http_request
+    // V7: 自動偵測 URL 所屬的 App，帶上用戶的 OAuth token
     case "http_request": {
       const url = params.url as string;
       const method = (params.method as string) || "GET";
@@ -572,6 +573,51 @@ export async function executeSystemAction(
       // 阻擋 metadata service（雲端環境的 SSRF 常見目標）
       if (hostname === "metadata.google.internal" || hostname.startsWith("169.254.")) {
         return { ok: false, error: "Cloud metadata service access is not allowed." };
+      }
+
+      // V7: 根據 URL hostname 自動偵測所屬 App，帶上用戶的 OAuth token
+      // 只有在用戶沒有手動帶 Authorization header 時才自動帶
+      if (!headers.Authorization && !headers.authorization) {
+        const DOMAIN_APP_MAP: Record<string, string> = {
+          "api.notion.com": "notion",
+          "www.googleapis.com": "google", // Google 系需進一步比對 path
+          "gmail.googleapis.com": "gmail",
+          "sheets.googleapis.com": "google_sheets",
+          "docs.googleapis.com": "google_docs",
+          "api.github.com": "github",
+          "api.line.me": "line",
+          "api.telegram.org": "telegram",
+          "discord.com": "discord",
+          "slack.com": "slack",
+          "graph.threads.net": "threads",
+          "graph.instagram.com": "instagram",
+          "graph.facebook.com": "instagram", // Meta Graph API
+          "api.canva.com": "canva",
+        };
+
+        let detectedApp = DOMAIN_APP_MAP[hostname];
+
+        // Google 系 API：www.googleapis.com 需根據 path 判斷
+        if (hostname === "www.googleapis.com") {
+          const path = new URL(url).pathname;
+          if (path.startsWith("/calendar")) detectedApp = "google_calendar";
+          else if (path.startsWith("/drive")) detectedApp = "google_drive";
+          else if (path.startsWith("/gmail")) detectedApp = "gmail";
+          else if (path.startsWith("/youtube")) detectedApp = "youtube";
+          else if (path.startsWith("/tasks")) detectedApp = "google_tasks";
+        }
+
+        if (detectedApp) {
+          try {
+            const { getValidToken } = await import("@/services/token-manager");
+            const token = await getValidToken(userId, detectedApp);
+            if (token) {
+              headers.Authorization = `Bearer ${token}`;
+            }
+          } catch {
+            // token 取得失敗不阻塞，繼續裸請求
+          }
+        }
       }
 
       try {

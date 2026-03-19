@@ -308,10 +308,12 @@ async function doPreContext(
     console.error("Pre-context pattern query failed:", err);
   }
 
-  // O1+U9: 跨 App 上下文 — create_page 時從 title 提取關鍵字查其他 App
+  // O1+U9+V12: 跨 App 上下文 — 建立/搜尋/撰寫內容時，從標題/查詢詞查其他 App
+  // 擴展觸發條件：create_page、create_event、send（郵件/訊息）、search 等
   // 透過 crossAppQuery 回調查詢，不直接 import adapter/token-manager
-  if (/create_page/.test(toolName) && crossAppQuery) {
-    const title = params.title as string | undefined;
+  const contextKeyword = (params.title ?? params.subject ?? params.query ?? params.summary) as string | undefined;
+  if (/create|send|search|query/.test(toolName) && crossAppQuery && contextKeyword) {
+    const title = contextKeyword;
     if (title && title.length > 2) {
       try {
         const crossResults: Array<{ app: string; type: string; title: string; date?: string }> = [];
@@ -348,6 +350,21 @@ async function doPreContext(
               crossResults.push({ app: "gmail", type: "email", title: `有「${keyword}」相關的郵件` });
             }
           } catch { /* Gmail 查詢失敗不影響 */ }
+        }
+        // V12: 跨 App 上下文 — 查 Notion 相關頁面
+        if (appName !== "notion") {
+          try {
+            const keyword = title.substring(0, 30);
+            const notionResult = await crossAppQuery(
+              "notion", "notion_search", { query: keyword },
+            ) as { content?: Array<{ text: string }> } | null;
+            const notionText = (notionResult as Record<string, unknown>)?.content
+              ? ((notionResult as { content: Array<{ text: string }> }).content[0]?.text)
+              : null;
+            if (notionText && !notionText.includes("No results")) {
+              crossResults.push({ app: "notion", type: "page", title: `有「${keyword}」相關的 Notion 頁面` });
+            }
+          } catch { /* Notion 查詢失敗不影響 */ }
         }
         if (crossResults.length > 0) {
           context.crossAppContext = crossResults;

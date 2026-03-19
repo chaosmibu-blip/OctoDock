@@ -117,12 +117,21 @@ export async function detectSopCandidate(
         return null;
       }
 
-      // 檢查是否已存過同名的 SOP
+      // V8: 檢查是否已存過同名的 SOP，有重名就加數字後綴
+      let finalSopName = sopName;
       const existing = await queryMemory(userId, sopName, "sop");
-      if (!existing.find((r) => r.key === sopName)) {
+      if (existing.find((r) => r.key === sopName)) {
+        // 找到可用的數字後綴（例如 "notion: 追加內容 2"）
+        let suffix = 2;
+        while (existing.find((r) => r.key === `${sopName} ${suffix}`)) {
+          suffix++;
+        }
+        finalSopName = `${sopName} ${suffix}`;
+      }
+      if (!existing.find((r) => r.key === finalSopName)) {
         // 自動產生 SOP 內容（Markdown 格式）
         const sopContent = [
-          `# ${sopName}`,
+          `# ${finalSopName}`,
           ``,
           `自動偵測的操作流程（出現 ${candidate.count} 次）`,
           `序列：${patternKey}`,
@@ -136,7 +145,7 @@ export async function detectSopCandidate(
           `---`,
           `*自動產生於 ${new Date().toISOString().substring(0, 10)}*`,
         ].join("\n");
-        await storeMemory(userId, sopName, sopContent, "sop");
+        await storeMemory(userId, finalSopName, sopContent, "sop");
       }
     } catch (err) {
       console.error("Auto SOP creation failed:", err);

@@ -409,6 +409,18 @@ const translations: Record<Locale, Record<string, string>> = {
     "tool.notion_replace_content": "取代頁面的完整內容",
     "tool.notion_append_content": "在頁面末尾追加內容",
     "tool.notion_move_page": "移動頁面到其他父頁面",
+
+    // U23: 帳號刪除
+    "account.delete_title": "危險區域",
+    "account.delete_desc": "刪除帳號後，所有資料（連結的 App、記憶、操作紀錄、排程）將永久移除，無法復原。",
+    "account.delete_btn": "刪除帳號",
+    "account.delete_confirm_title": "確認刪除帳號",
+    "account.delete_confirm_desc": "此操作不可復原。請輸入 DELETE 以確認刪除。",
+    "account.delete_confirm_input": "請輸入 DELETE",
+    "account.delete_confirm_btn": "永久刪除我的帳號",
+    "account.delete_cancel": "取消",
+    "account.delete_success": "帳號已刪除，正在跳轉...",
+    "account.delete_error": "刪除失敗，請稍後再試",
   },
   en: {
     // Common
@@ -808,6 +820,18 @@ const translations: Record<Locale, Record<string, string>> = {
     "tool.notion_replace_content": "Replace the entire content of a page",
     "tool.notion_append_content": "Append content to the end of a page",
     "tool.notion_move_page": "Move a page to a different parent",
+
+    // U23: Account deletion
+    "account.delete_title": "Danger Zone",
+    "account.delete_desc": "Deleting your account will permanently remove all data (connected apps, memories, operation logs, schedules). This cannot be undone.",
+    "account.delete_btn": "Delete Account",
+    "account.delete_confirm_title": "Confirm Account Deletion",
+    "account.delete_confirm_desc": "This action is irreversible. Type DELETE to confirm.",
+    "account.delete_confirm_input": "Type DELETE",
+    "account.delete_confirm_btn": "Permanently Delete My Account",
+    "account.delete_cancel": "Cancel",
+    "account.delete_success": "Account deleted. Redirecting...",
+    "account.delete_error": "Deletion failed. Please try again later.",
   },
 };
 
