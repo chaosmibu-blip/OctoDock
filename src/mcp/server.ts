@@ -145,7 +145,15 @@ async function compressIfNeeded(
  */
 function buildSummary(text: string, headLines: number, tailLines: number): string {
   const lines = text.split("\n");
-  if (lines.length <= headLines + tailLines) return text;
+  // 行數少但字元數超標（minified JSON / base64）→ 強制按字元數截斷
+  if (lines.length <= headLines + tailLines) {
+    if (text.length <= MAX_RESPONSE_CHARS) return text;
+    // 字元數超標但行數少：取前 2000 字元 + 後 500 字元
+    const headChars = text.substring(0, 2000);
+    const tailChars = text.substring(text.length - 500);
+    return `[Metadata] Total: ${text.length} chars, ${lines.length} lines (dense/minified content)\n\n` +
+      headChars + `\n\n... (${text.length - 2500} chars omitted) ...\n\n` + tailChars;
+  }
 
   const head = lines.slice(0, headLines).join("\n");
   const tail = lines.slice(-tailLines).join("\n");

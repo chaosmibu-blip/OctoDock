@@ -51,6 +51,19 @@ async function githubFetch(
   return res.json();
 }
 
+/**
+ * 取得 repo 的預設分支名稱（通常是 main 或 master）
+ * 避免寫死 "main"，因為部分 repo 用 master 或其他名稱
+ */
+async function getDefaultBranch(owner: string, repo: string, token: string): Promise<string> {
+  try {
+    const repoData = await githubFetch(`/repos/${owner}/${repo}`, token) as { default_branch?: string };
+    return repoData.default_branch ?? "main";
+  } catch {
+    return "main"; // API 失敗時 fallback
+  }
+}
+
 // ── do+help 架構：動作對照表 ──────────────────────────────
 // 將自然語言動作名稱對應到 MCP 工具名稱
 const actionMap: Record<string, string> = {
@@ -1286,7 +1299,7 @@ async function execute(
             title: params.title,
             body: params.body,
             head: params.head,
-            base: (params.base as string) || "main",
+            base: (params.base as string) || await getDefaultBranch(params.owner as string, params.repo as string, token),
           }),
         },
       );
@@ -1392,7 +1405,7 @@ async function execute(
         {
           method: "POST",
           body: JSON.stringify({
-            ref: (params.ref as string) || "main",
+            ref: (params.ref as string) || await getDefaultBranch(params.owner as string, params.repo as string, token),
           }),
         },
       );
@@ -1467,7 +1480,7 @@ async function execute(
     // 建立新分支（先取得來源分支的 SHA，再建立 ref）
     case "github_create_branch": {
       // 取得來源分支的最新 commit SHA
-      const sourceBranch = (params.from as string) || "main";
+      const sourceBranch = (params.from as string) || await getDefaultBranch(params.owner as string, params.repo as string, token);
       const refData = await githubFetch(
         `/repos/${params.owner}/${params.repo}/git/ref/heads/${sourceBranch}`,
         token,
