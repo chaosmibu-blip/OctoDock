@@ -7,8 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/auth";
+import { auth } from "@/auth";
 import { db } from "@/db";
 import { oauthClients, oauthCodes } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -16,7 +15,7 @@ import { nanoid } from "nanoid";
 
 export async function POST(request: NextRequest) {
   // 驗證用戶身份
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json(
       { error: "unauthorized", error_description: "Not logged in" },

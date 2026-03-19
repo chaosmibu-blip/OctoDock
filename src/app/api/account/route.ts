@@ -16,8 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/auth";
+import { auth } from "@/auth";
 import { db } from "@/db";
 import {
   users,
@@ -35,7 +34,7 @@ import { eq } from "drizzle-orm";
 
 export async function DELETE(request: NextRequest) {
   // 驗證用戶身份
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json(
       { error: "Unauthorized" },

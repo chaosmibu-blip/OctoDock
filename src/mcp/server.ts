@@ -205,14 +205,7 @@ function registerDoTool(
 ): void {
   server.tool(
     "octodock_do",
-    {
-      description: "Execute a single action on a connected app (e.g. notion, gmail, github). Requires app, action, and params. If you don't know the action name or params, call octodock_help first. If the task matches a saved workflow, call octodock_sop first — it's faster.",
-      // U26d: Safety annotations for Claude Connectors Directory
-      annotations: {
-        destructiveHint: true,
-        readOnlyHint: false,
-      },
-    },
+    "Execute a single action on a connected app (e.g. notion, gmail, github). Requires app, action, and params. If you don't know the action name or params, call octodock_help first. If the task matches a saved workflow, call octodock_sop first — it's faster.",
     {
       app: z.string().describe("App name (e.g. 'notion', 'gmail', 'system')"),
       action: z.string().describe("Action to perform (e.g. 'create_page', 'search')"),
@@ -220,6 +213,11 @@ function registerDoTool(
         .record(z.string(), z.unknown())
         .optional()
         .describe("Action parameters"),
+    },
+    // U26d: Safety annotations for Claude Connectors Directory
+    {
+      destructiveHint: true,
+      readOnlyHint: false,
     },
     async (args) => {
       const { app, action, params = {} } = args as {
@@ -645,14 +643,7 @@ function registerHelpTool(
 ): void {
   server.tool(
     "octodock_help",
-    {
-      description: "Look up available apps and actions. No args: list all connected apps. With app: list actions for that app. With app+action: show required params and usage example.",
-      // U26d: Safety annotations
-      annotations: {
-        destructiveHint: false,
-        readOnlyHint: true,
-      },
-    },
+    "Look up available apps and actions. No args: list all connected apps. With app: list actions for that app. With app+action: show required params and usage example.",
     {
       app: z
         .string()
@@ -662,6 +653,11 @@ function registerHelpTool(
         .string()
         .optional()
         .describe("Action name to get detailed params and example (requires app)"),
+    },
+    // U26d: Safety annotations
+    {
+      destructiveHint: false,
+      readOnlyHint: true,
     },
     async (args) => {
       const { app, action } = args as { app?: string; action?: string };
@@ -1396,17 +1392,15 @@ function registerSopTool(
 ): void {
   server.tool(
     "octodock_sop",
-    {
-      description: "List saved workflows (SOPs and combo actions) that compress multi-step operations into one call. Check here BEFORE using octodock_do — if a matching workflow exists, use it instead. Workflows are auto-generated from repeated usage patterns and user-defined rules.",
-      // U26d: Safety annotations
-      annotations: {
-        destructiveHint: false,
-        readOnlyHint: true,
-      },
-    },
+    "List saved workflows (SOPs and combo actions) that compress multi-step operations into one call. Check here BEFORE using octodock_do — if a matching workflow exists, use it instead. Workflows are auto-generated from repeated usage patterns and user-defined rules.",
     {
       category: z.string().optional().describe("Filter by app name (e.g. 'notion', 'gmail')"),
       name: z.string().optional().describe("Execute a specific SOP by name"),
+    },
+    // U26d: Safety annotations
+    {
+      destructiveHint: false,
+      readOnlyHint: true,
     },
     async (args) => {
       const { category, name } = args as { category?: string; name?: string };

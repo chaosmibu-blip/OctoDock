@@ -137,21 +137,12 @@ export async function executeWithMiddleware(
 
 /**
  * 非同步寫入 operations 記錄（不阻塞主請求）
- * 如果 agent_instance_id 欄位不存在（migration 尚未跑完），自動降級重試
  */
-function logOperation(values: Record<string, unknown>) {
+function logOperation(values: typeof operations.$inferInsert) {
   db.insert(operations)
     .values(values)
     .catch((err) => {
-      // 若因 agent_instance_id 欄位不存在而失敗，去掉該欄位重試
-      if (String(err).includes("agent_instance_id")) {
-        const { agentInstanceId, ...rest } = values;
-        db.insert(operations)
-          .values(rest)
-          .catch((retryErr) => console.error("Failed to log operation (retry):", retryErr));
-      } else {
-        console.error("Failed to log operation:", err);
-      }
+      console.error("Failed to log operation:", err);
     });
 }
 
