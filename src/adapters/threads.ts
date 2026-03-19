@@ -72,7 +72,7 @@ octodock_do(app:"threads", action:"get_profile", params:{})`,
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
-  if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `threads actions:
   publish(text) — publish text post (max 500 chars)
   get_posts(limit?) — get recent posts

@@ -203,7 +203,7 @@ octodock_do(app:"telegram", action:"create_forum_topic", params:{chat_id:"-10012
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
-  if (action) return `Action "${action}" not found. Available: ${Object.keys(actionMap).join(", ")}`;
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `telegram actions (${Object.keys(actionMap).length}):
 ## Messaging
   send_message(chat_id, text, parse_mode?, reply_to?, reply_markup?) — send text

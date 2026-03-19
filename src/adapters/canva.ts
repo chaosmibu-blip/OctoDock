@@ -203,7 +203,7 @@ Example: \`octodock_do(app:"canva", action:"get_profile")\``,
 function getSkill(action?: string): string {
   // 有指定 action → 回傳該 action 的詳細說明
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
-  if (action) return `Action "${action}" not found. Use octodock_help(app:"canva") to see all actions.`;
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
 
   // 沒指定 → 回傳 App 級別總覽
   return `# Canva — Design platform

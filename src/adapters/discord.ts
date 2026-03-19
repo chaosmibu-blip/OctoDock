@@ -219,7 +219,7 @@ octodock_do(app:"discord", action:"execute_webhook", params:{webhook_id:"123", w
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
-  if (action) return `Action "${action}" not found. Available: ${Object.keys(actionMap).join(", ")}`;
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `discord actions (${Object.keys(actionMap).length}):
 ## Messages
   send_message(channel_id, content, embeds?) — send message (Markdown)

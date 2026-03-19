@@ -220,8 +220,7 @@ octodock_do(app:"youtube", action:"post_comment", params:{video_id:"dQw4w9WgXcQ"
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
-  if (action)
-    return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `youtube actions (${Object.keys(actionMap).length}):
   search(query, max_results?) — search videos (⚠️ 100 quota units per call)
   get_video(video_id) — get video details + stats (1 unit)

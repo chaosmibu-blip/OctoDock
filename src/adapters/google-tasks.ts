@@ -174,9 +174,7 @@ function getSkill(action?: string): string {
   // action 級別：回傳該 action 的完整參數 + 範例
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   // 有 action 但找不到：提示可用的 action
-  if (action) {
-    return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
-  }
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   // app 級別：全部 10 個 action
   return `google_tasks actions (${Object.keys(actionMap).length}):
   list_tasklists() — list all task lists

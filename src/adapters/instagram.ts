@@ -90,7 +90,7 @@ octodock_do(app:"instagram", action:"get_insights", params:{media_id:"1789001234
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
-  if (action) return `Action "${action}" not found. Available: ${Object.keys(ACTION_SKILLS).join(", ")}`;
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `instagram actions:
   publish(image_url, caption?) — publish photo post
   get_posts(limit?) — get recent posts with engagement stats

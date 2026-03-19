@@ -222,7 +222,7 @@ octodock_do(app:"line", action:"create_audience", params:{description:"VIP custo
 
 function getSkill(action?: string): string {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
-  if (action) return `Action "${action}" not found. Available: ${Object.keys(actionMap).join(", ")}`;
+  if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `line actions (${Object.keys(actionMap).length}):
 ## Messaging
   send_message(user_id, message) — send text to user
