@@ -842,7 +842,8 @@ function registerHelpTool(
       // I9: 對破壞性 action 加 ⚠️ destructive 標記
       // U5: 在 getSkill 回傳後附加頻率排序摘要
       if (adapter.getSkill) {
-        let skillText = adapter.getSkill();
+        let skillText = adapter.getSkill() ?? "";
+        if (!skillText) return { content: [{ type: "text", text: `No help available for ${app}.` }] };
 
         // U5: 從 operations 表查使用頻率，產生「常用」區塊
         try {

@@ -195,11 +195,11 @@ No parameters required.`,
 // getSkill：回傳操作說明
 // ============================================================
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   // 帶 action：回傳特定 action 的完整說明
-  if (action && ACTION_SKILLS[action]) {
-    return ACTION_SKILLS[action];
-  }
+  if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
+  // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
+  if (action) return null;
 
   // 不帶 action：回傳 App 級別清單
   return `Gamma — AI presentation generator.

@@ -62,7 +62,7 @@ export async function suggestNextAction(
       LIMIT 1
     `);
 
-    const result = (rows as unknown as Array<{ next_app: string; next_tool: string; cnt: string; probability: string }>);
+    const result = (rows.rows as unknown as Array<{ next_app: string; next_tool: string; cnt: string; probability: string }>);
     if (!result || result.length === 0) return null;
 
     const top = result[0];

@@ -109,6 +109,7 @@ export interface AppAdapter {
   /**
    * 回傳操作說明（Skill）
    * 必填。不帶 action：App 級別清單。帶 action：完整參數 + 範例
+   * 找不到 action 時回傳 null，讓 server.ts 用 actionMap fallback
    */
   getSkill(action?: string): string | null;
 
