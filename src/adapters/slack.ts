@@ -161,7 +161,7 @@ Get replies in a message thread.
 };
 
 /** 回傳 Skill 說明 */
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return `No detailed help for slack.${action}. Use octodock_help(app:"slack") to see all actions.`;
   return `slack (${Object.keys(actionMap).length} actions):

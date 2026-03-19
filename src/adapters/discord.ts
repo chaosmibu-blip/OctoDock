@@ -217,7 +217,7 @@ Send a message through a webhook (no bot required).
 octodock_do(app:"discord", action:"execute_webhook", params:{webhook_id:"123", webhook_token:"abc", content:"Automated alert!"})`,
 };
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `discord actions (${Object.keys(actionMap).length}):

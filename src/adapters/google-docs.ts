@@ -122,7 +122,7 @@ Insert a table at a specific position in the document.
 octodock_do(app:"google_docs", action:"insert_table", params:{document_id:"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", rows:3, columns:4, index:1})`,
 };
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `google_docs actions (${Object.keys(actionMap).length}):

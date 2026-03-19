@@ -110,7 +110,7 @@ export interface AppAdapter {
    * 回傳操作說明（Skill）
    * 必填。不帶 action：App 級別清單。帶 action：完整參數 + 範例
    */
-  getSkill(action?: string): string;
+  getSkill(action?: string): string | null;
 
   /**
    * 將 API 原始回傳轉成 AI 友善格式

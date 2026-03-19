@@ -281,7 +281,7 @@ List all workspace members.
 octodock_do(app:"notion", action:"get_users", params:{})`,
 };
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   // action 級別：回傳該 action 的完整參數 + 範例
   if (action && ACTION_SKILLS[action]) {
     return ACTION_SKILLS[action];

@@ -170,7 +170,7 @@ Create a new task list.
 octodock_do(app:"google_tasks", action:"create_tasklist", params:{title:"Work Projects"})`,
 };
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   // action 級別：回傳該 action 的完整參數 + 範例
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   // 有 action 但找不到：提示可用的 action

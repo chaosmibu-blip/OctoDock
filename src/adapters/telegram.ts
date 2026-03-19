@@ -201,7 +201,7 @@ Create a topic in a forum-enabled group.
 octodock_do(app:"telegram", action:"create_forum_topic", params:{chat_id:"-1001234567890", name:"Bug Reports"})`,
 };
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `telegram actions (${Object.keys(actionMap).length}):

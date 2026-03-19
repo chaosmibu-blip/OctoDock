@@ -220,7 +220,7 @@ Create an audience group from user IDs for narrowcast.
 octodock_do(app:"line", action:"create_audience", params:{description:"VIP customers", user_ids:["U1234..."]})`,
 };
 
-function getSkill(action?: string): string {
+function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
   return `line actions (${Object.keys(actionMap).length}):
