@@ -258,9 +258,10 @@ function formatResponse(action: string, rawData: unknown): string {
       return `Done. ${formatTask(task)}\n  ID: ${task.id}`;
     }
 
-    // 刪除任務
+    // U12: 刪除任務 — 回傳被刪的標題和 ID
     case "delete_task": {
-      return "Done. Task deleted.";
+      const d = data as { id?: string; title?: string };
+      return `Done. Task deleted: **${d.title ?? "(unknown)"}**\n  ID: ${d.id ?? "unknown"}`;
     }
 
     // 移動任務
@@ -534,15 +535,25 @@ async function execute(
       };
     }
 
-    // 刪除任務
+    // U12: 刪除任務 — 先取標題再刪，回傳包含被刪任務的 id 和 title
     case "gtasks_delete_task": {
-      const result = await gtasksFetch(
+      let taskTitle = "(unknown)";
+      try {
+        const taskInfo = await gtasksFetch(
+          `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task as string)}`,
+          token,
+        ) as { title?: string };
+        taskTitle = taskInfo.title ?? "(unknown)";
+      } catch {
+        // 取不到不阻塞刪除
+      }
+      await gtasksFetch(
         `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task as string)}`,
         token,
         { method: "DELETE" },
       );
       return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify({ deleted: true, id: params.task, title: taskTitle }, null, 2) }],
       };
     }
 

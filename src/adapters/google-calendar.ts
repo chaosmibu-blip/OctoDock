@@ -126,6 +126,10 @@ const actionMap: Record<string, string> = {
   list_recurring: "gcal_list_recurring",
   create_calendar: "gcal_create_calendar",
   delete_calendar: "gcal_delete_calendar",
+  // U22: ACL 共享功能
+  share_calendar: "gcal_share_calendar",
+  list_sharing: "gcal_list_sharing",
+  remove_sharing: "gcal_remove_sharing",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -245,6 +249,32 @@ Delete a Google Calendar. This action is irreversible. Cannot delete the primary
   calendar_id: Calendar ID to delete
 ### Example
 octodock_do(app:"google_calendar", action:"delete_calendar", params:{calendar_id:"abc123@group.calendar.google.com"})`,
+
+  // U22: ACL 共享功能
+  share_calendar: `## google_calendar.share_calendar
+⚠️ sensitive — Share your calendar with another person.
+### Parameters
+  calendar_id (optional): Calendar ID (default "primary")
+  email: Email address of the person to share with
+  role: "reader" (can view) or "writer" (can edit)
+### Example
+octodock_do(app:"google_calendar", action:"share_calendar", params:{email:"wife@gmail.com", role:"reader"})
+octodock_do(app:"google_calendar", action:"share_calendar", params:{email:"colleague@company.com", role:"writer", calendar_id:"work@group.calendar.google.com"})`,
+
+  list_sharing: `## google_calendar.list_sharing
+List who the calendar is shared with.
+### Parameters
+  calendar_id (optional): Calendar ID (default "primary")
+### Example
+octodock_do(app:"google_calendar", action:"list_sharing", params:{})`,
+
+  remove_sharing: `## google_calendar.remove_sharing
+⚠️ destructive — Remove someone's access to your calendar.
+### Parameters
+  calendar_id (optional): Calendar ID (default "primary")
+  email: Email address to remove
+### Example
+octodock_do(app:"google_calendar", action:"remove_sharing", params:{email:"someone@gmail.com"})`,
 };
 
 function getSkill(action?: string): string {
@@ -262,6 +292,9 @@ function getSkill(action?: string): string {
   list_recurring(event_id, calendar_id?) — list instances of a recurring event
   create_calendar(summary, description?, timezone?) — create a new calendar
   delete_calendar(calendar_id) — delete a calendar
+  share_calendar(email, role, calendar_id?) — ⚠️ share calendar with someone
+  list_sharing(calendar_id?) — list who calendar is shared with
+  remove_sharing(email, calendar_id?) — ⚠️ remove someone's calendar access
 Use octodock_help(app:"google_calendar", action:"ACTION") for detailed params + example.`;
 }
 
@@ -333,6 +366,33 @@ function formatResponse(action: string, rawData: unknown): string {
     // 刪除日曆
     case "delete_calendar": {
       return "已成功刪除日曆。";
+    }
+
+    // U22: 共享日曆回傳格式
+    case "share_calendar": {
+      const data = rawData as Record<string, unknown>;
+      const scope = data.scope as { type?: string; value?: string } | undefined;
+      return `✅ 已共享日曆給 **${scope?.value || "unknown"}**（權限：${data.role || "unknown"}）`;
+    }
+
+    // U22: 列出共享對象
+    case "list_sharing": {
+      const data = rawData as { items?: Array<Record<string, unknown>> };
+      if (!data.items?.length) return "No sharing rules found.";
+      const userRules = data.items.filter((rule) => {
+        const scope = rule.scope as { type?: string } | undefined;
+        return scope?.type === "user";
+      });
+      if (!userRules.length) return "此日曆尚未與任何人共享。";
+      return `共享對象（${userRules.length} 人）：\n` + userRules.map((rule) => {
+        const scope = rule.scope as { value?: string } | undefined;
+        return `- **${scope?.value}** — ${rule.role}`;
+      }).join("\n");
+    }
+
+    // U22: 移除共享
+    case "remove_sharing": {
+      return `✅ 已移除共享權限。`;
     }
 
     // 空閒/忙碌查詢結果
@@ -562,6 +622,31 @@ const tools: ToolDefinition[] = [
       calendar_id: z.string().describe("Calendar ID to delete"),
     },
   },
+  // U22: ACL 共享功能
+  {
+    name: "gcal_share_calendar",
+    description: "Share a calendar with another person by email. Requires email and role (reader or writer).",
+    inputSchema: {
+      calendar_id: z.string().optional().describe("Calendar ID (default primary)"),
+      email: z.string().describe("Email of the person to share with"),
+      role: z.string().describe("Access level: reader (view only) or writer (can edit)"),
+    },
+  },
+  {
+    name: "gcal_list_sharing",
+    description: "List all people the calendar is shared with and their access levels.",
+    inputSchema: {
+      calendar_id: z.string().optional().describe("Calendar ID (default primary)"),
+    },
+  },
+  {
+    name: "gcal_remove_sharing",
+    description: "Remove someone's access to your calendar.",
+    inputSchema: {
+      calendar_id: z.string().optional().describe("Calendar ID (default primary)"),
+      email: z.string().describe("Email of the person to remove"),
+    },
+  },
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
@@ -744,6 +829,36 @@ async function execute(
       return {
         content: [{ type: "text", text: JSON.stringify({ deleted: true }, null, 2) }],
       };
+    }
+
+    // U22: 共享日曆 — 新增共享對象
+    case "gcal_share_calendar": {
+      const calendarId = (params.calendar_id as string) || "primary";
+      const result = await gcalFetch(`/calendars/${encodeURIComponent(calendarId)}/acl`, token, {
+        method: "POST",
+        body: JSON.stringify({
+          role: params.role,
+          scope: { type: "user", value: params.email },
+        }),
+      });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // U22: 列出共享對象
+    case "gcal_list_sharing": {
+      const calendarId = (params.calendar_id as string) || "primary";
+      const result = await gcalFetch(`/calendars/${encodeURIComponent(calendarId)}/acl`, token);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // U22: 移除共享
+    case "gcal_remove_sharing": {
+      const calendarId = (params.calendar_id as string) || "primary";
+      const ruleId = `user:${params.email}`;
+      const result = await gcalFetch(`/calendars/${encodeURIComponent(calendarId)}/acl/${encodeURIComponent(ruleId)}`, token, {
+        method: "DELETE",
+      });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
 
     // 空閒/忙碌查詢：檢查指定時間範圍的可用性

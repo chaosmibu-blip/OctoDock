@@ -42,15 +42,14 @@ export async function GET() {
       .map((a) => [a.appName, a]),
   );
 
-  /* U17: 查詢每個 action 的使用次數（用於區分已解鎖/未解鎖） */
-  const actionUsage = new Map<string, number>();
+  // U17: 查詢每個 action 的使用次數（用於前端區分已解鎖/未解鎖）
+  let usedActionsMap = new Map<string, Set<string>>(); // app → Set<action>
   if (session?.user?.id) {
     try {
-      const usageRows = await db
+      const usedActions = await db
         .select({
           appName: operations.appName,
           action: operations.action,
-          count: sql<number>`count(*)`,
         })
         .from(operations)
         .where(
@@ -60,13 +59,15 @@ export async function GET() {
           ),
         )
         .groupBy(operations.appName, operations.action);
-      for (const row of usageRows) {
-        if (row.action) {
-          actionUsage.set(`${row.appName}.${row.action}`, Number(row.count));
+
+      for (const row of usedActions) {
+        if (!usedActionsMap.has(row.appName)) {
+          usedActionsMap.set(row.appName, new Set());
         }
+        usedActionsMap.get(row.appName)!.add(row.action);
       }
     } catch {
-      // 使用次數查詢失敗不影響回傳
+      // 查詢失敗不影響主流程
     }
   }
 
@@ -75,20 +76,19 @@ export async function GET() {
     const conn = connectedMap.get(adapter.name);
 
     /* 從 actionMap 取得所有 action，搭配 getSkill 取描述 */
+    // U17: 加入 used 欄位，標示該 action 是否曾被使用過
+    const appUsedActions = usedActionsMap.get(adapter.name) ?? new Set();
     const actions = Object.keys(adapter.actionMap).map((actionName) => {
       /* 嘗試從 tools 找到對應的 description */
       const internalToolName = adapter.actionMap[actionName];
       const tool = adapter.tools.find((t) => t.name === internalToolName);
-      // U17: action 使用次數 ≥ 1 = 已解鎖
-      const usageCount = actionUsage.get(`${adapter.name}.${actionName}`) ?? 0;
       return {
         name: actionName,
         description: {
           zh: getActionZh(adapter.name, actionName),
           en: tool?.description ?? actionName,
         },
-        unlocked: usageCount > 0,  // U17: 用過至少 1 次 = 已解鎖
-        usageCount,                  // U17: 使用次數（供前端決定節點大小/亮度）
+        used: appUsedActions.has(actionName), // U17: 已解鎖 = true
       };
     });
 

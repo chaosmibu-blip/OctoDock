@@ -263,6 +263,50 @@ export const storedResults = pgTable(
 // ============================================================
 // 4.9 bot_configs (Phase 3+)
 // ============================================================
+// ============================================================
+// 4.10 OAuth Provider tables（U24：OctoDock 作為 OAuth Provider）
+// 讓 Claude Connectors Directory 等外部 AI 平台透過 OAuth 連接
+// ============================================================
+
+/** OAuth 客戶端（例如 Claude by Anthropic） */
+export const oauthClients = pgTable("oauth_clients", {
+  id: text("id").primaryKey(), // 例如 "claude_connector"
+  secretHash: text("secret_hash").notNull(), // bcrypt hashed secret
+  name: text("name").notNull(), // 顯示名稱
+  redirectUris: text("redirect_uris").array().notNull(), // 允許的 redirect URIs
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+/** OAuth authorization codes（短命，使用後即刪） */
+export const oauthCodes = pgTable("oauth_codes", {
+  code: text("code").primaryKey(), // 隨機產生
+  clientId: text("client_id").notNull().references(() => oauthClients.id),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  redirectUri: text("redirect_uri").notNull(),
+  scope: text("scope").notNull().default("mcp"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), // 10 分鐘
+  used: boolean("used").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+/** OAuth access/refresh tokens */
+export const oauthTokens = pgTable(
+  "oauth_tokens",
+  {
+    accessToken: text("access_token").primaryKey(),
+    refreshToken: text("refresh_token").notNull().unique(),
+    clientId: text("client_id").notNull().references(() => oauthClients.id),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull().default("mcp"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), // 1 小時
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_oauth_tokens_user").on(table.userId),
+    index("idx_oauth_tokens_refresh").on(table.refreshToken),
+  ],
+);
+
 export const botConfigs = pgTable("bot_configs", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")

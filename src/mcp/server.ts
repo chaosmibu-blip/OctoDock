@@ -197,7 +197,14 @@ function registerDoTool(
 ): void {
   server.tool(
     "octodock_do",
-    "Execute a single action on a connected app (e.g. notion, gmail, github). Requires app, action, and params. If you don't know the action name or params, call octodock_help first. If the task matches a saved workflow, call octodock_sop first — it's faster.",
+    {
+      description: "Execute a single action on a connected app (e.g. notion, gmail, github). Requires app, action, and params. If you don't know the action name or params, call octodock_help first. If the task matches a saved workflow, call octodock_sop first — it's faster.",
+      // U26d: Safety annotations for Claude Connectors Directory
+      annotations: {
+        destructiveHint: true,
+        readOnlyHint: false,
+      },
+    },
     {
       app: z.string().describe("App name (e.g. 'notion', 'gmail', 'system')"),
       action: z.string().describe("Action to perform (e.g. 'create_page', 'search')"),
@@ -630,7 +637,14 @@ function registerHelpTool(
 ): void {
   server.tool(
     "octodock_help",
-    "Look up available apps and actions. No args: list all connected apps. With app: list actions for that app. With app+action: show required params and usage example.",
+    {
+      description: "Look up available apps and actions. No args: list all connected apps. With app: list actions for that app. With app+action: show required params and usage example.",
+      // U26d: Safety annotations
+      annotations: {
+        destructiveHint: false,
+        readOnlyHint: true,
+      },
+    },
     {
       app: z
         .string()
@@ -820,15 +834,56 @@ function registerHelpTool(
       }
 
       // 優先用 getSkill()（精簡版）
+      // U5: 頻率排序 — 從 operations 表統計使用次數，常用的排前面
       // I9: 對破壞性 action 加 ⚠️ destructive 標記
       // U5: 在 getSkill 回傳後附加頻率排序摘要
       if (adapter.getSkill) {
         let skillText = adapter.getSkill();
-        // I9: 在 action 列表中標注破壞性操作
-        const destructivePatterns = ["delete", "trash", "replace_content", "clear", "archive"];
+
+        // U5: 從 operations 表查使用頻率，產生「常用」區塊
+        try {
+          const { operations: opsTable } = await import("@/db/schema");
+          const { sql } = await import("drizzle-orm");
+          const freqRows = await db
+            .select({
+              action: opsTable.action,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(opsTable)
+            .where(
+              and(
+                eq(opsTable.userId, userId),
+                eq(opsTable.appName, app),
+                eq(opsTable.success, true),
+              ),
+            )
+            .groupBy(opsTable.action)
+            .orderBy(sql`count(*) desc`)
+            .limit(5);
+
+          if (freqRows.length > 0) {
+            const freqList = freqRows.map((r) => `- ${r.action} (${r.count} 次)`).join("\n");
+            skillText = `**常用：**\n${freqList}\n\n---\n\n${skillText}`;
+          }
+        } catch {
+          // 頻率查詢失敗不影響
+        }
+        // I9/U4: 在 action 列表中標注破壞性操作（⚠️ destructive）
+        // 匹配格式：action_name(...) — description 或 - **action_name** 等格式
+        const destructivePatterns = ["delete", "trash", "replace_content", "clear", "archive", "remove"];
         for (const pattern of destructivePatterns) {
-          const regex = new RegExp(`(- \\*\\*[^*]*${pattern}[^*]*\\*\\*)`, "g");
-          skillText = skillText.replace(regex, `$1 ⚠️`);
+          // 匹配 getSkill 總覽中的 action 行（格式：  action_name(...) — description）
+          const lineRegex = new RegExp(`(^\\s+${pattern}[^\\n]*)`, "gm");
+          skillText = skillText.replace(lineRegex, (match) => {
+            if (match.includes("⚠️")) return match; // 避免重複標記
+            return `${match} ⚠️ destructive`;
+          });
+          // 匹配 Markdown bold 格式
+          const boldRegex = new RegExp(`(- \\*\\*[^*]*${pattern}[^*]*\\*\\*)`, "g");
+          skillText = skillText.replace(boldRegex, (match) => {
+            if (match.includes("⚠️")) return match;
+            return `${match} ⚠️ destructive`;
+          });
         }
         // U5: 從 operations 表查使用頻率，附加在開頭
         try {
@@ -1332,7 +1387,14 @@ function registerSopTool(
 ): void {
   server.tool(
     "octodock_sop",
-    "List saved workflows (SOPs and combo actions) that compress multi-step operations into one call. Check here BEFORE using octodock_do — if a matching workflow exists, use it instead. Workflows are auto-generated from repeated usage patterns and user-defined rules.",
+    {
+      description: "List saved workflows (SOPs and combo actions) that compress multi-step operations into one call. Check here BEFORE using octodock_do — if a matching workflow exists, use it instead. Workflows are auto-generated from repeated usage patterns and user-defined rules.",
+      // U26d: Safety annotations
+      annotations: {
+        destructiveHint: false,
+        readOnlyHint: true,
+      },
+    },
     {
       category: z.string().optional().describe("Filter by app name (e.g. 'notion', 'gmail')"),
       name: z.string().optional().describe("Execute a specific SOP by name"),

@@ -169,6 +169,71 @@ export function checkParams(
     }
   }
 
+  // ── J3d/U7: 必填參數攔截 — 在打上游 API 前就攔截缺少必填參數的情況 ──
+  const REQUIRED_PARAMS: Record<string, Record<string, string[]>> = {
+    notion: {
+      notion_create_page: ["title"],
+      notion_replace_content: ["page_id", "content"],
+      notion_append_content: ["page_id", "content"],
+      notion_delete_page: ["page_id"],
+      notion_get_page: ["page_id"],
+      notion_move_page: ["page_id", "new_parent_id"],
+      notion_update_page: ["page_id"],
+      notion_get_block: ["block_id"],
+      notion_delete_block: ["block_id"],
+      notion_update_block: ["block_id"],
+      notion_query_database: ["database_id"],
+      notion_create_database_item: ["database_id", "properties"],
+      notion_add_comment: ["page_id", "text"],
+    },
+    gmail: {
+      gmail_send: ["to", "subject"],
+      gmail_read: ["message_id"],
+      gmail_reply: ["message_id", "body"],
+      gmail_create_draft: ["to", "subject"],
+    },
+    google_calendar: {
+      gcal_create_event: ["summary", "start", "end"],
+      gcal_update_event: ["event_id"],
+      gcal_delete_event: ["event_id"],
+      gcal_get_event: ["event_id"],
+      gcal_quick_add: ["text"],
+      gcal_freebusy: ["time_min", "time_max"],
+      gcal_delete_calendar: ["calendar_id"],
+      gcal_share_calendar: ["email", "role"],
+      gcal_remove_sharing: ["email"],
+    },
+    google_drive: {
+      gdrive_download: ["file_id"],
+      gdrive_delete: ["file_id"],
+    },
+    google_tasks: {
+      gtasks_create_task: ["title"],
+      gtasks_complete_task: ["task_id"],
+      gtasks_delete_task: ["task_id"],
+    },
+    github: {
+      github_create_issue: ["owner", "repo", "title"],
+      github_get_file: ["owner", "repo", "path"],
+    },
+  };
+
+  const requiredForTool = REQUIRED_PARAMS[app]?.[toolName];
+  if (requiredForTool) {
+    const missing = requiredForTool.filter((p) => {
+      const val = params[p];
+      return val === undefined || val === null || val === "";
+    });
+    if (missing.length > 0) {
+      // 反查 action 名稱（從 toolName 推回）
+      const actionName = toolName.replace(/^[^_]+_/, ""); // 簡易推導
+      return {
+        blocked: true,
+        error: `${app}.${actionName} 缺少必填參數：${missing.join(", ")}。Use octodock_help(app:"${app}", action:"${actionName}") to see required params.`,
+      };
+    }
+  }
+
   if (warnings.length > 0) {
     return { blocked: false, warnings, transformed: params };
   }

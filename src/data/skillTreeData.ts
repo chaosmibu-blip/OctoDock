@@ -25,6 +25,7 @@ export interface SkillNode {
   prerequisites?: Array<{ nodeId: string; label: string; app: string }>;
   discovered?: boolean;     // 第三層：自動發現的候選組合技
   frequency?: number;       // 自動發現的出現次數
+  used?: boolean;           // U17: action 是否曾被使用過（已解鎖 vs 未解鎖）
 }
 
 /** 技能樹邊 */
@@ -204,6 +205,7 @@ export function buildSkillTree(
         description: action.description.zh,
         descriptionEn: action.description.en,
         app: app.name,
+        used: (action as { used?: boolean }).used ?? false, // U17: 標記是否已使用
       });
       edges.push({ from: app.name, to: actionId, type: 'normal' });
     });

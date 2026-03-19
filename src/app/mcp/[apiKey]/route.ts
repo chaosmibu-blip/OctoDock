@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { authenticateByApiKey } from "@/mcp/middleware/auth";
+import { authenticateByApiKey, authenticateByBearerToken } from "@/mcp/middleware/auth";
 import { createServerForUser } from "@/mcp/server";
 import { ensureAdapters } from "@/mcp/registry";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -26,11 +26,21 @@ async function handleMcpRequest(
 ): Promise<Response> {
   const { apiKey } = await params;
 
-  // 1. 用 API key 驗證用戶身份
-  const user = await authenticateByApiKey(apiKey);
+  // 1. 驗證用戶身份（支援 API key 和 Bearer token 兩種方式）
+  // U24: 優先檢查 Authorization: Bearer header（OAuth Provider）
+  let user = null;
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const bearerToken = authHeader.slice(7);
+    user = await authenticateByBearerToken(bearerToken);
+  }
+  // Fallback: 從 URL path 中的 API key 驗證
+  if (!user) {
+    user = await authenticateByApiKey(apiKey);
+  }
   if (!user) {
     return NextResponse.json(
-      { error: "Invalid API key (INVALID_API_KEY)" },
+      { error: "Invalid API key or Bearer token (INVALID_AUTH)" },
       { status: 401 },
     );
   }
@@ -103,12 +113,37 @@ async function handleMcpRequest(
 // MCP 協議使用 POST，GET 和 DELETE 也開放供 MCP SDK 使用
 // ============================================================
 
+// U26e: CORS headers — 讓瀏覽器端認證能正常運作
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+/** U26e: OPTIONS preflight handler（CORS 預檢請求） */
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
+
+/** 為 response 附加 CORS headers */
+function withCors(response: Response): Response {
+  const newHeaders = new Headers(response.headers);
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    newHeaders.set(key, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  });
+}
+
 /** 處理 MCP POST 請求（主要的工具呼叫入口） */
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ apiKey: string }> },
 ) {
-  return handleMcpRequest(req, context);
+  return withCors(await handleMcpRequest(req, context));
 }
 
 /** 處理 MCP GET 請求（SSE 連線等） */
@@ -116,7 +151,7 @@ export async function GET(
   req: NextRequest,
   context: { params: Promise<{ apiKey: string }> },
 ) {
-  return handleMcpRequest(req, context);
+  return withCors(await handleMcpRequest(req, context));
 }
 
 /** 處理 MCP DELETE 請求（session 清理等） */
@@ -124,5 +159,5 @@ export async function DELETE(
   req: NextRequest,
   context: { params: Promise<{ apiKey: string }> },
 ) {
-  return handleMcpRequest(req, context);
+  return withCors(await handleMcpRequest(req, context));
 }
