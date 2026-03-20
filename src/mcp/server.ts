@@ -73,7 +73,7 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
       "Before calling octodock_do, call octodock_help to discover available apps and action parameters.",
       "If a saved workflow (SOP) exists for the task, call octodock_sop first — it's faster.",
     ].join("\n"),
-  });
+  } as ConstructorParameters<typeof McpServer>[0]);
 
   // 查詢用戶已連結且有效的 App 列表
   const apps = await db
