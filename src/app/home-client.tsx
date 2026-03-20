@@ -141,6 +141,10 @@ export function HomeClient() {
       {/* Footer */}
       <footer className="border-t border-gray-200 py-6 text-center text-sm text-gray-400">
         <div className="flex items-center justify-center gap-4">
+          <Link href="/docs" className="hover:text-gray-600 transition-colors">
+            {t("footer.docs")}
+          </Link>
+          <span>·</span>
           <Link href="/privacy" className="hover:text-gray-600 transition-colors">
             {t("footer.privacy")}
           </Link>

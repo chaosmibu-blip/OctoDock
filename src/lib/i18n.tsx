@@ -36,6 +36,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "landing.sell4": "不在你的電腦上跑程式，OAuth 授權隨時可撤銷，比本地 Agent 更安全",
 
     // Footer
+    "footer.docs": "文件",
     "footer.privacy": "隱私權政策",
     "footer.terms": "服務條款",
 
@@ -523,6 +524,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "landing.sell4": "Nothing runs on your computer — OAuth authorization, revokable anytime, safer than local agents",
 
     // Footer
+    "footer.docs": "Documentation",
     "footer.privacy": "Privacy Policy",
     "footer.terms": "Terms of Service",
 
