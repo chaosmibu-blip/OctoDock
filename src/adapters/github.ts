@@ -10,6 +10,7 @@ import type {
   ToolResult,
   TokenSet,
 } from "./types";
+import { executePatchFile } from "./github-patch-file";
 
 // ── OAuth 設定 ─────────────────────────────────────────────
 const authConfig: OAuthConfig = {
@@ -99,6 +100,7 @@ const actionMap: Record<string, string> = {
   list_runs: "github_list_runs",
   get_run: "github_get_run",
   create_review: "github_create_review",
+  patch_file: "github_patch_file",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -418,6 +420,19 @@ Create a review on a pull request (approve, request changes, or comment).
   body (optional): Review comment body
 ### Example
 octodock_do(app:"github", action:"create_review", params:{owner:"octocat", repo:"Hello-World", pull_number:42, event:"APPROVE", body:"LGTM!"})`,
+
+  patch_file: `## github.patch_file
+Partially modify a file using find/replace. The find string must match exactly once in the file (unique match required). Server-side reads the full file, applies the patch, and commits — AI only sends the find/replace strings, no need to handle full file content.
+### Parameters
+  owner: Repository owner (username or org)
+  repo: Repository name
+  path: File path within the repository (e.g. "src/index.ts")
+  find: Exact string to find in the file (must match exactly once)
+  replace: Replacement string
+  message: Commit message
+  branch (optional): Branch name (default: repo's default branch)
+### Example
+octodock_do(app:"github", action:"patch_file", params:{owner:"octocat", repo:"Hello-World", path:"src/config.ts", find:"const MAX = 10;", replace:"const MAX = 100;", message:"Increase max limit to 100"})`,
 };
 
 // ── do+help 架構：取得技能說明 ────────────────────────────
@@ -457,6 +472,7 @@ function getSkill(action?: string): string | null {
   search_issues(query, per_page?) — search issues & PRs
   star_repo(owner, repo) — star a repository
   fork_repo(owner, repo) — fork a repository
+  patch_file(owner, repo, path, find, replace, message, branch?) — find/replace partial file edit
 Use octodock_help(app:"github", action:"ACTION") for detailed params + example.`;
 }
 
@@ -575,6 +591,11 @@ function formatResponse(action: string, rawData: unknown): string {
     // Star 倉庫：204 No Content 成功
     case "star_repo": {
       return "Done. Repository starred successfully.";
+    }
+
+    // 局部修改檔案：直接回傳文字結果
+    case "patch_file": {
+      return String(rawData);
     }
 
     // 觸發工作流程：204 No Content 成功
@@ -1070,6 +1091,20 @@ const tools: ToolDefinition[] = [
       body: z.string().optional().describe("Review comment body (required for REQUEST_CHANGES)"),
     },
   },
+  {
+    name: "github_patch_file",
+    description:
+      "Partially modify a file using find/replace. The find string must match exactly once (unique). Server-side reads full file, applies patch, and commits.",
+    inputSchema: {
+      owner: z.string().describe("Repository owner (username or organization)"),
+      repo: z.string().describe("Repository name"),
+      path: z.string().describe("File path within the repository (e.g., 'src/index.ts')"),
+      find: z.string().describe("Exact string to find in the file (must match exactly once)"),
+      replace: z.string().describe("Replacement string"),
+      message: z.string().describe("Commit message"),
+      branch: z.string().optional().describe("Branch name (default: repo's default branch)"),
+    },
+  },
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
@@ -1559,6 +1594,31 @@ async function execute(
       );
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 局部修改檔案（find/replace，不需要完整內容）
+    case "github_patch_file": {
+      const result = await executePatchFile(
+        {
+          owner: params.owner as string,
+          repo: params.repo as string,
+          path: params.path as string,
+          find: params.find as string,
+          replace: params.replace as string,
+          message: params.message as string,
+          branch: params.branch as string | undefined,
+        },
+        token,
+      );
+      if (!result.ok) {
+        return {
+          content: [{ type: "text", text: result.error ?? "patch_file failed" }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: "text", text: result.data ?? "Patched successfully." }],
       };
     }
 
