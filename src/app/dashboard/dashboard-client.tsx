@@ -56,14 +56,24 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
   const [copied, setCopied] = useState(false);
   /* 引導區塊：選擇的 AI 工具平台 */
   const [selectedPlatform, setSelectedPlatform] = useState<"claude" | "cursor" | null>(null);
+  /* Cursor config 複製狀態 */
+  const [cursorCopied, setCursorCopied] = useState(false);
   const [expandedApp, setExpandedApp] = useState<string | null>(null);
   const [toolsCache, setToolsCache] = useState<Record<string, ToolInfo[]>>({});
   const [loadingTools, setLoadingTools] = useState<string | null>(null);
+  /* #7: 工具載入錯誤狀態 */
+  const [toolsError, setToolsError] = useState<string | null>(null);
   // U23: 帳號刪除狀態
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  /* #5: 中斷連結確認狀態 */
+  const [disconnectConfirm, setDisconnectConfirm] = useState<string | null>(null);
+  /* #6: 中斷連結錯誤狀態 */
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  /* #8: 連結中 loading 狀態 */
+  const [connectingApp, setConnectingApp] = useState<string | null>(null);
   const router = useRouter();
   const { t } = useI18n();
 
@@ -94,14 +104,28 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     setTimeout(() => setCopied(false), 2000);
   }, [mcpUrl]);
 
+  /* #17: 複製 Cursor MCP config JSON */
+  const copyCursorConfig = useCallback(() => {
+    const config = JSON.stringify({
+      mcpServers: {
+        octodock: {
+          url: mcpUrl
+        }
+      }
+    }, null, 2);
+    navigator.clipboard.writeText(config);
+    setCursorCopied(true);
+    setTimeout(() => setCursorCopied(false), 2000);
+  }, [mcpUrl]);
 
-  /* 展開/收合工具清單 */
+  /* #7: 展開/收合工具清單（含錯誤處理） */
   const toggleTools = useCallback(async (appName: string) => {
     if (expandedApp === appName) {
       setExpandedApp(null);
       return;
     }
     setExpandedApp(appName);
+    setToolsError(null);
     if (!toolsCache[appName]) {
       setLoadingTools(appName);
       try {
@@ -109,22 +133,38 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
         if (res.ok) {
           const data = await res.json();
           setToolsCache((prev) => ({ ...prev, [appName]: data.tools }));
+        } else {
+          setToolsError(t("dashboard.tools_load_error"));
         }
       } catch {
-        // ignore
+        setToolsError(t("dashboard.tools_load_error"));
       } finally {
         setLoadingTools(null);
       }
     }
-  }, [expandedApp, toolsCache]);
+  }, [expandedApp, toolsCache, t]);
 
+  /* #8: 連結 App（帶 loading 狀態） */
   const connectApp = useCallback((appName: string) => {
+    setConnectingApp(appName);
     router.push(`/api/connect/${appName}`);
   }, [router]);
 
+  /* #5 #6: 中斷連結（帶確認 + 錯誤處理） */
   const disconnectApp = useCallback(async (appName: string) => {
-    await fetch(`/api/connect/${appName}`, { method: "DELETE" });
-    router.refresh();
+    try {
+      const res = await fetch(`/api/connect/${appName}`, { method: "DELETE" });
+      if (!res.ok) {
+        setDisconnectError(appName);
+        setTimeout(() => setDisconnectError(null), 3000);
+        return;
+      }
+      setDisconnectConfirm(null);
+      router.refresh();
+    } catch {
+      setDisconnectError(appName);
+      setTimeout(() => setDisconnectError(null), 3000);
+    }
   }, [router]);
 
   /** U23: 帳號刪除處理 — 呼叫 DELETE /api/account 並跳轉 */
@@ -155,23 +195,23 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     <div className="min-h-screen bg-[#faf9f6] py-6 px-4">
       <div className="max-w-4xl mx-auto space-y-5">
 
-        {/* ── Nav bar ── */}
-        <div className="flex items-center justify-between">
+        {/* ── Nav bar ── #3: 加 flex-wrap 避免小螢幕溢出 */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <Image src="/icon-192.png" alt="OctoDock" width={28} height={28} className="rounded" />
+            <Image src="/icon-192.png" alt="OctoDock" width={28} height={28} className="rounded-lg" />
             <h1 className="text-xl font-bold text-gray-900">OctoDock</h1>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <LanguageSwitcher />
             <Link
               href="/preferences"
-              className="px-3 py-1.5 text-xs border rounded-md hover:bg-gray-100 transition-colors"
+              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
             >
               {t("nav.memory")}
             </Link>
             <button
               onClick={() => { window.location.href = "/api/auth/signout"; }}
-              className="px-3 py-1.5 text-xs border border-red-200 text-red-500 rounded-md hover:bg-red-50 transition-colors"
+              className="px-3 py-1.5 text-xs border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
             >
               {t("common.logout")}
             </button>
@@ -183,15 +223,15 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           {user.name} ({user.email})
         </p>
 
-        {/* ── MCP URL 橫條（緊湊） ── */}
-        <div className="flex items-center gap-3 rounded-[10px] border border-gray-200 bg-white px-4 py-2.5">
+        {/* ── MCP URL 橫條 ── #1: 手機改 flex-col #9: 統一 rounded-lg #11: 統一背景色 */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
           <span className="text-xs font-semibold text-gray-500 shrink-0">{t("dashboard.mcp_url")}</span>
-          <code className="flex-1 text-xs font-mono text-gray-600 bg-[#F1EFE8] rounded px-3 py-1.5 overflow-x-auto">
+          <code className="w-full sm:flex-1 text-xs font-mono text-gray-600 bg-[#F1EFE8] rounded-lg px-3 py-1.5 overflow-x-auto">
             {mcpUrl}
           </code>
           <button
             onClick={copyMcpUrl}
-            className="px-3 py-1.5 bg-black text-white text-xs rounded-md hover:bg-gray-800 transition-colors whitespace-nowrap"
+            className="px-3 py-1.5 bg-black text-white text-xs rounded-lg hover:bg-gray-800 transition-colors whitespace-nowrap"
           >
             {copied ? t("common.copied") : t("common.copy")}
           </button>
@@ -199,18 +239,18 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
 
         {/* ── 引導區塊（已連接 >= 1 個 App 時顯示）── 分步引導用戶把 MCP URL 設進 AI 工具 */}
         {connected.length > 0 && (
-          <div className="rounded-[10px] bg-[#E1F5EE] px-5 py-5 space-y-4">
+          <div className="rounded-lg bg-[#E1F5EE] px-5 py-5 space-y-4">
             <p className="text-sm font-medium text-[#085041]">{t("dashboard.guide_title")}</p>
 
-            {/* Step 1: 複製 MCP URL */}
-            <div className="flex items-center gap-3">
+            {/* Step 1: 複製 MCP URL — #2: 手機改 flex-col */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
               <span className="text-xs font-semibold text-[#0F6E56] shrink-0">{t("dashboard.guide_step1")}</span>
-              <code className="flex-1 text-xs font-mono text-[#085041] bg-white/60 rounded-md px-3 py-2 overflow-x-auto">
+              <code className="w-full sm:flex-1 text-xs font-mono text-[#085041] bg-[#F1EFE8] rounded-lg px-3 py-2 overflow-x-auto">
                 {mcpUrl}
               </code>
               <button
                 onClick={() => { copyMcpUrl(); }}
-                className={`px-4 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
                   copied
                     ? "bg-[#085041] text-white"
                     : "bg-[#0F6E56] text-white hover:bg-[#0a5a46]"
@@ -258,21 +298,35 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => { if (!copied) copyMcpUrl(); }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0F6E56] text-white text-xs font-medium rounded-md hover:bg-[#0a5a46] transition-colors"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0F6E56] text-white text-xs font-medium rounded-lg hover:bg-[#0a5a46] transition-colors"
                 >
                   {t("dashboard.guide_claude_btn")}
                   <span className="text-[10px]">↗</span>
                 </a>
               </div>
             )}
+            {/* #17: Cursor 教學 — 複製 MCP config JSON */}
             {selectedPlatform === "cursor" && (
-              <div className="bg-white/70 rounded-lg px-4 py-3 space-y-2">
+              <div className="bg-white/70 rounded-lg px-4 py-3 space-y-3">
                 <p className="text-xs text-[#085041]">{t("dashboard.guide_cursor_steps")}</p>
+                <code className="block text-[11px] font-mono text-[#085041] bg-[#F1EFE8] rounded-lg px-3 py-2 overflow-x-auto whitespace-pre">
+{`{
+  "mcpServers": {
+    "octodock": {
+      "url": "${mcpUrl}"
+    }
+  }
+}`}
+                </code>
                 <button
-                  onClick={() => { if (!copied) copyMcpUrl(); }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0F6E56] text-white text-xs font-medium rounded-md hover:bg-[#0a5a46] transition-colors"
+                  onClick={copyCursorConfig}
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
+                    cursorCopied
+                      ? "bg-[#085041] text-white"
+                      : "bg-[#0F6E56] text-white hover:bg-[#0a5a46]"
+                  }`}
                 >
-                  {t("dashboard.guide_cursor_btn")}
+                  {cursorCopied ? t("dashboard.guide_cursor_copied") : t("dashboard.guide_cursor_copy_config")}
                 </button>
               </div>
             )}
@@ -291,43 +345,69 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                 const appTools = toolsCache[app.name];
                 const isExpanded = expandedApp === app.name;
                 const isLoading = loadingTools === app.name;
+                const isConfirmingDisconnect = disconnectConfirm === app.name;
+                const hasDisconnectError = disconnectError === app.name;
                 return (
-                  <div key={app.name} className="rounded-[10px] border border-gray-200 bg-white p-4">
+                  <div key={app.name} className="rounded-lg border border-gray-200 bg-white p-4">
                     {/* 卡片頭部 */}
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="text-sm font-medium text-gray-900">{app.displayName}</h3>
                       {appTools && (
-                        <span className="text-[10px] bg-[#E1F5EE] text-[#1D9E75] rounded px-1.5 py-0.5 font-medium">
+                        <span className="text-[10px] bg-[#E1F5EE] text-[#1D9E75] rounded-lg px-1.5 py-0.5 font-medium">
                           {appTools.length}
                         </span>
                       )}
                     </div>
                     <p className="text-[11px] text-gray-400 leading-snug mb-2">{t(app.descKey)}</p>
-                    {/* 操作列 */}
-                    <div className="flex items-center gap-3">
+                    {/* 操作列 — #12: 加 padding 撐大觸控目標 #13: 中斷連結改深色 */}
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => toggleTools(app.name)}
-                        className="text-[10px] text-blue-500 hover:text-blue-700 transition-colors"
+                        className="text-[11px] text-blue-500 hover:text-blue-700 transition-colors px-1.5 py-1 -ml-1.5"
                       >
                         {isExpanded ? t("dashboard.hide_tools") : t("dashboard.view_tools")}
                       </button>
-                      <button
-                        onClick={() => disconnectApp(app.name)}
-                        className="text-[10px] text-[#B4B2A9] hover:text-[#E24B4A] transition-colors"
-                      >
-                        {t("dashboard.disconnect")}
-                      </button>
+                      {/* #5: 中斷連結兩步確認 */}
+                      {isConfirmingDisconnect ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => disconnectApp(app.name)}
+                            className="text-[11px] text-red-500 hover:text-red-700 transition-colors px-1.5 py-1 font-medium"
+                          >
+                            {t("dashboard.disconnect_confirm")}
+                          </button>
+                          <button
+                            onClick={() => setDisconnectConfirm(null)}
+                            className="text-[11px] text-gray-500 hover:text-gray-700 transition-colors px-1.5 py-1"
+                          >
+                            {t("account.delete_cancel")}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDisconnectConfirm(app.name)}
+                          className="text-[11px] text-gray-500 hover:text-red-500 transition-colors px-1.5 py-1"
+                        >
+                          {t("dashboard.disconnect")}
+                        </button>
+                      )}
                     </div>
-                    {/* 展開的工具清單 */}
+                    {/* #6: 中斷連結錯誤提示 */}
+                    {hasDisconnectError && (
+                      <p className="text-[11px] text-red-500 mt-1">{t("dashboard.disconnect_error")}</p>
+                    )}
+                    {/* 展開的工具清單 — #7: 錯誤狀態 */}
                     {isExpanded && (
                       <div className="mt-3 pt-3 border-t border-gray-100">
                         {isLoading ? (
-                          <p className="text-[11px] text-gray-300">{t("common.loading")}</p>
+                          <p className="text-[11px] text-gray-400">{t("common.loading")}</p>
+                        ) : toolsError ? (
+                          <p className="text-[11px] text-red-400">{toolsError}</p>
                         ) : appTools && appTools.length > 0 ? (
                           <div className="space-y-1.5 max-h-48 overflow-y-auto">
                             {appTools.map((tool: ToolInfo) => (
                               <div key={tool.name}>
-                                <code className="text-[10px] bg-gray-50 px-1.5 py-0.5 rounded border text-gray-700">
+                                <code className="text-[10px] bg-gray-50 px-1.5 py-0.5 rounded-lg border text-gray-700">
                                   {tool.name}
                                 </code>
                                 <p className="text-[10px] text-gray-400 mt-0.5 ml-0.5">
@@ -350,7 +430,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           </div>
         )}
 
-        {/* ── Google 一鍵連接 ── */}
+        {/* ── Google 一鍵連接 ── #4: 手機改 flex-col #9: 統一 rounded-lg #10: 統一 hover 色 */}
         {(() => {
           const googleApps = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
           const googleConnected = googleApps.filter((a) => isConnected(a)).length;
@@ -361,14 +441,14 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
             ? t("dashboard.google_all")
             : t("dashboard.google_remaining");
           return (
-            <div className="bg-[#E1F5EE] border border-[#1D9E75]/20 rounded-lg p-3 flex items-center justify-between">
+            <div className="bg-[#E1F5EE] border border-[#1D9E75]/20 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <div>
                 <span className="text-sm font-medium text-[#0F6E56]">{label}</span>
                 <span className="text-xs text-gray-500 ml-2">({googleConnected}/{googleTotal})</span>
               </div>
               <button
                 onClick={() => connectApp("google_all")}
-                className="px-4 py-1.5 bg-[#0F6E56] text-white text-xs font-medium rounded-md hover:bg-[#0d5e49] transition-colors"
+                className="px-4 py-1.5 bg-[#0F6E56] text-white text-xs font-medium rounded-lg hover:bg-[#0a5a46] transition-colors"
               >
                 {t("dashboard.google_all_btn")}
               </button>
@@ -376,45 +456,49 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           );
         })()}
 
-        {/* ── 可連結 App ── */}
+        {/* ── 可連結 App ── #8: 連結按鈕加 loading 狀態 */}
         {available.length > 0 && (
           <div>
             <h2 className="text-sm font-semibold text-gray-700 mb-3">
               {t("dashboard.available_section")}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {available.map((app) => (
-                <div key={app.name} className="rounded-[10px] border border-dashed border-gray-300 bg-white p-4">
-                  <h3 className="text-sm text-gray-400 mb-1">{app.displayName}</h3>
-                  <p className="text-[11px] text-gray-300 leading-snug mb-3">{t(app.descKey)}</p>
-                  <button
-                    onClick={() => connectApp(app.name)}
-                    className="px-3 py-1.5 text-[11px] bg-black text-white rounded-md hover:bg-gray-800 transition-colors"
-                  >
-                    {t("dashboard.connect")}
-                  </button>
-                </div>
-              ))}
+              {available.map((app) => {
+                const isConnecting = connectingApp === app.name;
+                return (
+                  <div key={app.name} className="rounded-lg border border-dashed border-gray-300 bg-white p-4">
+                    <h3 className="text-sm text-gray-400 mb-1">{app.displayName}</h3>
+                    <p className="text-[11px] text-gray-300 leading-snug mb-3">{t(app.descKey)}</p>
+                    <button
+                      onClick={() => connectApp(app.name)}
+                      disabled={isConnecting}
+                      className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isConnecting ? t("common.loading") : t("dashboard.connect")}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* ── U23: 危險區域 — 刪除帳號 ── */}
-        <div className="rounded-[10px] border border-red-200 bg-red-50/50 p-4 mt-6">
+        {/* ── U23: 危險區域 — 刪除帳號 ── #9: 統一 rounded-lg */}
+        <div className="rounded-lg border border-red-200 bg-red-50/50 p-4 mt-6">
           <h2 className="text-sm font-semibold text-red-600 mb-1">{t("account.delete_title")}</h2>
           <p className="text-[11px] text-red-400 mb-3">{t("account.delete_desc")}</p>
           <button
             onClick={() => setShowDeleteModal(true)}
-            className="px-3 py-1.5 text-[11px] border border-red-300 text-red-500 rounded-md hover:bg-red-100 transition-colors"
+            className="px-3 py-1.5 text-[11px] border border-red-300 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
           >
             {t("account.delete_btn")}
           </button>
         </div>
 
-        {/* U23: 刪除帳號確認彈窗 */}
+        {/* U23: 刪除帳號確認彈窗 — #9: 統一 rounded-lg #15: loading 走 i18n */}
         {showDeleteModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl max-w-sm w-full p-6 space-y-4">
+            <div className="bg-white rounded-lg max-w-sm w-full p-6 space-y-4">
               <h3 className="text-base font-semibold text-gray-900">{t("account.delete_confirm_title")}</h3>
               <p className="text-sm text-gray-500">{t("account.delete_confirm_desc")}</p>
               <input
@@ -422,7 +506,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                 value={deleteInput}
                 onChange={(e) => setDeleteInput(e.target.value)}
                 placeholder={t("account.delete_confirm_input")}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400"
               />
               {deleteError && <p className="text-xs text-red-500">{deleteError}</p>}
               <div className="flex gap-3 justify-end">
@@ -435,9 +519,9 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                 <button
                   onClick={handleDeleteAccount}
                   disabled={deleteInput !== "DELETE" || deleting}
-                  className="px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  {deleting ? "..." : t("account.delete_confirm_btn")}
+                  {deleting ? t("common.loading") : t("account.delete_confirm_btn")}
                 </button>
               </div>
             </div>
