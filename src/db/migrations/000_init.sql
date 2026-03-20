@@ -134,6 +134,45 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_user_idx ON subscriptions(user_id);
 
+-- ============================================================
+-- OAuth Provider（U24：OctoDock 作為 OAuth Provider）
+-- 讓 Claude Connectors Directory 等外部 AI 平台透過 OAuth 連接
+-- ============================================================
+
+-- OAuth 客戶端（例如 Claude by Anthropic）
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  id TEXT PRIMARY KEY,                    -- 例如 "claude_connector"
+  secret_hash TEXT NOT NULL,              -- SHA-256 hashed secret
+  name TEXT NOT NULL,                     -- 顯示名稱
+  redirect_uris TEXT[] NOT NULL,          -- 允許的 redirect URIs
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- OAuth authorization codes（短命，10 分鐘過期，使用後標記 used）
+CREATE TABLE IF NOT EXISTS oauth_codes (
+  code TEXT PRIMARY KEY,                  -- 隨機產生
+  client_id TEXT NOT NULL REFERENCES oauth_clients(id),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  redirect_uri TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT 'mcp',
+  expires_at TIMESTAMPTZ NOT NULL,
+  used BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- OAuth access/refresh tokens
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  access_token TEXT PRIMARY KEY,          -- oat_ prefix
+  refresh_token TEXT NOT NULL UNIQUE,     -- ort_ prefix
+  client_id TEXT NOT NULL REFERENCES oauth_clients(id),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  scope TEXT NOT NULL DEFAULT 'mcp',
+  expires_at TIMESTAMPTZ NOT NULL,        -- 1 小時
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_refresh ON oauth_tokens(refresh_token);
+
 -- Bot 設定
 CREATE TABLE IF NOT EXISTS bot_configs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -88,12 +88,8 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   // A1: 從 request headers 提取 agent 實例 ID
   const agentInstanceId = extractAgentInstanceId(requestHeaders);
 
-  // P1: 動態生成 octodock_do 的 description（根據用戶狀態）
-  // 查詢 Top 5 最常用 App + 最關鍵的 1-2 條偏好，嵌入 description
-  const doDescription = await buildDoDescription(user.id, connectedAppNames);
-
   // ── 註冊 octodock_do ──
-  registerDoTool(server, user.id, connectedAppNames, agentInstanceId, doDescription);
+  registerDoTool(server, user.id, connectedAppNames, agentInstanceId);
 
   // ── 註冊 octodock_help ──
   registerHelpTool(server, user.id, connectedAppNames);
@@ -104,69 +100,7 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   return server;
 }
 
-/**
- * P1: 動態生成 octodock_do 的 description
- * 根據用戶連結的 App 數量和偏好，生成 ~80-100 tokens 的描述
- * 核心策略：佔據「用戶偏好」這個獨佔位置，不跟內建工具搶優先級
- */
-async function buildDoDescription(
-  userId: string,
-  connectedAppNames: string[],
-): Promise<string> {
-  const appCount = connectedAppNames.length;
-
-  // 產生 App 列表文字：< 10 個列全部，>= 10 個列 Top 5 + 總數
-  let appListText: string;
-  if (appCount === 0) {
-    return "OctoDock: unified app gateway (no apps connected yet). Call octodock_help() to get started.";
-  }
-
-  if (appCount < 10) {
-    // 少量 App → 直接列出名稱
-    appListText = connectedAppNames.join(", ");
-  } else {
-    // 大量 App → 查使用頻率取 Top 5
-    try {
-      const { operations: opsTable } = await import("@/db/schema");
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const topApps = await db
-        .select({ appName: opsTable.appName, count: sql<number>`count(*)::int` })
-        .from(opsTable)
-        .where(and(
-          eq(opsTable.userId, userId),
-          eq(opsTable.success, true),
-          gte(opsTable.createdAt, thirtyDaysAgo),
-        ))
-        .groupBy(opsTable.appName)
-        .orderBy(desc(sql`count(*)`))
-        .limit(5);
-      const topNames = topApps.map((r) => r.appName).filter(Boolean);
-      appListText = topNames.length > 0
-        ? `${topNames.join(", ")} +${appCount - topNames.length} more`
-        : connectedAppNames.slice(0, 5).join(", ") + ` +${appCount - 5} more`;
-    } catch {
-      appListText = connectedAppNames.slice(0, 5).join(", ") + ` +${appCount - 5} more`;
-    }
-  }
-
-  // 查詢最關鍵的 1-2 條用戶偏好（高 confidence 優先）
-  let preferenceLine = "";
-  try {
-    const prefs = await listMemory(userId, "preference", 2);
-    if (prefs.length > 0) {
-      preferenceLine = " " + prefs.map((p) => `${p.key}: ${p.value}`).join("; ") + ".";
-    }
-  } catch {
-    // 偏好查詢失敗不影響 description 生成
-  }
-
-  // 組裝 description（~80-100 tokens）
-  // 核心設計點：
-  // - 「MUST call octodock_help before first use」強制前置模式
-  // - 「cross-session memory」凸顯獨佔能力
-  // - 「batch operations across multiple apps」曝光 batch 能力
-  return `OctoDock: unified gateway to ${appCount} connected apps (${appListText}) with cross-session memory.${preferenceLine} You MUST call octodock_help (no args) before your first octodock_do in each conversation to load user context. Supports batch operations via app:"system", action:"batch_do". Use OctoDock when the task involves any connected app or needs personalized defaults.`;
-}
+// buildDoDescription 已刪除 — 工具描述改為靜態，動態 context 由 octodock_help() 回傳承擔
 
 // ============================================================
 // 回傳壓縮（Level 3）
@@ -285,11 +219,10 @@ function registerDoTool(
   userId: string,
   connectedAppNames: string[],
   agentInstanceId: string | null,
-  description: string,
 ): void {
   server.tool(
     "octodock_do",
-    description,
+    "Access all the user's connected apps. Gain cross-session memory, cross-app workflows, and personalized defaults not available in built-in connectors. Call octodock_help first if unsure about action or params.",
     {
       app: z.string().describe("App name (e.g. 'notion', 'gmail', 'system')"),
       action: z.string().describe("Action to perform (e.g. 'create_page', 'search')"),
@@ -541,15 +474,13 @@ function registerDoTool(
         result.warnings.push(...guardWarnings);
       }
 
-      // C1: 把 pre-context 附在 DoResult 上（只在有資料時）
+      // C1: 把 pre-context 附在 DoResult 上
+      // 只保留 AI 會實際用來決策的資訊（target info、重複寄信警告、跨 App 關聯）
+      // 移除 AI 不會主動解讀的：namingConvention、patterns（實測無行為改變）
       if (preContext && result.ok) {
         const contextParts: string[] = [];
         if (preContext.existingSiblings) {
           contextParts.push(`Existing siblings: ${preContext.existingSiblings.map((s) => s.title).join(", ")}`);
-        }
-        if (preContext.namingConvention) {
-          const nc = preContext.namingConvention;
-          contextParts.push(`Naming convention: ${nc.datePrefix ? "date prefix" : "no date prefix"}${nc.commonTypes.length > 0 ? `, types: ${nc.commonTypes.join(", ")}` : ""}. Examples: ${nc.examples.join(", ")}`);
         }
         if (preContext.todaySentToRecipient != null) {
           contextParts.push(`Sent to this recipient today: ${preContext.todaySentToRecipient} times`);
@@ -560,22 +491,14 @@ function registerDoTool(
         if (preContext.currentContent) {
           contextParts.push(`Current: "${preContext.currentContent.title}" (last edited ${preContext.currentContent.lastEdited})`);
         }
-        // I10: 只顯示有值的 pattern（count > 0），避免浪費 token
-        if (preContext.patterns && preContext.patterns.length > 0) {
-          const activePatterns = preContext.patterns.filter((p) => p.count > 0);
-          if (activePatterns.length > 0) {
-            contextParts.push(`Detected patterns: ${activePatterns.map((p) => `${p.name}(×${p.count})`).join(", ")}`);
-          }
-        }
-        // U9: 跨 App 上下文附在 context 裡
+        // U9: 跨 App 上下文 — AI 會用這個來串連跨 App 工作流
         if (preContext.crossAppContext && preContext.crossAppContext.length > 0) {
           const crossText = preContext.crossAppContext.map((c) => `- [${c.app}] ${c.title}${c.date ? ` (${c.date})` : ""}`).join("\n");
           contextParts.push(`Related across apps:\n${crossText}`);
         }
         if (contextParts.length > 0) {
-          // 合併既有的 context（session 用戶摘要），不覆蓋
           const existing = result.context ? result.context + "\n\n" : "";
-          result.context = existing + "Pre-context:\n" + contextParts.join("\n");
+          result.context = existing + contextParts.join("\n");
         }
       }
 
@@ -718,10 +641,11 @@ function registerDoTool(
       try {
         const sessionState = await detectSessionState(userId, connectedAppNames);
         if (sessionState) {
-          // 缺口 2：新 session 的第一次 do() 附帶用戶上下文
+          // 缺口 2：新 session 的第一次 do() 附帶用戶上下文（append，不覆蓋既有 context）
           const summary = await getUserSummary(userId);
           if (summary) {
-            result.context = summary;
+            const existing = result.context ? result.context + "\n\n" : "";
+            result.context = existing + summary;
           }
           // 缺口 1 + 7：記憶不足時請 AI 分享用戶記憶
           const solicitation = shouldSolicitMemory(sessionState);
@@ -759,7 +683,7 @@ function registerHelpTool(
 ): void {
   server.tool(
     "octodock_help",
-    "Load user context and discover available apps/actions. No args → returns connected apps + user preferences + recent patterns + key ID mappings (MUST call once at start of each conversation). With app → list actions. With app+action → show params and example.",
+    "Load user context, preferences, and connected apps. Call this first at conversation start (MUST call once before any octodock_do) — returns personalized defaults that improve all subsequent operations. With app: list actions. With app+action: show params and example.",
     {
       app: z
         .string()
@@ -888,7 +812,7 @@ function registerHelpTool(
           const likely = await getLikelyNextActions(userId);
           if (likely.length > 0) {
             const likelyText = likely.map((l) =>
-              `- **${l.app}.${l.action}** — ${l.reason}${l.suggestedParams ? ` (suggested params: ${JSON.stringify(l.suggestedParams)})` : ""}`
+              `- **${l.app}.${l.action}** — ${l.reason}${l.suggestedParams ? ` (last used params, verify before reuse: ${JSON.stringify(l.suggestedParams)})` : ""}`
             ).join("\n");
             text += `\n\n## Likely Next Actions\n\n${likelyText}`;
           }
@@ -999,34 +923,6 @@ function registerHelpTool(
         let skillText = adapter.getSkill() ?? "";
         if (!skillText) return { content: [{ type: "text", text: `No help available for ${app}.` }] };
 
-        // U5: 從 operations 表查使用頻率，產生「常用」區塊
-        try {
-          const { operations: opsTable } = await import("@/db/schema");
-          const { sql } = await import("drizzle-orm");
-          const freqRows = await db
-            .select({
-              action: opsTable.action,
-              count: sql<number>`count(*)::int`,
-            })
-            .from(opsTable)
-            .where(
-              and(
-                eq(opsTable.userId, userId),
-                eq(opsTable.appName, app),
-                eq(opsTable.success, true),
-              ),
-            )
-            .groupBy(opsTable.action)
-            .orderBy(sql`count(*) desc`)
-            .limit(5);
-
-          if (freqRows.length > 0) {
-            const freqList = freqRows.map((r) => `- ${r.action} (${r.count} 次)`).join("\n");
-            skillText = `**常用：**\n${freqList}\n\n---\n\n${skillText}`;
-          }
-        } catch {
-          // 頻率查詢失敗不影響
-        }
         // I9/U4: 在 action 列表中標注破壞性操作（⚠️ destructive）
         // 匹配格式：action_name(...) — description 或 - **action_name** 等格式
         // V9: 擴展破壞性 action 標記，涵蓋所有 adapter 的檔案覆寫操作
@@ -1593,7 +1489,7 @@ function registerSopTool(
 ): void {
   server.tool(
     "octodock_sop",
-    "Check for saved workflows (SOPs) before using octodock_do. Priority chain: octodock_help → octodock_sop → octodock_do. If a matching workflow exists, follow its steps with octodock_do — it's faster and preserves the user's proven process. No args → list top workflows. With name → show full steps.",
+    "Load and run the user's proven workflows to complete tasks faster and better. Frequent multi-step operations are saved here — run them directly instead of calling octodock_do step by step. No args: list top workflows. With name: show full steps.",
     {
       category: z.string().optional().describe("Filter by app name (e.g. 'notion', 'gmail')"),
       name: z.string().optional().describe("Execute a specific SOP by name"),
