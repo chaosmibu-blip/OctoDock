@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -97,14 +97,29 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     return Object.values(toolsCache).reduce((sum, tools) => sum + tools.length, 0);
   }, [toolsCache]);
 
+  /* #1: 自動重置 timer — 用 ref 追蹤，unmount 時清理 */
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const cursorCopiedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const disconnectErrorTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  /* unmount 時清理所有 timer */
+  useEffect(() => {
+    return () => {
+      clearTimeout(copiedTimerRef.current);
+      clearTimeout(cursorCopiedTimerRef.current);
+      clearTimeout(disconnectErrorTimerRef.current);
+    };
+  }, []);
+
   /* 複製 MCP URL */
   const copyMcpUrl = useCallback(() => {
     navigator.clipboard.writeText(mcpUrl);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
   }, [mcpUrl]);
 
-  /* #17: 複製 Cursor MCP config JSON */
+  /* 複製 Cursor MCP config JSON */
   const copyCursorConfig = useCallback(() => {
     const config = JSON.stringify({
       mcpServers: {
@@ -115,55 +130,74 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     }, null, 2);
     navigator.clipboard.writeText(config);
     setCursorCopied(true);
-    setTimeout(() => setCursorCopied(false), 2000);
+    clearTimeout(cursorCopiedTimerRef.current);
+    cursorCopiedTimerRef.current = setTimeout(() => setCursorCopied(false), 2000);
   }, [mcpUrl]);
 
-  /* #7: 展開/收合工具清單（含錯誤處理） */
-  const toggleTools = useCallback(async (appName: string) => {
-    if (expandedApp === appName) {
-      setExpandedApp(null);
-      return;
-    }
-    setExpandedApp(appName);
-    setToolsError(null);
-    if (!toolsCache[appName]) {
-      setLoadingTools(appName);
-      try {
-        const res = await fetch(`/api/tools/${appName}`);
-        if (res.ok) {
-          const data = await res.json();
-          setToolsCache((prev) => ({ ...prev, [appName]: data.tools }));
-        } else {
-          setToolsError(t("dashboard.tools_load_error"));
-        }
-      } catch {
-        setToolsError(t("dashboard.tools_load_error"));
-      } finally {
-        setLoadingTools(null);
-      }
-    }
-  }, [expandedApp, toolsCache, t]);
+  /* #2: fetch abort 用 ref 追蹤 */
+  const toolsAbortRef = useRef<AbortController>();
 
-  /* #8: 連結 App（帶 loading 狀態） */
+  /* #6 #7: 展開/收合工具清單（修正依賴 + abort + 錯誤處理） */
+  const toggleTools = useCallback(async (appName: string) => {
+    /* #6: 用 functional setState 避免依賴 expandedApp */
+    setExpandedApp((prev) => {
+      if (prev === appName) return null;
+      return appName;
+    });
+    setToolsError(null);
+    /* 用 functional check 避免依賴 toolsCache */
+    setToolsCache((prev) => {
+      if (prev[appName]) return prev; // 已有快取，不需 fetch
+      /* 觸發 fetch（在 setState 外執行，透過 setTimeout 延遲） */
+      setTimeout(() => fetchTools(appName), 0);
+      return prev;
+    });
+  }, []);
+
+  /* 獨立的 fetch 函式，避免 useCallback 依賴膨脹 */
+  const fetchTools = useCallback(async (appName: string) => {
+    toolsAbortRef.current?.abort();
+    const controller = new AbortController();
+    toolsAbortRef.current = controller;
+    setLoadingTools(appName);
+    try {
+      const res = await fetch(`/api/tools/${appName}`, { signal: controller.signal });
+      if (res.ok) {
+        const data = await res.json();
+        setToolsCache((prev) => ({ ...prev, [appName]: data.tools }));
+      } else {
+        setToolsError(t("dashboard.tools_load_error"));
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setToolsError(t("dashboard.tools_load_error"));
+    } finally {
+      setLoadingTools(null);
+    }
+  }, [t]);
+
+  /* #8 #10: 連結 App — 用 window.location.href 因為是 API route redirect */
   const connectApp = useCallback((appName: string) => {
     setConnectingApp(appName);
-    router.push(`/api/connect/${appName}`);
-  }, [router]);
+    window.location.href = `/api/connect/${appName}`;
+  }, []);
 
-  /* #5 #6: 中斷連結（帶確認 + 錯誤處理） */
+  /* #5 #6: 中斷連結（帶確認 + 錯誤處理 + timer cleanup） */
   const disconnectApp = useCallback(async (appName: string) => {
     try {
       const res = await fetch(`/api/connect/${appName}`, { method: "DELETE" });
       if (!res.ok) {
         setDisconnectError(appName);
-        setTimeout(() => setDisconnectError(null), 3000);
+        clearTimeout(disconnectErrorTimerRef.current);
+        disconnectErrorTimerRef.current = setTimeout(() => setDisconnectError(null), 3000);
         return;
       }
       setDisconnectConfirm(null);
       router.refresh();
     } catch {
       setDisconnectError(appName);
-      setTimeout(() => setDisconnectError(null), 3000);
+      clearTimeout(disconnectErrorTimerRef.current);
+      disconnectErrorTimerRef.current = setTimeout(() => setDisconnectError(null), 3000);
     }
   }, [router]);
 
@@ -432,7 +466,8 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
 
         {/* ── Google 一鍵連接 ── #4: 手機改 flex-col #9: 統一 rounded-lg #10: 統一 hover 色 */}
         {(() => {
-          const googleApps = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
+          /* #9: 從 APP_KEYS 派生而不是硬編碼 */
+          const googleApps = APP_KEYS.filter((a) => a.name.startsWith("google_") || a.name === "gmail" || a.name === "youtube").map((a) => a.name);
           const googleConnected = googleApps.filter((a) => isConnected(a)).length;
           const googleTotal = googleApps.length;
           // 全部已連接就不顯示

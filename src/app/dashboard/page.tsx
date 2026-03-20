@@ -1,9 +1,16 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { users, connectedApps } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { DashboardClient } from "./dashboard-client";
+
+/* #7: 頁面專屬 metadata */
+export const metadata: Metadata = {
+  title: "Dashboard | OctoDock",
+  description: "管理你的 MCP 連結、App 和 AI 工具設定",
+};
 
 export default async function DashboardPage() {
   const session = await auth();
