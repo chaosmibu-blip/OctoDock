@@ -88,8 +88,12 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   // A1: 從 request headers 提取 agent 實例 ID
   const agentInstanceId = extractAgentInstanceId(requestHeaders);
 
+  // P1: 動態生成 octodock_do 的 description（根據用戶狀態）
+  // 查詢 Top 5 最常用 App + 最關鍵的 1-2 條偏好，嵌入 description
+  const doDescription = await buildDoDescription(user.id, connectedAppNames);
+
   // ── 註冊 octodock_do ──
-  registerDoTool(server, user.id, connectedAppNames, agentInstanceId);
+  registerDoTool(server, user.id, connectedAppNames, agentInstanceId, doDescription);
 
   // ── 註冊 octodock_help ──
   registerHelpTool(server, user.id, connectedAppNames);
@@ -98,6 +102,70 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   registerSopTool(server, user.id);
 
   return server;
+}
+
+/**
+ * P1: 動態生成 octodock_do 的 description
+ * 根據用戶連結的 App 數量和偏好，生成 ~80-100 tokens 的描述
+ * 核心策略：佔據「用戶偏好」這個獨佔位置，不跟內建工具搶優先級
+ */
+async function buildDoDescription(
+  userId: string,
+  connectedAppNames: string[],
+): Promise<string> {
+  const appCount = connectedAppNames.length;
+
+  // 產生 App 列表文字：< 10 個列全部，>= 10 個列 Top 5 + 總數
+  let appListText: string;
+  if (appCount === 0) {
+    return "OctoDock: unified app gateway (no apps connected yet). Call octodock_help() to get started.";
+  }
+
+  if (appCount < 10) {
+    // 少量 App → 直接列出名稱
+    appListText = connectedAppNames.join(", ");
+  } else {
+    // 大量 App → 查使用頻率取 Top 5
+    try {
+      const { operations: opsTable } = await import("@/db/schema");
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const topApps = await db
+        .select({ appName: opsTable.appName, count: sql<number>`count(*)::int` })
+        .from(opsTable)
+        .where(and(
+          eq(opsTable.userId, userId),
+          eq(opsTable.success, true),
+          gte(opsTable.createdAt, thirtyDaysAgo),
+        ))
+        .groupBy(opsTable.appName)
+        .orderBy(desc(sql`count(*)`))
+        .limit(5);
+      const topNames = topApps.map((r) => r.appName).filter(Boolean);
+      appListText = topNames.length > 0
+        ? `${topNames.join(", ")} +${appCount - topNames.length} more`
+        : connectedAppNames.slice(0, 5).join(", ") + ` +${appCount - 5} more`;
+    } catch {
+      appListText = connectedAppNames.slice(0, 5).join(", ") + ` +${appCount - 5} more`;
+    }
+  }
+
+  // 查詢最關鍵的 1-2 條用戶偏好（高 confidence 優先）
+  let preferenceLine = "";
+  try {
+    const prefs = await listMemory(userId, "preference", 2);
+    if (prefs.length > 0) {
+      preferenceLine = " " + prefs.map((p) => `${p.key}: ${p.value}`).join("; ") + ".";
+    }
+  } catch {
+    // 偏好查詢失敗不影響 description 生成
+  }
+
+  // 組裝 description（~80-100 tokens）
+  // 核心設計點：
+  // - 「MUST call octodock_help before first use」強制前置模式
+  // - 「cross-session memory」凸顯獨佔能力
+  // - 「batch operations across multiple apps」曝光 batch 能力
+  return `OctoDock: unified gateway to ${appCount} connected apps (${appListText}) with cross-session memory.${preferenceLine} You MUST call octodock_help (no args) before your first octodock_do in each conversation to load user context. Supports batch operations via app:"system", action:"batch_do". Use OctoDock when the task involves any connected app or needs personalized defaults.`;
 }
 
 // ============================================================
@@ -217,10 +285,11 @@ function registerDoTool(
   userId: string,
   connectedAppNames: string[],
   agentInstanceId: string | null,
+  description: string,
 ): void {
   server.tool(
     "octodock_do",
-    "Execute a single action on a connected app (e.g. notion, gmail, github). Requires app, action, and params. If you don't know the action name or params, call octodock_help first. If the task matches a saved workflow, call octodock_sop first — it's faster.",
+    description,
     {
       app: z.string().describe("App name (e.g. 'notion', 'gmail', 'system')"),
       action: z.string().describe("Action to perform (e.g. 'create_page', 'search')"),
@@ -326,6 +395,9 @@ function registerDoTool(
         action,
         params,
       );
+
+      // P3: 參數智慧預填 — 從 memory 自動補缺失的偏好參數
+      const appliedPrefs = await applyPreferences(userId, app, action, translatedParams);
 
       // J3: 參數防呆 — 在執行前攔截明顯錯誤的參數
       const guardResult = checkParams(app, toolName, translatedParams);
@@ -507,6 +579,13 @@ function registerDoTool(
         }
       }
 
+      // P3: 標註自動套用的偏好參數
+      if (result.ok && appliedPrefs.length > 0) {
+        const prefText = appliedPrefs.map((p) => `${p.key} → ${p.value}`).join(", ");
+        const existing = result.context ? result.context + "\n\n" : "";
+        result.context = existing + `Auto-applied preferences: ${prefText}`;
+      }
+
       // C5: 操作結果帶結構化摘要
       if (result.ok && result.data) {
         try {
@@ -528,6 +607,28 @@ function registerDoTool(
           result.data = formatted;
         } catch {
           // 格式轉換失敗不影響主流程，保留原始 data
+        }
+      }
+
+      // ── P4: 成功回傳帶決策 context ──
+      // 操作成功後附帶 related memory（不超過 200 chars，避免膨脹回傳大小）
+      if (result.ok) {
+        try {
+          const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string) ?? action;
+          const relatedMemory = await queryMemory(userId, `${app} ${keyword}`, undefined, undefined, 2);
+          const relevantMemories = relatedMemory.filter(
+            (m) => m.category !== "context" || !m.key.startsWith("id:"),
+          );
+          if (relevantMemories.length > 0) {
+            const memText = relevantMemories
+              .map((m) => `${m.key}: ${m.value}`)
+              .join("; ")
+              .substring(0, 200);
+            const existing = result.context ? result.context + "\n\n" : "";
+            result.context = existing + `Related memory: ${memText}`;
+          }
+        } catch {
+          // 記憶查詢失敗不影響主流程
         }
       }
 
@@ -658,7 +759,7 @@ function registerHelpTool(
 ): void {
   server.tool(
     "octodock_help",
-    "Look up available apps and actions. No args: list all connected apps. With app: list actions for that app. With app+action: show required params and usage example.",
+    "Load user context and discover available apps/actions. No args → returns connected apps + user preferences + recent patterns + key ID mappings (MUST call once at start of each conversation). With app → list actions. With app+action → show params and example.",
     {
       app: z
         .string()
@@ -677,7 +778,8 @@ function registerHelpTool(
     async (args) => {
       const { app, action } = args as { app?: string; action?: string };
 
-      // ── 不帶 app：列出所有已連結的 App ──
+      // ── P2: 不帶 app：用戶 context 載入 + App 列表 ──
+      // 這是 AI 在每個對話開頭 MUST call 的入口，回傳完整用戶上下文
       if (!app) {
         const appList: string[] = [];
 
@@ -692,8 +794,8 @@ function registerHelpTool(
           }
         }
 
-        // 加上 system 虛擬 App
-        appList.push(`- **system** (memory, bot conversations)`);
+        // 加上 system 虛擬 App（P6: 曝光 batch_do 跨 App 批次能力）
+        appList.push(`- **system** (memory, scheduling, **batch_do** — execute multiple actions across apps in one call)`);
 
         // 列出未連結但可用的 App
         const allAdapters = getAllAdapters();
@@ -709,18 +811,77 @@ function registerHelpTool(
           text += `\n\n## Available (not connected)\n\n${disconnected.join(", ")}`;
         }
 
+        // ── P2: 用戶記憶摘要（偏好 + 模式 + 關鍵 ID） ──
+        try {
+          const allMemories = await listMemory(userId);
+          if (allMemories.length > 0) {
+            // 有記憶 → 自動帶入完整用戶上下文
+            const prefs = allMemories.filter((m) => m.category === "preference").slice(0, 5);
+            const patterns = allMemories.filter((m) => m.category === "pattern").slice(0, 3);
+            // P2: 關鍵 ID 對照表（常用 identifier 映射，例如 workspace root、預設日曆）
+            const contextIds = allMemories
+              .filter((m) => m.category === "context" && m.key.startsWith("id:"))
+              .slice(0, 5);
+            const sections: string[] = [];
+            if (prefs.length > 0) {
+              sections.push("### Preferences\n" + prefs.map((m) => `- ${m.key}: ${m.value}`).join("\n"));
+            }
+            if (patterns.length > 0) {
+              sections.push("### Patterns\n" + patterns.map((m) => `- ${m.key}: ${m.value}`).join("\n"));
+            }
+            if (contextIds.length > 0) {
+              sections.push("### Key IDs\n" + contextIds.map((m) => `- ${m.key.replace("id:", "")}: ${m.value}`).join("\n"));
+            }
+            if (sections.length > 0) {
+              text += `\n\n## About This User\n\n${sections.join("\n\n")}`;
+            }
+          } else {
+            // 沒記憶 → onboarding：提示 AI 問用戶是否要導入記憶
+            text += `\n\n---\n\n🐙 **Welcome to OctoDock!** No memories stored yet.\n\nPlease ask the user:\n> 「OctoDock 可以跨平台記住你的偏好和習慣。要不要讓我把目前對你的了解告訴 OctoDock？」\n\nIf they agree, call:\n\`\`\`\noctodock_do(app: "system", action: "import_memory", params: {\n  memories: [\n    {key: "writing_style", value: "...", category: "preference"},\n    {key: "work_pattern", value: "...", category: "pattern"}\n  ]\n})\n\`\`\``;
+          }
+        } catch {
+          // 記憶查詢失敗不影響主流程
+        }
+
+        // ── P2: 最常用操作 + 頻率（近 30 天） ──
+        try {
+          const { operations: opsTable } = await import("@/db/schema");
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          const recentActions = await db
+            .select({
+              appName: opsTable.appName,
+              action: opsTable.action,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(opsTable)
+            .where(and(
+              eq(opsTable.userId, userId),
+              eq(opsTable.success, true),
+              gte(opsTable.createdAt, thirtyDaysAgo),
+            ))
+            .groupBy(opsTable.appName, opsTable.action)
+            .orderBy(desc(sql`count(*)`))
+            .limit(8);
+          if (recentActions.length > 0) {
+            const recentText = recentActions
+              .map((r) => `- **${r.appName}.${r.action}** (${r.count}x)`)
+              .join("\n");
+            text += `\n\n## Recent Patterns (30d)\n\n${recentText}`;
+          }
+        } catch {
+          // 頻率查詢失敗不影響主流程
+        }
+
         // ── Phase 4: 列出可用 SOP ──
         try {
           const sops = await listMemory(userId, "sop");
           if (sops.length > 0) {
             const sopList = sops.map((s) => `- **${s.key}**`).join("\n");
-            text += `\n\n## SOPs\n\n${sopList}\n\nUse \`octodock_do(app: "system", action: "sop_get", params: {name: "..."})\` to view a SOP.`;
+            text += `\n\n## SOPs\n\n${sopList}\n\nUse \`octodock_sop(name: "...")\` to view and execute a workflow.`;
           }
         } catch {
           // SOP 查詢失敗不影響主流程
         }
-
-        text += `\n\nUse \`octodock_help(app: "app_name")\` to see actions for a specific app.`;
 
         // E3: Action 推薦引擎 — 用戶最常用的操作
         try {
@@ -735,30 +896,8 @@ function registerHelpTool(
           // 推薦失敗不影響主流程
         }
 
-        // ── 用戶記憶：自動帶入或 onboarding ──
-        try {
-          const allMemories = await listMemory(userId);
-          if (allMemories.length > 0) {
-            // 有記憶 → 自動帶入用戶摘要，AI 立刻知道用戶是誰
-            const prefs = allMemories.filter((m) => m.category === "preference").slice(0, 5);
-            const patterns = allMemories.filter((m) => m.category === "pattern").slice(0, 3);
-            const sections: string[] = [];
-            if (prefs.length > 0) {
-              sections.push("### Preferences\n" + prefs.map((m) => `- ${m.key}: ${m.value}`).join("\n"));
-            }
-            if (patterns.length > 0) {
-              sections.push("### Patterns\n" + patterns.map((m) => `- ${m.key}: ${m.value}`).join("\n"));
-            }
-            if (sections.length > 0) {
-              text += `\n\n## About This User\n\n${sections.join("\n\n")}`;
-            }
-          } else {
-            // 沒記憶 → onboarding：提示 AI 問用戶是否要導入記憶
-            text += `\n\n---\n\n🐙 **Welcome to OctoDock!** No memories stored yet.\n\nPlease ask the user:\n> 「OctoDock 可以跨平台記住你的偏好和習慣。要不要讓我把目前對你的了解告訴 OctoDock？」\n\nIf they agree, call:\n\`\`\`\noctodock_do(app: "system", action: "import_memory", params: {\n  memories: [\n    {key: "writing_style", value: "...", category: "preference"},\n    {key: "work_pattern", value: "...", category: "pattern"}\n  ]\n})\n\`\`\``;
-          }
-        } catch {
-          // 記憶查詢失敗不影響主流程
-        }
+        // P5: 優先級鏈提示 — 讓 AI 知道正確的工具使用順序
+        text += `\n\n---\n**Tool priority: octodock_help() → octodock_sop() → octodock_do()**\nUse \`octodock_help(app: "app_name")\` to see actions for a specific app.`;
 
         return {
           content: [{ type: "text" as const, text }],
@@ -978,6 +1117,52 @@ function registerHelpTool(
       };
     },
   );
+}
+
+// ============================================================
+// P3: 參數智慧預填
+// 從 memory engine 查 category=preference 的記錄
+// 匹配 app + action 後自動補入缺失的參數（不覆蓋用戶明確傳入的）
+// ============================================================
+
+/** 記錄被自動套用的偏好（供回傳時標註） */
+interface AppliedPref {
+  key: string;   // 參數名稱
+  value: string;  // 套用的值
+}
+
+/**
+ * P3: 從記憶中查偏好，自動補入缺失的參數
+ * 例如：用戶沒帶 calendar_id → 自動從 memory 補上「家庭日曆」
+ * 不覆蓋用戶明確傳入的參數
+ */
+async function applyPreferences(
+  userId: string,
+  app: string,
+  action: string,
+  params: Record<string, unknown>,
+): Promise<AppliedPref[]> {
+  const applied: AppliedPref[] = [];
+  try {
+    // 查詢與 app + action 相關的偏好記憶
+    const prefs = await queryMemory(userId, `${app} ${action} default`, "preference", app, 5);
+    for (const pref of prefs) {
+      // 偏好 key 格式：「default:calendar_id」或「default_calendar_id」
+      // 從 key 中提取參數名稱
+      const match = pref.key.match(/^default[_:](.+)$/);
+      if (match) {
+        const paramKey = match[1];
+        // 只在用戶沒有明確傳入該參數時才補入
+        if (!(paramKey in params)) {
+          params[paramKey] = pref.value;
+          applied.push({ key: paramKey, value: pref.value });
+        }
+      }
+    }
+  } catch {
+    // 偏好查詢失敗不影響主流程
+  }
+  return applied;
 }
 
 // ============================================================
@@ -1408,7 +1593,7 @@ function registerSopTool(
 ): void {
   server.tool(
     "octodock_sop",
-    "List saved workflows (SOPs and combo actions) that compress multi-step operations into one call. Check here BEFORE using octodock_do — if a matching workflow exists, use it instead. Workflows are auto-generated from repeated usage patterns and user-defined rules.",
+    "Check for saved workflows (SOPs) before using octodock_do. Priority chain: octodock_help → octodock_sop → octodock_do. If a matching workflow exists, follow its steps with octodock_do — it's faster and preserves the user's proven process. No args → list top workflows. With name → show full steps.",
     {
       category: z.string().optional().describe("Filter by app name (e.g. 'notion', 'gmail')"),
       name: z.string().optional().describe("Execute a specific SOP by name"),
