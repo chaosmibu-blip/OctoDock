@@ -16,7 +16,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check-sync": "npx tsx scripts/check-sync.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
@@ -31,6 +32,7 @@
     "marked": "^17.0.4",
     "next": "^15.5.12",
     "next-auth": "^5.0.0-beta.30",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.20.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
