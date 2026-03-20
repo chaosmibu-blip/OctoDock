@@ -98,9 +98,9 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
   }, [toolsCache]);
 
   /* #1: 自動重置 timer — 用 ref 追蹤，unmount 時清理 */
-  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const cursorCopiedTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const disconnectErrorTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const cursorCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const disconnectErrorTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   /* unmount 時清理所有 timer */
   useEffect(() => {
@@ -135,7 +135,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
   }, [mcpUrl]);
 
   /* #2: fetch abort 用 ref 追蹤 */
-  const toolsAbortRef = useRef<AbortController>();
+  const toolsAbortRef = useRef<AbortController | undefined>(undefined);
 
   /* #6 #7: 展開/收合工具清單（修正依賴 + abort + 錯誤處理） */
   const toggleTools = useCallback(async (appName: string) => {
