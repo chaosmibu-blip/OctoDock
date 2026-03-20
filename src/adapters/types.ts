@@ -78,6 +78,8 @@ export interface DoResult {
   warnings?: string[]; // C2: 異常偵測警告
   nextSuggestion?: { app: string; action: string; reason: string; probability: number }; // E1: 操作鏈建議
   recoveryHint?: { lastSuccessfulParams: Record<string, unknown>; note: string }; // E2: 失敗修復建議
+  candidates?: Array<{ title: string; id: string }>; // NOT_FOUND 時自動搜尋的候選結果
+  frequentFailure?: { count: number; since: string; suggestion: string }; // 高頻失敗偵測
 }
 
 // ============================================================

@@ -595,6 +595,61 @@ function registerDoTool(
         }
       }
 
+      // ── NOT_FOUND 智慧復原：自動搜尋候選 ──
+      // 404 時從 params 推斷用戶想找什麼，自動搜尋一次，把候選放在回傳裡
+      // AI 看到 candidates 就能自己選正確 ID，不用叫用戶改設定
+      if (!result.ok && result.errorCode === "NOT_FOUND" && adapter) {
+        try {
+          // 從 params 提取搜尋關鍵字
+          const searchKeyword = (translatedParams.title as string)
+            ?? (translatedParams.query as string)
+            ?? (translatedParams.name as string);
+          // 能搜尋的 App（有 search action）
+          const searchToolName = adapter.actionMap?.["search"];
+          if (searchKeyword && searchToolName && token) {
+            const searchResult = await adapter.execute(searchToolName, { query: searchKeyword, max_results: 5 }, token);
+            const searchText = searchResult.content?.[0]?.text;
+            if (searchText) {
+              // 從搜尋結果提取候選（格式：標題 + ID）
+              const candidates = extractCandidatesFromSearch(searchText);
+              if (candidates.length > 0) {
+                result.candidates = candidates;
+              }
+            }
+          }
+        } catch {
+          // 自動搜尋失敗不影響錯誤回傳
+        }
+      }
+
+      // ── 高頻失敗偵測：同一 action 連續失敗多次時提醒 ──
+      if (!result.ok) {
+        try {
+          const { operations: opsTable } = await import("@/db/schema");
+          const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          const failRows = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(opsTable)
+            .where(and(
+              eq(opsTable.userId, userId),
+              eq(opsTable.appName, app),
+              eq(opsTable.action, action),
+              eq(opsTable.success, false),
+              gte(opsTable.createdAt, twentyFourHoursAgo),
+            ));
+          const failCount = failRows[0]?.count ?? 0;
+          if (failCount >= 3) {
+            result.frequentFailure = {
+              count: failCount,
+              since: twentyFourHoursAgo.toISOString(),
+              suggestion: `此操作近 24 小時內失敗 ${failCount} 次。建議先用 octodock_help(app:"${app}", action:"${action}") 確認參數格式，或用 search 確認正確 ID。`,
+            };
+          }
+        } catch {
+          // 查詢失敗不影響錯誤回傳
+        }
+      }
+
       // 如果操作成功，嘗試從結果中學習 ID 對應（越用越懂你）
       if (result.ok) {
         learnFromResult(userId, app, action, params, result).catch(() => {});
@@ -854,6 +909,50 @@ function registerHelpTool(
             if (warning) {
               skillText += `\n\n${warning}`;
             }
+
+            // 預防性提示：查近 7 天該 action 的失敗率，高於 30% 就警告
+            try {
+              const { operations: opsTable } = await import("@/db/schema");
+              const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+              const statsRows = await db
+                .select({
+                  success: opsTable.success,
+                  count: sql<number>`count(*)::int`,
+                })
+                .from(opsTable)
+                .where(and(
+                  eq(opsTable.userId, userId),
+                  eq(opsTable.appName, app),
+                  eq(opsTable.action, action),
+                  gte(opsTable.createdAt, sevenDaysAgo),
+                ))
+                .groupBy(opsTable.success);
+              const total = statsRows.reduce((sum, r) => sum + r.count, 0);
+              const failCount = statsRows.find((r) => r.success === false)?.count ?? 0;
+              if (total >= 5 && failCount / total > 0.3) {
+                // 查最常見的錯誤訊息
+                const topError = await db
+                  .select({ result: opsTable.result })
+                  .from(opsTable)
+                  .where(and(
+                    eq(opsTable.userId, userId),
+                    eq(opsTable.appName, app),
+                    eq(opsTable.action, action),
+                    eq(opsTable.success, false),
+                    gte(opsTable.createdAt, sevenDaysAgo),
+                  ))
+                  .orderBy(desc(opsTable.createdAt))
+                  .limit(1);
+                const errorMsg = topError[0]?.result
+                  ? (typeof topError[0].result === "string" ? topError[0].result : JSON.stringify(topError[0].result)).substring(0, 150)
+                  : "unknown";
+                const failRate = Math.round((failCount / total) * 100);
+                skillText += `\n\n⚠️ 此操作近 7 天失敗率 ${failRate}%（${failCount}/${total}）。最近的錯誤：${errorMsg}`;
+              }
+            } catch {
+              // 失敗率查詢失敗不影響 help 回傳
+            }
+
             return {
               content: [{ type: "text" as const, text: skillText }],
             };
@@ -1437,6 +1536,25 @@ function extractTitleFromItem(item: Record<string, unknown>): string | undefined
  * C5: 通用 fallback — 從 rawResult 嘗試提取 id、title/name、url
  * adapter 沒實作 extractSummary 時使用
  */
+/**
+ * NOT_FOUND 智慧復原：從搜尋結果文字中提取候選（title + id）
+ * 支援格式：Notion 的 "**Title** (page) id:xxx"、Drive 的 "- Name (...) id:xxx"
+ */
+function extractCandidatesFromSearch(searchText: string): Array<{ title: string; id: string }> {
+  const candidates: Array<{ title: string; id: string }> = [];
+  // 匹配 "**title** ... id:xxx" 或 "- title ... id:xxx"
+  const idPattern = /(?:\*\*(.+?)\*\*|^-\s+(.+?))\s.*?id:(\S+)/gm;
+  let match;
+  while ((match = idPattern.exec(searchText)) !== null && candidates.length < 5) {
+    const title = (match[1] ?? match[2] ?? "").trim();
+    const id = match[3].trim();
+    if (title && id) {
+      candidates.push({ title, id });
+    }
+  }
+  return candidates;
+}
+
 function extractDefaultSummary(rawData: unknown): Record<string, unknown> | null {
   // U12: 統一 summary 提取 — 支援物件和 JSON 字串
   let obj: Record<string, unknown>;

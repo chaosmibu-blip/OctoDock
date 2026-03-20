@@ -46,7 +46,7 @@ async function gmailFetch(
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: { message: res.statusText } }));
     throw new Error(
-      `Gmail API error: ${(error as { error: { message: string } }).error.message} (GMAIL_API_ERROR)`,
+      `Gmail API error (${res.status}): ${(error as { error: { message: string } }).error.message} (GMAIL_API_ERROR)`,
     );
   }
   return res.json();
@@ -1040,7 +1040,7 @@ async function execute(
       });
       if (!res.ok) {
         const error = await res.json().catch(() => ({ error: { message: res.statusText } }));
-        throw new Error(`Gmail API error: ${(error as { error: { message: string } }).error.message} (GMAIL_API_ERROR)`);
+        throw new Error(`Gmail API error (${res.status}): ${(error as { error: { message: string } }).error.message} (GMAIL_API_ERROR)`);
       }
       return {
         content: [{ type: "text", text: JSON.stringify({ deleted: true }) }],

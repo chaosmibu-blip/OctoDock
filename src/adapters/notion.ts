@@ -53,8 +53,9 @@ async function notionFetch(
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
+    // 帶上 HTTP status code，讓 error-types.ts 的 extractHttpStatus 能正確分類 403/404
     throw new Error(
-      `Notion API error: ${(error as { message: string }).message} (NOTION_API_ERROR)`,
+      `Notion API error (${res.status}): ${(error as { message: string }).message} (NOTION_API_ERROR)`,
     );
   }
   return res.json();

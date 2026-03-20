@@ -42,7 +42,7 @@ async function sheetsFetch(
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: { message: res.statusText } }));
     throw new Error(
-      `Google Sheets API error: ${(error as { error: { message: string } }).error.message} (GSHEETS_API_ERROR)`,
+      `Google Sheets API error (${res.status}): ${(error as { error: { message: string } }).error.message} (GSHEETS_API_ERROR)`,
     );
   }
   return res.json();

@@ -44,7 +44,7 @@ async function driveFetch(
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: { message: res.statusText } }));
     throw new Error(
-      `Google Drive API error: ${(error as { error: { message: string } }).error.message} (GDRIVE_API_ERROR)`,
+      `Google Drive API error (${res.status}): ${(error as { error: { message: string } }).error.message} (GDRIVE_API_ERROR)`,
     );
   }
   // DELETE 回傳 204 No Content

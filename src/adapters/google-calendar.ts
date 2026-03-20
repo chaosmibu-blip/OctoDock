@@ -48,7 +48,7 @@ async function gcalFetch(
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: { message: res.statusText } }));
     throw new Error(
-      `Google Calendar API error: ${(error as { error: { message: string } }).error.message} (GCAL_API_ERROR)`,
+      `Google Calendar API error (${res.status}): ${(error as { error: { message: string } }).error.message} (GCAL_API_ERROR)`,
     );
   }
   return res.json();

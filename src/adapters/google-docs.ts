@@ -42,7 +42,7 @@ async function docsFetch(
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: { message: res.statusText } }));
     throw new Error(
-      `Google Docs API error: ${(error as { error: { message: string } }).error.message} (GDOCS_API_ERROR)`,
+      `Google Docs API error (${res.status}): ${(error as { error: { message: string } }).error.message} (GDOCS_API_ERROR)`,
     );
   }
   return res.json();
