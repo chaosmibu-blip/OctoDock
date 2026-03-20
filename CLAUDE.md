@@ -190,6 +190,7 @@ AI 可以用名稱（不用 ID）操作：
 - **Adapter 品質檢查**：`.claude/skills/adapter-quality-checklist.md` — 新增或修改 adapter 時的品質基準線
 - **新增 App 研究**：`.claude/skills/new-app-research.md` — 新增 App 時先研究 API 再寫程式碼
 - **架構思維**：`.claude/skills/architecture-thinking.md` — 架構總覽 + 碰到問題時判斷改架構還是改個別 App
+- **前端 UI 審查**：`.claude/skills/ui-review.md` — 修改或新增前端頁面時的 7 層面檢查清單（視覺一致性、響應式、狀態完整性、操作回饋、引導流程、無障礙、多語系）
 
 ### App 設定指南（所有 App 的 OAuth / API Key / Bot Token 設定流程）
 - `.claude/skills/setup-guide.md` — 16 個 App 的設定指南（按認證類型分組）
