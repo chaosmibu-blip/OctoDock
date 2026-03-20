@@ -183,14 +183,20 @@ AI 可以用名稱（不用 ID）操作：
 - **升級計畫書**：`docs/agentdock-upgrade-plan.md`（所有 Phase 的規劃和進度）
 - **討論紀錄**：`docs/agentdock-discussion-log.md`（Notion 討論彙整）
 
-### Skills（語意觸發，不是固定關鍵字）
-- **自我改進檢查**：`.claude/skills/self-improve.md` — 每次改完程式碼自動判斷 CLAUDE.md 和 skills 是否需要更新或建立新的
-- **規劃文件**：`.claude/skills/planning-doc.md` — 3 個以上檔案改動時必須先寫規劃文件
-- **前後端同步**：`.claude/skills/frontend-sync.md` — 後端變更時自動檢查前端是否需要同步
-- **Adapter 品質檢查**：`.claude/skills/adapter-quality-checklist.md` — 新增或修改 adapter 時的品質基準線
-- **新增 App 研究**：`.claude/skills/new-app-research.md` — 新增 App 時先研究 API 再寫程式碼
-- **架構思維**：`.claude/skills/architecture-thinking.md` — 架構總覽 + 碰到問題時判斷改架構還是改個別 App
-- **前端 UI 審查**：`.claude/skills/ui-review.md` — 修改或新增前端頁面時的 7 層面檢查清單（視覺一致性、響應式、狀態完整性、操作回饋、引導流程、無障礙、多語系）
+### Skills（if-then 規則 + hook 雙層觸發）
+
+Hook（`.claude/hooks/post-commit-check.sh`）會在 commit 後根據改動的檔案自動提醒對應 skill。以下規則也必須在**開始工作前**主動判斷：
+
+| 觸發條件 | 必須讀取的 Skill | 說明 |
+|----------|-----------------|------|
+| 新增或修改 `src/adapters/*.ts` | `.claude/skills/adapter-quality-checklist.md` | G1-G3、B2-B3 品質基準線逐項檢查 |
+| **新增** adapter（全新 App） | `.claude/skills/new-app-research.md` | 先研究 API 再寫程式碼，產出規格文件 |
+| 後端變更（adapter / MCP / auth / schema） | `.claude/skills/frontend-sync.md` | 檢查前端是否需要同步（APP_KEYS、i18n、oauth-env） |
+| 修改 `src/app/` 或 `src/components/` | `.claude/skills/ui-review.md` | 7 層面 UI 審查（視覺、響應式、狀態、回饋、引導、a11y、i18n） |
+| 修改核心架構（server.ts / types.ts / middleware） | `.claude/skills/architecture-thinking.md` | 判斷是架構層問題還是個別 App 問題 |
+| 任務涉及 3 個以上檔案改動 | `.claude/skills/planning-doc.md` | 先寫規劃文件，不能直接動手 |
+| 每次完成一輪程式碼變更 | `.claude/skills/self-improve.md` | 判斷 CLAUDE.md 和 skills 是否需要更新 |
+| 設定 App 的 OAuth / API Key / Bot Token | `.claude/skills/setup-guide.md` | 16 個 App 的認證設定流程 |
 
 ### App 設定指南（所有 App 的 OAuth / API Key / Bot Token 設定流程）
 - `.claude/skills/setup-guide.md` — 16 個 App 的設定指南（按認證類型分組）
