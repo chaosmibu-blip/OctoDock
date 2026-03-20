@@ -163,7 +163,7 @@ Get replies in a message thread.
 /** 回傳 Skill 說明 */
 function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
-  if (action) return `No detailed help for slack.${action}. Use octodock_help(app:"slack") to see all actions.`;
+  if (action) return null; // 回傳 null 讓 server.ts fallback 用 actionMap 查 inputSchema
   return `slack (${Object.keys(actionMap).length} actions):
 Channels: list_channels, create_channel, archive_channel, set_topic, set_purpose, invite_to_channel, kick_from_channel
 Messages: get_messages, get_replies, send_message, update_message, delete_message

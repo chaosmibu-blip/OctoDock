@@ -156,6 +156,7 @@ const actionMap: Record<string, string> = {
   list_comments: "gdrive_list_comments",
   delete_permission: "gdrive_delete_permission",
   empty_trash: "gdrive_empty_trash",
+  read_pdf: "gdrive_read_pdf",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -293,6 +294,13 @@ Remove a specific permission (sharing) from a file.
   permission_id: Permission ID (from list_permissions)
 ### Example
 octodock_do(app:"google_drive", action:"delete_permission", params:{file_id:"1Bxi...", permission_id:"12345"})`,
+
+  read_pdf: `## google_drive.read_pdf
+Download a PDF file from Google Drive and extract its text content. Returns plain text.
+### Parameters
+  file_id: Google Drive file ID of the PDF
+### Example
+octodock_do(app:"google_drive", action:"read_pdf", params:{file_id:"1a6nCHFdxzjMWGmDcuzOcdzPgd6sLdH1c"})`,
 };
 
 function getSkill(action?: string): string | null {
@@ -315,6 +323,7 @@ function getSkill(action?: string): string | null {
   add_comment(file_id, content) — add a comment to a file
   list_comments(file_id) — list all comments on a file
   delete_permission(file_id, permission_id) — remove a sharing permission
+  read_pdf(file_id) — download PDF and extract text content
 Use octodock_help(app:"google_drive", action:"ACTION") for detailed params + example.`;
 }
 
@@ -425,6 +434,11 @@ function formatResponse(action: string, rawData: unknown): string {
     }
     case "delete_permission":
       return `Done. Permission removed.`;
+    // PDF 文字提取：直接回傳文字內容
+    case "read_pdf": {
+      const d = rawData as any;
+      return d.text ?? d.content ?? String(rawData);
+    }
     default:
       return JSON.stringify(rawData, null, 2);
   }
@@ -524,6 +538,14 @@ const tools: ToolDefinition[] = [
     description:
       "Permanently delete ALL files in Google Drive trash. Cannot be undone.",
     inputSchema: {},
+  },
+  {
+    name: "gdrive_read_pdf",
+    description:
+      "Download a PDF file from Google Drive and extract its text content. Returns plain text.",
+    inputSchema: {
+      file_id: z.string().describe("Google Drive file ID of the PDF"),
+    },
   },
   {
     name: "gdrive_share",
@@ -769,6 +791,43 @@ async function execute(
             text: JSON.stringify({ success: true, file_id: params.file_id, action: "moved_to_trash" }, null, 2),
           },
         ],
+      };
+    }
+
+    // 讀取 PDF：下載 PDF binary 並提取文字內容
+    case "gdrive_read_pdf": {
+      // 1. 下載 PDF binary
+      const dlRes = await fetch(
+        `${DRIVE_API}/files/${params.file_id}?alt=media`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!dlRes.ok) {
+        throw new Error(
+          `Failed to download PDF: ${dlRes.status} ${dlRes.statusText} (GDRIVE_DOWNLOAD_ERROR)`,
+        );
+      }
+      const buffer = Buffer.from(await dlRes.arrayBuffer());
+
+      // 2. 用 pdf-parse v2 提取文字
+      const { PDFParse } = await import("pdf-parse");
+      const parser = new PDFParse({ data: buffer });
+      const pdfData = await parser.getText();
+
+      // 3. 掃描型 PDF（無文字層）回傳提示
+      if (!pdfData.text || pdfData.text.trim().length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              text: "",
+              message: "PDF has no extractable text (may be scanned image). Try uploading to Google Drive as Google Doc format for OCR.",
+            }),
+          }],
+        };
+      }
+
+      return {
+        content: [{ type: "text", text: JSON.stringify({ text: pdfData.text, pages: pdfData.total }) }],
       };
     }
 

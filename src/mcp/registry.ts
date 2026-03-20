@@ -94,6 +94,32 @@ export async function loadAdapters(): Promise<void> {
   console.log(
     `Loaded ${adapters.size} adapters: ${[...adapters.keys()].join(", ")}`,
   );
+
+  // ── 驗證：getSkill 是否涵蓋所有 actionMap 的 action ──
+  // 載入時就抓到 drift，避免 AI 看不到已實作的功能
+  validateAdapterSkills();
+}
+
+/**
+ * 驗證每個 adapter 的 getSkill() 總覽是否列出 actionMap 的所有 action
+ * 有遺漏就印 warning，開發者加 action 後忘了更新 getSkill 會被抓到
+ */
+function validateAdapterSkills(): void {
+  for (const [name, adapter] of adapters) {
+    if (!adapter.actionMap || !adapter.getSkill) continue;
+    const actionKeys = Object.keys(adapter.actionMap);
+    // 取 getSkill 總覽（無參數呼叫）
+    const overview = adapter.getSkill();
+    if (!overview) continue;
+    // 檢查每個 actionMap key 是否出現在總覽文字中
+    const missing = actionKeys.filter((key) => !overview.includes(key));
+    if (missing.length > 0) {
+      console.warn(
+        `⚠️ [${name}] getSkill() 漏列 ${missing.length} 個 action: ${missing.join(", ")}` +
+        `\n   → AI 呼叫 octodock_help("${name}") 時看不到這些功能，請更新 getSkill`,
+      );
+    }
+  }
 }
 
 /** 單例 Promise：確保 loadAdapters 只執行一次，並發請求共享同一個 Promise */

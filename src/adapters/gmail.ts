@@ -398,7 +398,8 @@ function formatResponse(action: string, rawData: unknown): string {
     case "draft": {
       const msg = data.message as Record<string, unknown> | undefined;
       const id = data.id || msg?.id;
-      return `Done. Message ID: ${id}`;
+      const threadId = data.threadId || msg?.threadId;
+      return `Done. Message ID: ${id}${threadId ? `\nThread ID: ${threadId}` : ""}`;
     }
     // 標籤列表：列出所有標籤名稱
     case "label_list": {

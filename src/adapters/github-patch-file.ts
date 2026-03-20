@@ -55,6 +55,28 @@ export interface PatchFileResult {
  *
  * AI 端只需傳 find + replace 字串，不需要碰完整內容
  */
+/**
+ * B3: 智慧錯誤引導 — 攔截常見 GitHub patch_file 錯誤，回傳有用提示
+ */
+export function formatPatchFileError(errorMessage: string): string | null {
+  if (errorMessage.includes("File not found") || errorMessage.includes("Not Found")) {
+    return `「找不到檔案 (FILE_NOT_FOUND)」— 請確認 owner、repo、path、branch 都正確。用 github.search_code 或 github.get_file 先確認檔案存在。`;
+  }
+  if (errorMessage.includes("not found in")) {
+    return `「搜尋字串未找到 (FIND_NOT_FOUND)」— find 字串在檔案中不存在。請用 github.get_file 查看檔案內容，確認 find 字串完全匹配（含空白和換行）。`;
+  }
+  if (errorMessage.includes("matches") && errorMessage.includes("times")) {
+    return `「搜尋字串不唯一 (MULTIPLE_MATCHES)」— find 字串在檔案中匹配到多次。請加長 find 字串，包含更多上下文，確保只匹配一處。`;
+  }
+  if (errorMessage.includes("409") || errorMessage.includes("conflict")) {
+    return `「版本衝突 (CONFLICT)」— 檔案在你讀取後被修改了。請重新取得檔案的 SHA，再重試。`;
+  }
+  if (errorMessage.includes("401") || errorMessage.includes("Bad credentials")) {
+    return `「GitHub token 無效或過期 (AUTH_FAILED)」— 請重新連結 GitHub 帳號。`;
+  }
+  return null;
+}
+
 export async function executePatchFile(
   params: PatchFileParams,
   token: string,

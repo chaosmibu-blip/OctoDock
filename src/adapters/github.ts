@@ -10,7 +10,7 @@ import type {
   ToolResult,
   TokenSet,
 } from "./types";
-import { executePatchFile } from "./github-patch-file";
+import { executePatchFile, formatPatchFileError } from "./github-patch-file";
 
 // ── OAuth 設定 ─────────────────────────────────────────────
 const authConfig: OAuthConfig = {
@@ -525,7 +525,7 @@ function formatResponse(action: string, rawData: unknown): string {
       return JSON.stringify(rawData, null, 2);
     }
 
-    // 建立/更新操作：完成確認 + URL
+    // 建立/更新操作：完成確認 + title + URL
     case "create_issue":
     case "update_issue":
     case "create_comment":
@@ -535,15 +535,18 @@ function formatResponse(action: string, rawData: unknown): string {
     case "create_gist":
     case "fork_repo": {
       const data = rawData as any;
-      return `Done. URL: ${data.html_url}`;
+      const title = data.title ?? data.name ?? data.full_name;
+      const id = data.number ?? data.id;
+      return `Done.${title ? ` Title: ${title}` : ""}${id ? `\nID: ${id}` : ""}\nURL: ${data.html_url}`;
     }
 
-    // 檔案建立/更新/刪除：完成確認 + commit URL
+    // 檔案建立/更新/刪除：完成確認 + path + commit URL
     case "create_file":
     case "update_file":
     case "delete_file": {
       const data = rawData as any;
-      return `Done. URL: ${data.content?.html_url ?? data.commit?.html_url ?? "N/A"}`;
+      const path = data.content?.path;
+      return `Done.${path ? ` Path: ${path}` : ""}\nURL: ${data.content?.html_url ?? data.commit?.html_url ?? "N/A"}`;
     }
 
     // 合併 PR：完成確認
@@ -750,7 +753,9 @@ function formatError(action: string, errorMessage: string): string | null {
 
     return null;
   } catch {
-    // 如果不是 JSON 格式的錯誤，回傳 null 讓系統使用預設處理
+    // 非 JSON 格式的錯誤（例如 patch_file 的純文字錯誤）
+    const patchHint = formatPatchFileError(errorMessage);
+    if (patchHint) return patchHint;
     return null;
   }
 }

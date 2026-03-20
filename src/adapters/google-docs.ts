@@ -177,13 +177,21 @@ function formatResponse(action: string, rawData: unknown): string {
       return `**${title ?? "Untitled"}**\n\n${text}`;
     }
 
-    // 插入文字 / 取代文字 / 追加文字 / 刪除文字 / 插入表格：簡潔確認
+    // 插入文字 / 取代文字 / 追加文字 / 刪除文字 / 插入表格：確認 + document ID
     case "insert_text":
     case "replace_text":
     case "append_text":
     case "delete_text":
-    case "insert_table":
-      return "Done.";
+    case "insert_table": {
+      const docId = data.documentId as string | undefined;
+      const repliesArr = data.replies as any[] | undefined;
+      // replace_text 的 replies 裡有 occurrencesChanged
+      const occurrences = repliesArr?.[0]?.replaceAllText?.occurrencesChanged;
+      let msg = "Done.";
+      if (occurrences != null) msg += ` ${occurrences} occurrence(s) replaced.`;
+      if (docId) msg += `\nDocument ID: ${docId}\nURL: https://docs.google.com/document/d/${docId}/edit`;
+      return msg;
+    }
 
     default:
       return JSON.stringify(rawData, null, 2);
