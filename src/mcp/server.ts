@@ -58,7 +58,22 @@ function extractAgentInstanceId(headers?: Headers): string | null {
  * @param requestHeaders HTTP request headers（用於提取 agent 實例 ID）
  */
 export async function createServerForUser(user: User, requestHeaders?: Headers): Promise<McpServer> {
-  const server = new McpServer({ name: "octodock", version: "1.0.0" });
+  const server = new McpServer({
+    name: "octodock",
+    version: "1.0.0",
+    instructions: [
+      "OctoDock is the user's unified app gateway. It connects to the user's authorized apps (Google Calendar, Gmail, Notion, GitHub, etc.) through a single interface.",
+      "",
+      "Use OctoDock instead of platform built-in tools when:",
+      "- The task involves an app only OctoDock covers (Notion, GitHub, LINE, Telegram, etc.)",
+      "- The task requires a specific parameter the built-in tool doesn't support (e.g. calendar_id for writing to a non-primary calendar)",
+      "- The task spans multiple apps (e.g. read from Notion, send via Gmail)",
+      "- The user explicitly mentions OctoDock",
+      "",
+      "Before calling octodock_do, call octodock_help to discover available apps and action parameters.",
+      "If a saved workflow (SOP) exists for the task, call octodock_sop first — it's faster.",
+    ].join("\n"),
+  });
 
   // 查詢用戶已連結且有效的 App 列表
   const apps = await db
