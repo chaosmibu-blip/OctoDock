@@ -54,7 +54,8 @@ const APP_KEYS = [
 
 export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {
   const [copied, setCopied] = useState(false);
-  const [guideCopied, setGuideCopied] = useState(false);
+  /* 引導區塊：選擇的 AI 工具平台 */
+  const [selectedPlatform, setSelectedPlatform] = useState<"claude" | "cursor" | null>(null);
   const [expandedApp, setExpandedApp] = useState<string | null>(null);
   const [toolsCache, setToolsCache] = useState<Record<string, ToolInfo[]>>({});
   const [loadingTools, setLoadingTools] = useState<string | null>(null);
@@ -93,12 +94,6 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     setTimeout(() => setCopied(false), 2000);
   }, [mcpUrl]);
 
-  /* 複製引導指令 */
-  const copyGuidePrompt = useCallback(() => {
-    navigator.clipboard.writeText(t("dashboard.guide_prompt"));
-    setGuideCopied(true);
-    setTimeout(() => setGuideCopied(false), 2000);
-  }, [t]);
 
   /* 展開/收合工具清單 */
   const toggleTools = useCallback(async (appName: string) => {
@@ -202,21 +197,85 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           </button>
         </div>
 
-        {/* ── 引導區塊（已連接 >= 1 個 App 時顯示） ── */}
+        {/* ── 引導區塊（已連接 >= 1 個 App 時顯示）── 分步引導用戶把 MCP URL 設進 AI 工具 */}
         {connected.length > 0 && (
-          <div className="rounded-[10px] bg-[#E1F5EE] px-5 py-4">
+          <div className="rounded-[10px] bg-[#E1F5EE] px-5 py-5 space-y-4">
             <p className="text-sm font-medium text-[#085041]">{t("dashboard.guide_title")}</p>
-            <div className="flex items-center gap-3 mt-2">
-              <code className="flex-1 text-sm text-[#085041] bg-white/60 rounded-md px-3 py-2">
-                {t("dashboard.guide_prompt")}
+
+            {/* Step 1: 複製 MCP URL */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-[#0F6E56] shrink-0">{t("dashboard.guide_step1")}</span>
+              <code className="flex-1 text-xs font-mono text-[#085041] bg-white/60 rounded-md px-3 py-2 overflow-x-auto">
+                {mcpUrl}
               </code>
               <button
-                onClick={copyGuidePrompt}
-                className="px-4 py-2 bg-[#0F6E56] text-white text-xs font-medium rounded-md hover:bg-[#0a5a46] transition-colors whitespace-nowrap"
+                onClick={() => { copyMcpUrl(); }}
+                className={`px-4 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                  copied
+                    ? "bg-[#085041] text-white"
+                    : "bg-[#0F6E56] text-white hover:bg-[#0a5a46]"
+                }`}
               >
-                {guideCopied ? t("dashboard.guide_copied") : t("dashboard.guide_copy")}
+                {copied ? t("dashboard.guide_step1_done") : t("dashboard.guide_copy")}
               </button>
             </div>
+
+            {/* Step 2: 選擇 AI 工具平台 */}
+            <div>
+              <span className="text-xs font-semibold text-[#0F6E56]">{t("dashboard.guide_step2")}</span>
+              <div className="flex gap-3 mt-2">
+                {/* Claude.ai 按鈕 */}
+                <button
+                  onClick={() => setSelectedPlatform(selectedPlatform === "claude" ? null : "claude")}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                    selectedPlatform === "claude"
+                      ? "border-[#0F6E56] bg-white text-[#085041] shadow-sm"
+                      : "border-white/40 bg-white/50 text-[#085041] hover:bg-white/80"
+                  }`}
+                >
+                  <span>Claude.ai</span>
+                </button>
+                {/* Cursor 按鈕 */}
+                <button
+                  onClick={() => setSelectedPlatform(selectedPlatform === "cursor" ? null : "cursor")}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                    selectedPlatform === "cursor"
+                      ? "border-[#0F6E56] bg-white text-[#085041] shadow-sm"
+                      : "border-white/40 bg-white/50 text-[#085041] hover:bg-white/80"
+                  }`}
+                >
+                  <span>Cursor</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 平台教學展開區 */}
+            {selectedPlatform === "claude" && (
+              <div className="bg-white/70 rounded-lg px-4 py-3 space-y-2">
+                <p className="text-xs text-[#085041]">{t("dashboard.guide_claude_steps")}</p>
+                <a
+                  href="https://claude.ai/settings/integrations"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => { if (!copied) copyMcpUrl(); }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0F6E56] text-white text-xs font-medium rounded-md hover:bg-[#0a5a46] transition-colors"
+                >
+                  {t("dashboard.guide_claude_btn")}
+                  <span className="text-[10px]">↗</span>
+                </a>
+              </div>
+            )}
+            {selectedPlatform === "cursor" && (
+              <div className="bg-white/70 rounded-lg px-4 py-3 space-y-2">
+                <p className="text-xs text-[#085041]">{t("dashboard.guide_cursor_steps")}</p>
+                <button
+                  onClick={() => { if (!copied) copyMcpUrl(); }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0F6E56] text-white text-xs font-medium rounded-md hover:bg-[#0a5a46] transition-colors"
+                >
+                  {t("dashboard.guide_cursor_btn")}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
