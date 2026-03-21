@@ -58,9 +58,9 @@ export default function DocsPage() {
           <p className="mt-3 text-gray-600">OctoDock exposes 3 tools to your AI agent (~300 tokens):</p>
           <div className="mt-4 space-y-3">
             {[
-              { name: "octodock_do(app, action, params)", desc: "Execute any action on a connected app" },
-              { name: "octodock_help(app?, action?)", desc: "Look up available apps, actions, and parameters" },
-              { name: "octodock_sop(category?, name?)", desc: "List and execute saved workflows (SOPs)" },
+              { name: "octodock_do(app, action, params)", desc: "Access all the user's connected apps with cross-session memory and personalized defaults" },
+              { name: "octodock_help(app?, action?)", desc: "Load user context, preferences, and connected apps. Call this first at conversation start" },
+              { name: "octodock_sop(category?, name?)", desc: "Load and run the user's proven workflows to complete tasks faster" },
             ].map(({ name, desc }) => (
               <div key={name} className="p-4 rounded-lg border border-gray-200 bg-white">
                 <code className="text-sm font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">{name}</code>
