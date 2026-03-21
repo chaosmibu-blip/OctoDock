@@ -498,6 +498,25 @@ const translations: Record<Locale, Record<string, string>> = {
     "account.delete_cancel": "取消",
     "account.delete_success": "帳號已刪除，正在跳轉...",
     "account.delete_error": "刪除失敗，請稍後再試",
+
+    // Feedback
+    "feedback.btn": "反饋",
+    "feedback.title": "提交反饋",
+    "feedback.category": "分類",
+    "feedback.category.bug": "Bug 回報",
+    "feedback.category.feature": "功能建議",
+    "feedback.category.app_request": "希望新增的 App",
+    "feedback.category.other": "其他",
+    "feedback.content": "內容",
+    "feedback.content_placeholder": "請描述你遇到的問題或建議...",
+    "feedback.email": "Email（選填）",
+    "feedback.email_placeholder": "方便我們回覆你",
+    "feedback.submit": "送出",
+    "feedback.submitting": "送出中...",
+    "feedback.success": "感謝你的反饋！",
+    "feedback.error": "送出失敗，請稍後再試",
+    "feedback.cancel": "取消",
+    "feedback.missing_app": "沒有找到你要的 App？告訴我們",
   },
   en: {
     // Common
@@ -986,6 +1005,25 @@ const translations: Record<Locale, Record<string, string>> = {
     "account.delete_cancel": "Cancel",
     "account.delete_success": "Account deleted. Redirecting...",
     "account.delete_error": "Deletion failed. Please try again later.",
+
+    // Feedback
+    "feedback.btn": "Feedback",
+    "feedback.title": "Submit Feedback",
+    "feedback.category": "Category",
+    "feedback.category.bug": "Bug Report",
+    "feedback.category.feature": "Feature Request",
+    "feedback.category.app_request": "Request New App",
+    "feedback.category.other": "Other",
+    "feedback.content": "Content",
+    "feedback.content_placeholder": "Describe the issue or suggestion...",
+    "feedback.email": "Email (optional)",
+    "feedback.email_placeholder": "So we can follow up",
+    "feedback.submit": "Submit",
+    "feedback.submitting": "Submitting...",
+    "feedback.success": "Thank you for your feedback!",
+    "feedback.error": "Submission failed. Please try again later.",
+    "feedback.cancel": "Cancel",
+    "feedback.missing_app": "Can't find your app? Let us know",
   },
 };
 

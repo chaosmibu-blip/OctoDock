@@ -63,6 +63,12 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
   const [loadingTools, setLoadingTools] = useState<string | null>(null);
   /* #7: 工具載入錯誤狀態 */
   const [toolsError, setToolsError] = useState<string | null>(null);
+  // 反饋表單狀態
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState<string>("feature");
+  const [feedbackContent, setFeedbackContent] = useState("");
+  const [feedbackEmail, setFeedbackEmail] = useState("");
+  const [feedbackStatus, setFeedbackStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   // U23: 帳號刪除狀態
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
@@ -200,6 +206,47 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
       disconnectErrorTimerRef.current = setTimeout(() => setDisconnectError(null), 3000);
     }
   }, [router]);
+
+  /** 反饋表單送出 — 使用 FormSubmit.co 發送到信箱 */
+  const handleFeedbackSubmit = useCallback(async () => {
+    if (!feedbackContent.trim()) return;
+    setFeedbackStatus("submitting");
+    try {
+      const res = await fetch("https://formsubmit.co/ajax/s8869420@gmail.com", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          _subject: `[OctoDock Feedback] ${feedbackCategory}`,
+          category: feedbackCategory,
+          content: feedbackContent,
+          email: feedbackEmail || user.email,
+          user_name: user.name,
+        }),
+      });
+      if (res.ok) {
+        setFeedbackStatus("success");
+        // 2 秒後關閉並重置表單
+        setTimeout(() => {
+          setShowFeedback(false);
+          setFeedbackCategory("feature");
+          setFeedbackContent("");
+          setFeedbackEmail("");
+          setFeedbackStatus("idle");
+        }, 2000);
+      } else {
+        setFeedbackStatus("error");
+      }
+    } catch {
+      setFeedbackStatus("error");
+    }
+  }, [feedbackCategory, feedbackContent, feedbackEmail, user.email, user.name]);
+
+  /** 打開反饋表單（可預選分類） */
+  const openFeedback = useCallback((category?: string) => {
+    if (category) setFeedbackCategory(category);
+    setFeedbackStatus("idle");
+    setShowFeedback(true);
+  }, []);
 
   /** U23: 帳號刪除處理 — 呼叫 DELETE /api/account 並跳轉 */
   const handleDeleteAccount = useCallback(async () => {
@@ -515,6 +562,13 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                 );
               })}
             </div>
+            {/* 「希望新增的 App」入口 — 預選 app_request 分類 */}
+            <button
+              onClick={() => openFeedback("app_request")}
+              className="mt-3 text-xs text-[#0F6E56] hover:underline cursor-pointer"
+            >
+              {t("feedback.missing_app")} →
+            </button>
           </div>
         )}
 
@@ -564,6 +618,92 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
         )}
 
       </div>
+
+      {/* ── 固定反饋按鈕（右下角） ── */}
+      <button
+        onClick={() => openFeedback()}
+        className="fixed bottom-6 right-6 w-12 h-12 bg-[#0F6E56] text-white rounded-full shadow-lg hover:bg-[#0a5a46] transition-colors flex items-center justify-center z-40"
+        title={t("feedback.btn")}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      </button>
+
+      {/* ── 反饋表單彈窗 ── */}
+      {showFeedback && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+            <h3 className="text-base font-semibold text-gray-900">{t("feedback.title")}</h3>
+
+            {feedbackStatus === "success" ? (
+              <p className="text-sm text-green-600 py-4 text-center">{t("feedback.success")}</p>
+            ) : (
+              <>
+                {/* 分類選擇 */}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">{t("feedback.category")}</label>
+                  <select
+                    value={feedbackCategory}
+                    onChange={(e) => setFeedbackCategory(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F6E56] bg-white"
+                  >
+                    <option value="bug">{t("feedback.category.bug")}</option>
+                    <option value="feature">{t("feedback.category.feature")}</option>
+                    <option value="app_request">{t("feedback.category.app_request")}</option>
+                    <option value="other">{t("feedback.category.other")}</option>
+                  </select>
+                </div>
+
+                {/* 內容 */}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">{t("feedback.content")}</label>
+                  <textarea
+                    value={feedbackContent}
+                    onChange={(e) => setFeedbackContent(e.target.value)}
+                    placeholder={t("feedback.content_placeholder")}
+                    rows={4}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F6E56] resize-none"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">{t("feedback.email")}</label>
+                  <input
+                    type="email"
+                    value={feedbackEmail}
+                    onChange={(e) => setFeedbackEmail(e.target.value)}
+                    placeholder={t("feedback.email_placeholder")}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F6E56]"
+                  />
+                </div>
+
+                {feedbackStatus === "error" && (
+                  <p className="text-xs text-red-500">{t("feedback.error")}</p>
+                )}
+
+                {/* 按鈕 */}
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => { setShowFeedback(false); setFeedbackStatus("idle"); }}
+                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                  >
+                    {t("feedback.cancel")}
+                  </button>
+                  <button
+                    onClick={handleFeedbackSubmit}
+                    disabled={!feedbackContent.trim() || feedbackStatus === "submitting"}
+                    className="px-4 py-2 text-sm bg-[#0F6E56] text-white rounded-lg hover:bg-[#0a5a46] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {feedbackStatus === "submitting" ? t("feedback.submitting") : t("feedback.submit")}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
