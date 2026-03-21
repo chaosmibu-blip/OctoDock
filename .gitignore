@@ -25,6 +25,7 @@
 *.pem
 .cache/
 .claude/settings.local.json
+.claude/projects/
 
 # debug
 npm-debug.log*
