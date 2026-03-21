@@ -80,6 +80,7 @@ export interface DoResult {
   recoveryHint?: { lastSuccessfulParams: Record<string, unknown>; note: string }; // E2: 失敗修復建議
   candidates?: Array<{ title: string; id: string }>; // NOT_FOUND 時自動搜尋的候選結果
   frequentFailure?: { count: number; since: string; suggestion: string }; // 高頻失敗偵測
+  affectedResources?: Array<{ id: string; title: string; status?: string }>; // G6: 錯誤時列出被影響的資源
 }
 
 // ============================================================

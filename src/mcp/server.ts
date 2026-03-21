@@ -341,6 +341,12 @@ function registerDoTool(
       // J3: 非攔截的警告，暫存到 guardWarnings，等 result 初始化後再合併
       const guardWarnings = guardResult?.warnings;
 
+      // G5: suppress_suggestions — 讓 AI 或用戶控制是否回傳 nextSuggestion
+      const suppressSuggestions = translatedParams.suppress_suggestions === true;
+      if (suppressSuggestions) {
+        delete translatedParams.suppress_suggestions;
+      }
+
       // C6: Dry-run 模式 — 破壞性操作預覽，不實際執行
       const isDryRun = translatedParams.dryRun === true;
       const isDryRunEligible = /delete|trash|replace|update/.test(toolName);
@@ -499,6 +505,25 @@ function registerDoTool(
         if (contextParts.length > 0) {
           const existing = result.context ? result.context + "\n\n" : "";
           result.context = existing + contextParts.join("\n");
+        }
+
+        // G2: 破壞性操作預檢 — 子資源警告寫入 warnings
+        if (preContext.childResources && preContext.childResources.length > 0) {
+          if (!result.warnings) result.warnings = [];
+          const childList = preContext.childResources.map((c) => `"${c.title}" (${c.type})`).join(", ");
+          result.warnings.push(`⚠️ This page has ${preContext.childResources.length} child resource(s): ${childList}`);
+          // G6: 同時填入 affectedResources
+          result.affectedResources = preContext.childResources.map((c) => ({
+            id: c.id,
+            title: c.title,
+            status: c.type,
+          }));
+        }
+
+        // G3: 同名資源建立提醒
+        if (preContext.duplicateWarning) {
+          if (!result.warnings) result.warnings = [];
+          result.warnings.push(preContext.duplicateWarning);
         }
       }
 
@@ -669,8 +694,8 @@ function registerDoTool(
         }
         // SOP 自動辨識 — I8/J4 最終修正：靜默自動存 SOP，不產生 suggestion
         // detectSopCandidate 現在直接自動存 SOP 並回傳 null，不再需要處理回傳值
-        // E1: 操作鏈建議
-        if (nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
+        // E1: 操作鏈建議（G5: suppress_suggestions 時跳過）
+        if (!suppressSuggestions && nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
           result.nextSuggestion = nextSuggestionResult.value;
         }
         // E4: 跨 App 關聯
@@ -1591,6 +1616,18 @@ function extractDefaultSummary(rawData: unknown): Record<string, unknown> | null
 
   // 嘗試取 name（非 Notion 類 App 常用）
   if (typeof obj.name === "string") { summary.name = obj.name; hasData = true; }
+
+  // G1: 寫入型 action 帶 parent 資訊（讓 AI 知道資源建在哪裡）
+  const parentObj = obj.parent as Record<string, unknown> | undefined;
+  if (parentObj) {
+    const parentType = parentObj.type as string | undefined;
+    const parentId = parentObj.page_id ?? parentObj.database_id ?? parentObj.workspace;
+    if (parentType && parentId) {
+      summary.parent_type = parentType;
+      summary.parent_id = parentId;
+      hasData = true;
+    }
+  }
 
   return hasData ? summary : null;
 }

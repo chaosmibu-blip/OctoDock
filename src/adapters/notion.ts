@@ -121,6 +121,8 @@ const actionMap: Record<string, string> = {
   replace_content: "notion_replace_content", // G2: 全文替換頁面內容
   append_content: "notion_append_content", // 尾部追加 Markdown 內容
   move_page: "notion_move_page",
+  archive_page: "notion_archive_page", // 歸檔頁面（可復原）
+  unarchive_page: "notion_unarchive_page", // 取消歸檔（從垃圾桶復原）
   delete_page: "notion_delete_page",
   get_page_property: "notion_get_page_property",
   // 區塊操作
@@ -204,8 +206,22 @@ octodock_do(app:"notion", action:"update_page", params:{
   icon:{emoji:"🐙"}
 })`,
 
+  archive_page: `## notion.archive_page
+Archive a page (move to trash, recoverable within 30 days).
+### Parameters
+  page_id: Page ID
+### Example
+octodock_do(app:"notion", action:"archive_page", params:{page_id:"317a9617-..."})`,
+
+  unarchive_page: `## notion.unarchive_page
+Restore an archived page from trash.
+### Parameters
+  page_id: Page ID
+### Example
+octodock_do(app:"notion", action:"unarchive_page", params:{page_id:"317a9617-..."})`,
+
   delete_page: `## notion.delete_page
-Archive a page (recoverable within 30 days).
+Archive a page (recoverable within 30 days). Same as archive_page.
 ### Parameters
   page_id: Page ID
 ### Example
@@ -289,16 +305,18 @@ function getSkill(action?: string): string | null {
   }
   // 有 action 但找不到：提示可用的 action
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
-  // app 級別：全部 21 個 action
+  // app 級別：全部 action
   return `notion actions (${Object.keys(actionMap).length}):
   search(query, filter?) — search pages/databases
   create_page(title, content?, folder?) — create page (markdown)
   get_page(page) — get page content (returns markdown)
-  replace_content(page_id, content) — replace page body (markdown)
+  replace_content(page_id, content) — replace page body (markdown, preserves child pages)
   append_content(page_id, content) — append to end of page (markdown, no overwrite)
   move_page(page_id, new_parent_id) — move page to different parent
   update_page(page_id, properties?, icon?, cover?) — update properties
-  delete_page(page_id) — archive page
+  archive_page(page_id) — archive page (recoverable)
+  unarchive_page(page_id) — restore archived page
+  delete_page(page_id) — archive page (alias for archive_page)
   get_page_property(page_id, property_id) — get specific property value
   get_block(block_id) — get single block
   get_block_children(block_id, page_size?) — get child blocks of page/block
@@ -1059,6 +1077,8 @@ function formatResponse(action: string, rawData: unknown): string {
     case "append_content":
     case "append_blocks":
     case "update_database":
+    case "archive_page":
+    case "unarchive_page":
     case "delete_page":
     case "delete_block": {
       const url = data.url as string | undefined;
@@ -1274,8 +1294,9 @@ async function execute(
     // ── 全文替換頁面內容（G2: CRUD 完整閉環） ──
     // Notion API 沒有 "update content" endpoint，所以用組合操作：
     // 1. 取得所有現有 blocks
-    // 2. 逐一刪除
+    // 2. 過濾出非子頁面/子資料庫的 blocks，逐一刪除
     // 3. 用新的 Markdown 內容建立新 blocks
+    // 注意：child_page 和 child_database 類型的 block 會被保留，不會被刪除
     case "notion_replace_content": {
       const pageId = params.page_id as string;
       const newContent = params.content as string;
@@ -1284,12 +1305,17 @@ async function execute(
       const existing = (await notionFetch(
         `/blocks/${pageId}/children?page_size=100`,
         token,
-      )) as { results: Array<{ id: string }> };
+      )) as { results: Array<{ id: string; type: string; child_page?: { title: string }; child_database?: { title: string } }> };
 
-      // Step 2: 逐一刪除現有 blocks（Notion 不支援批次刪除）
-      const deletePromises = existing.results.map((block) =>
+      // Step 1.5: 分離子頁面/子資料庫和一般 block
+      const preservedTypes = new Set(["child_page", "child_database"]);
+      const blocksToDelete = existing.results.filter((b) => !preservedTypes.has(b.type));
+      const preservedBlocks = existing.results.filter((b) => preservedTypes.has(b.type));
+
+      // Step 2: 只刪除非子頁面/非子資料庫的 blocks（Notion 不支援批次刪除）
+      const deletePromises = blocksToDelete.map((block) =>
         notionFetch(`/blocks/${block.id}`, token, { method: "DELETE" }).catch(() => {
-          // 某些 block 可能無法刪除（例如子頁面），跳過
+          // 某些 block 可能無法刪除，跳過
         }),
       );
       await Promise.all(deletePromises);
@@ -1304,10 +1330,20 @@ async function execute(
         });
       }
 
-      // 回傳頁面資訊
+      // 回傳頁面資訊（含子頁面保留提示）
       const updatedPage = await notionFetch(`/pages/${pageId}`, token);
+      const responseData: Record<string, unknown> = updatedPage as Record<string, unknown>;
+      // 如果有保留的子頁面/子資料庫，在回傳中提示
+      if (preservedBlocks.length > 0) {
+        const preserved = preservedBlocks.map((b) => {
+          const title = b.child_page?.title ?? b.child_database?.title ?? "untitled";
+          return `${b.type}: "${title}" (${b.id})`;
+        });
+        responseData._preserved_children = preserved;
+        responseData._note = `${preservedBlocks.length} child page(s)/database(s) were preserved (not deleted).`;
+      }
       return {
-        content: [{ type: "text", text: JSON.stringify(updatedPage, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(responseData, null, 2) }],
       };
     }
 
@@ -1376,10 +1412,23 @@ async function execute(
     }
 
     // ── 刪除（封存）頁面 ──
+    // archive_page 和 delete_page 都走 Notion 的 archived: true（可復原）
+    case "notion_archive_page":
     case "notion_delete_page": {
       const result = await notionFetch(`/pages/${params.page_id}`, token, {
         method: "PATCH",
         body: JSON.stringify({ archived: true }),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // ── 取消歸檔頁面（從垃圾桶復原） ──
+    case "notion_unarchive_page": {
+      const result = await notionFetch(`/pages/${params.page_id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ archived: false }),
       });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],

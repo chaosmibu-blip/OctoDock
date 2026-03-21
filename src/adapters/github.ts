@@ -516,8 +516,26 @@ function formatResponse(action: string, rawData: unknown): string {
     }
 
     // 取得檔案內容：解碼 base64 並回傳純文字 + SHA（供 update/delete 使用）
+    // 目錄型回傳：精簡為樹狀結構（原始 JSON 太冗長，~18000 chars）
     case "get_file": {
       const data = rawData as any;
+      // 目錄型回傳：Array of {name, type, size, path}
+      if (Array.isArray(data)) {
+        if (data.length === 0) return "Empty directory.";
+        // 按類型排序：目錄在前，檔案在後
+        const sorted = [...data].sort((a: any, b: any) => {
+          if (a.type === "dir" && b.type !== "dir") return -1;
+          if (a.type !== "dir" && b.type === "dir") return 1;
+          return (a.name as string).localeCompare(b.name as string);
+        });
+        const lines = sorted.map((item: any) => {
+          const icon = item.type === "dir" ? "📁" : "📄";
+          const size = item.type === "file" ? ` (${item.size} bytes)` : "";
+          return `${icon} ${item.name}${size}`;
+        });
+        return `Directory (${data.length} items):\n${lines.join("\n")}`;
+      }
+      // 檔案型回傳：解碼 base64
       if (data.content && data.encoding === "base64") {
         const decoded = Buffer.from(data.content, "base64").toString("utf8");
         return `sha: ${data.sha}\n---\n${decoded}`;

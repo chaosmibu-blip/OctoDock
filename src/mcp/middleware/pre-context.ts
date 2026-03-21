@@ -39,6 +39,8 @@ export interface PreContextResult {
   namingConvention?: { datePrefix: boolean; commonTypes: string[]; examples: string[] };
   patterns?: Array<{ name: string; count: number }>;
   crossAppContext?: Array<{ app: string; type: string; title: string; date?: string }>; // O1+U9: 跨 App 相關資源
+  childResources?: Array<{ id: string; title: string; type: string }>; // G2: 破壞性操作前掃描子資源
+  duplicateWarning?: string; // G3: 同名資源建立提醒
 }
 
 /**
@@ -178,6 +180,55 @@ async function doPreContext(
         }
       } catch (err) {
         console.error("Pre-context target query failed:", err);
+      }
+    }
+  }
+
+  // G2: 破壞性操作前掃描子資源（replace_content / delete_page）
+  // 在 warnings 中列出會被影響的子頁面/子資料庫
+  if (executeQuery && token && appName === "notion" && /replace_content|delete/.test(toolName)) {
+    const targetId = params.page_id as string | undefined;
+    if (targetId) {
+      try {
+        const childResult = await executeQuery(
+          "notion_get_block_children",
+          { block_id: targetId, page_size: 50 },
+          token,
+        ) as { content: Array<{ text: string }> };
+        const childText = childResult?.content?.[0]?.text;
+        if (childText) {
+          const childData = JSON.parse(childText);
+          const children = (childData.results ?? []) as Array<Record<string, unknown>>;
+          const childPages = children
+            .filter((b) => b.type === "child_page" || b.type === "child_database")
+            .map((b) => ({
+              id: b.id as string,
+              title: (b.child_page as Record<string, string>)?.title
+                ?? (b.child_database as Record<string, string>)?.title
+                ?? "(untitled)",
+              type: b.type as string,
+            }));
+          if (childPages.length > 0) {
+            context.childResources = childPages;
+            hasData = true;
+          }
+        }
+      } catch {
+        // 子資源掃描失敗不影響主操作
+      }
+    }
+  }
+
+  // G3: 同名資源建立檢測（create_page 時查同 parent 底下是否已有同名頁面）
+  if (appName === "notion" && /create_page/.test(toolName) && context.existingSiblings) {
+    const newTitle = params.title as string | undefined;
+    if (newTitle) {
+      const duplicates = context.existingSiblings.filter(
+        (s) => s.title.trim().toLowerCase() === newTitle.trim().toLowerCase(),
+      );
+      if (duplicates.length > 0) {
+        context.duplicateWarning = `⚠️ A page with the same name "${newTitle}" already exists under this parent (created ${duplicates[0].createdAt}). Proceeding will create a duplicate.`;
+        hasData = true;
       }
     }
   }
