@@ -285,6 +285,24 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           <div className="flex gap-2 items-center flex-wrap">
             <LanguageSwitcher />
             <Link
+              href="/bots"
+              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {t("nav.bots")}
+            </Link>
+            <Link
+              href="/skill-tree"
+              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {t("nav.skill_tree")}
+            </Link>
+            <Link
+              href="/schedules"
+              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {t("nav.schedules")}
+            </Link>
+            <Link
               href="/preferences"
               className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
             >
@@ -375,7 +393,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
               <div className="bg-white/70 rounded-lg px-4 py-3 space-y-2">
                 <p className="text-xs text-[#085041]">{t("dashboard.guide_claude_steps")}</p>
                 <a
-                  href="https://claude.ai/settings/integrations"
+                  href="https://claude.ai/settings/connectors"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => { if (!copied) copyMcpUrl(); }}

@@ -62,7 +62,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.guide_cursor_btn": "Cursor 設定教學",
     "dashboard.guide_cursor_copy_config": "複製設定 JSON",
     "dashboard.guide_cursor_copied": "✓ 已複製設定",
-    "dashboard.guide_claude_steps": "在「Integrations」頁面，點選「Add integration」→ 貼上 MCP URL → 儲存",
+    "dashboard.guide_claude_steps": "Settings → Connectors → Add connector → Name 填 OctoDock → URL 貼上 → Save",
     "dashboard.guide_cursor_steps": "打開 Cursor Settings → MCP → 點「+ Add new MCP server」→ 選「Streamable HTTP」→ 貼上以下設定：",
     "dashboard.disconnect_confirm": "確定中斷？",
     "dashboard.disconnect_error": "中斷連結失敗，請稍後再試",
@@ -77,6 +77,8 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // Nav
     "nav.bots": "Bot 設定",
+    "nav.skill_tree": "技能樹",
+    "nav.schedules": "排程",
     "nav.memory": "記憶",
 
     // Apps
@@ -517,6 +519,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "feedback.error": "送出失敗，請稍後再試",
     "feedback.cancel": "取消",
     "feedback.missing_app": "沒有找到你要的 App？告訴我們",
+
+    // Schedules
+    "schedules.title": "排程管理",
+    "schedules.empty": "尚無排程",
+    "schedules.empty_hint": "透過 AI 用 octodock_do(app:\"system\", action:\"schedule_create\") 建立排程",
+    "schedules.active": "啟用中",
+    "schedules.paused": "已暫停",
+    "schedules.pause": "暫停",
+    "schedules.resume": "恢復",
+    "schedules.last_run": "上次執行",
+    "schedules.next_run": "下次執行",
   },
   en: {
     // Common
@@ -569,7 +582,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.guide_cursor_btn": "Cursor Setup Guide",
     "dashboard.guide_cursor_copy_config": "Copy Config JSON",
     "dashboard.guide_cursor_copied": "✓ Config Copied",
-    "dashboard.guide_claude_steps": "On the \"Integrations\" page, click \"Add integration\" → Paste MCP URL → Save",
+    "dashboard.guide_claude_steps": "Settings → Connectors → Add connector → Name: OctoDock → Paste MCP URL → Save",
     "dashboard.guide_cursor_steps": "Open Cursor Settings → MCP → Click \"+ Add new MCP server\" → Select \"Streamable HTTP\" → Paste the config below:",
     "dashboard.disconnect_confirm": "Confirm disconnect?",
     "dashboard.disconnect_error": "Failed to disconnect, please try again",
@@ -584,6 +597,8 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // Nav
     "nav.bots": "Bots",
+    "nav.skill_tree": "Skill Tree",
+    "nav.schedules": "Schedules",
     "nav.memory": "Memory",
 
     // Apps
@@ -1024,6 +1039,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "feedback.error": "Submission failed. Please try again later.",
     "feedback.cancel": "Cancel",
     "feedback.missing_app": "Can't find your app? Let us know",
+
+    // Schedules
+    "schedules.title": "Schedules",
+    "schedules.empty": "No schedules yet",
+    "schedules.empty_hint": "Create schedules via AI: octodock_do(app:\"system\", action:\"schedule_create\")",
+    "schedules.active": "Active",
+    "schedules.paused": "Paused",
+    "schedules.pause": "Pause",
+    "schedules.resume": "Resume",
+    "schedules.last_run": "Last run",
+    "schedules.next_run": "Next run",
   },
 };
 
