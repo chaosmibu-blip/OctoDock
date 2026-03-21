@@ -197,15 +197,46 @@ export function checkParams(
     google_drive: {
       gdrive_download: ["file_id"],
       gdrive_delete: ["file_id"],
+      gdrive_move: ["file_id", "new_parent_id"],
+      gdrive_rename: ["file_id", "new_name"],
+      gdrive_share: ["file_id", "email", "role"],
+      gdrive_copy: ["file_id"],
     },
     google_tasks: {
       gtasks_create_task: ["title"],
       gtasks_complete_task: ["task_id"],
       gtasks_delete_task: ["task_id"],
+      gtasks_update_task: ["task_id"],
+    },
+    google_sheets: {
+      gsheets_read: ["spreadsheet_id", "range"],
+      gsheets_write: ["spreadsheet_id", "range", "values"],
+      gsheets_append: ["spreadsheet_id", "range", "values"],
+      gsheets_clear: ["spreadsheet_id", "range"],
+      gsheets_add_sheet: ["spreadsheet_id", "title"],
+      gsheets_delete_sheet: ["spreadsheet_id", "sheet_id"],
+    },
+    google_docs: {
+      gdocs_get: ["document_id"],
+      gdocs_insert_text: ["document_id", "text"],
+      gdocs_replace_text: ["document_id", "find", "replace"],
+      gdocs_append_text: ["document_id", "text"],
     },
     github: {
       github_create_issue: ["owner", "repo", "title"],
       github_get_file: ["owner", "repo", "path"],
+      github_create_file: ["owner", "repo", "path", "content"],
+      github_update_file: ["owner", "repo", "path", "content", "sha"],
+      github_delete_file: ["owner", "repo", "path", "sha"],
+      github_create_pr: ["owner", "repo", "title", "head", "base"],
+      github_search_code: ["query"],
+    },
+    canva: {
+      canva_create_design: ["design_type"],
+    },
+    youtube: {
+      youtube_search: ["query"],
+      youtube_get_video: ["video_id"],
     },
   };
 
