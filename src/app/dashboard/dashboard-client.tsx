@@ -80,6 +80,11 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
   /* #8: 連結中 loading 狀態 */
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
+  /* Token 輸入 modal 狀態（bot_token / api_key 類 App 用） */
+  const [tokenModal, setTokenModal] = useState<{ app: string; displayName: string; instructions: string } | null>(null);
+  const [tokenInput, setTokenInput] = useState("");
+  const [tokenSubmitting, setTokenSubmitting] = useState(false);
+  const [tokenError, setTokenError] = useState("");
   const router = useRouter();
   const { t } = useI18n();
 
@@ -182,11 +187,67 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     }
   }, [t]);
 
-  /* #8 #10: 連結 App — 用 window.location.href 因為是 API route redirect */
-  const connectApp = useCallback((appName: string) => {
+  /* #8 #10: 連結 App — OAuth 用 redirect，bot_token / api_key 彈出 token 輸入框 */
+  const connectApp = useCallback(async (appName: string) => {
     setConnectingApp(appName);
-    window.location.href = `/api/connect/${appName}`;
+    try {
+      /* 先 fetch 取得認證類型（bot_token / api_key 回 JSON，oauth2 會 redirect） */
+      const res = await fetch(`/api/connect/${appName}`, { redirect: "manual" });
+      /* OAuth 類：API 回 redirect（302），手動跟隨 */
+      if (res.type === "opaqueredirect" || res.status === 302) {
+        window.location.href = `/api/connect/${appName}`;
+        return;
+      }
+      /* bot_token / api_key 類：回 JSON，彈出 token 輸入框 */
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authType === "bot_token" || data.authType === "api_key") {
+          const lang = document.documentElement.lang === "en" ? "en" : "zh";
+          const appDisplay = APP_KEYS.find(a => a.name === appName)?.displayName ?? appName;
+          setTokenModal({
+            app: appName,
+            displayName: appDisplay,
+            instructions: data.instructions?.[lang] || data.instructions?.en || "",
+          });
+          setTokenInput("");
+          setTokenError("");
+          setConnectingApp(null);
+          return;
+        }
+      }
+      /* fallback：直接跳轉 */
+      window.location.href = `/api/connect/${appName}`;
+    } catch {
+      /* fetch 失敗時 fallback 到直接跳轉 */
+      window.location.href = `/api/connect/${appName}`;
+    }
   }, []);
+
+  /* 提交 bot token / api key */
+  const submitToken = useCallback(async () => {
+    if (!tokenModal || !tokenInput.trim()) return;
+    setTokenSubmitting(true);
+    setTokenError("");
+    try {
+      const res = await fetch(`/api/connect/${tokenModal.app}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tokenInput.trim() }),
+      });
+      if (res.ok) {
+        setTokenModal(null);
+        setTokenInput("");
+        router.refresh();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setTokenError(data.error || t("token_modal.error"));
+      }
+    } catch {
+      setTokenError(t("token_modal.error"));
+    } finally {
+      setTokenSubmitting(false);
+    }
+  }, [tokenModal, tokenInput, router, t]);
 
   /* #5 #6: 中斷連結（帶確認 + 錯誤處理 + timer cleanup） */
   const disconnectApp = useCallback(async (appName: string) => {
@@ -601,6 +662,46 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
             {t("account.delete_btn")}
           </button>
         </div>
+
+        {/* Token 輸入彈窗（bot_token / api_key 類 App） */}
+        {tokenModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-sm w-full p-6 space-y-4">
+              <h3 className="text-base font-semibold text-gray-900">
+                {t("token_modal.title").replace("{app}", tokenModal.displayName)}
+              </h3>
+              {/* 設定步驟說明 */}
+              <div className="text-xs text-gray-500 whitespace-pre-line leading-relaxed bg-gray-50 rounded-lg p-3">
+                {tokenModal.instructions}
+              </div>
+              <input
+                type="password"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && tokenInput.trim()) submitToken(); }}
+                placeholder={t("token_modal.placeholder")}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F6E56] font-mono"
+                autoFocus
+              />
+              {tokenError && <p className="text-xs text-red-500">{tokenError}</p>}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => { setTokenModal(null); setTokenInput(""); setTokenError(""); }}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  {t("account.delete_cancel")}
+                </button>
+                <button
+                  onClick={submitToken}
+                  disabled={!tokenInput.trim() || tokenSubmitting}
+                  className="px-4 py-2 text-sm bg-[#0F6E56] text-white rounded-lg hover:bg-[#0a5a46] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {tokenSubmitting ? t("common.loading") : t("token_modal.submit")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* U23: 刪除帳號確認彈窗 — #9: 統一 rounded-lg #15: loading 走 i18n */}
         {showDeleteModal && (

@@ -501,6 +501,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "account.delete_success": "帳號已刪除，正在跳轉...",
     "account.delete_error": "刪除失敗，請稍後再試",
 
+    // Token 輸入彈窗（bot_token / api_key 類 App）
+    "token_modal.title": "連接 {app}",
+    "token_modal.placeholder": "貼上 Token...",
+    "token_modal.submit": "連接",
+    "token_modal.error": "連接失敗，請確認 Token 是否正確",
+
     // Feedback
     "feedback.btn": "反饋",
     "feedback.title": "提交反饋",
@@ -1020,6 +1026,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "account.delete_cancel": "Cancel",
     "account.delete_success": "Account deleted. Redirecting...",
     "account.delete_error": "Deletion failed. Please try again later.",
+
+    // Token input modal (bot_token / api_key apps)
+    "token_modal.title": "Connect {app}",
+    "token_modal.placeholder": "Paste Token...",
+    "token_modal.submit": "Connect",
+    "token_modal.error": "Connection failed. Please check your token.",
 
     // Feedback
     "feedback.btn": "Feedback",
