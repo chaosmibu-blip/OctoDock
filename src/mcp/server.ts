@@ -1149,6 +1149,7 @@ function registerHelpTool(
               github: "list_repos（Repo 列表）、search_code（搜尋程式碼）、create_issue（建立 Issue）",
               line: "send_text（發送文字）、broadcast（廣播訊息）、get_profile（取得用戶資料）",
               telegram: "send_message（發送訊息）、send_photo（發送照片）、get_updates（取得更新）",
+              telegram_user: "get_dialogs（對話列表）、get_history（聊天記錄）、search_messages（搜尋訊息）",
               discord: "send_message（發送訊息）、get_messages（訊息列表）、create_channel（建立頻道）",
               threads: "publish（發佈貼文）、get_posts（取得貼文）、reply（回覆貼文）",
               instagram: "publish（發佈貼文）、get_posts（取得貼文）、get_comments（取得留言）",

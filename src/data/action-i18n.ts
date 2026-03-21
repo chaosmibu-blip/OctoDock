@@ -193,6 +193,20 @@ const ACTION_ZH: Record<string, string> = {
   "telegram.get_updates": "取得更新",
   "telegram.answer_callback": "回應按鈕",
 
+  /* ── Telegram User (Client API) ── */
+  "telegram_user.get_dialogs": "對話列表",
+  "telegram_user.get_history": "聊天記錄",
+  "telegram_user.search_messages": "搜尋訊息",
+  "telegram_user.send_message": "發送訊息",
+  "telegram_user.read_history": "標記已讀",
+  "telegram_user.get_contacts": "聯絡人列表",
+  "telegram_user.resolve_username": "解析 Username",
+  "telegram_user.join_channel": "加入頻道",
+  "telegram_user.get_participants": "成員列表",
+  "telegram_user.get_me": "帳號資訊",
+  "telegram_user.forward_messages": "轉發訊息",
+  "telegram_user.get_folders": "資料夾列表",
+
   /* ── Discord ── */
   "discord.send_message": "發送訊息",
   "discord.edit_message": "編輯訊息",

@@ -33,6 +33,7 @@ async function importAllAdapters(): Promise<void> {
     // 通訊 / 社群
     import("@/adapters/line"),
     import("@/adapters/telegram"),
+    import("@/adapters/telegram-user"),
     import("@/adapters/discord"),
     import("@/adapters/slack"),
     import("@/adapters/threads"),

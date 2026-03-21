@@ -163,6 +163,28 @@ Threads 和 Instagram 共用同一個 Meta App 和同一組環境變數。
 
 ---
 
+## Phone Auth — Telegram (User)
+
+用戶帳號直接操作，不需要 Bot。
+
+### 管理員設定（一次性）
+1. 前往 [my.telegram.org](https://my.telegram.org) 用手機號碼登入
+2. 點 **API development tools**
+3. 填寫 App 名稱（`OctoDock`）、Platform（`Other`）
+4. 取得 **API ID**（整數）和 **API Hash**（hex 字串）
+5. 設定環境變數：`TG_API_ID` 和 `TG_API_HASH`
+
+### 用戶連接流程
+1. 在 Dashboard 點 Telegram (User) 的「連接」
+2. 輸入手機號碼（含國碼，如 `+886912345678`）
+3. Telegram App 會收到驗證碼
+4. 輸入驗證碼
+5. 如果有兩步驗證，再輸入密碼
+- **認證方式**：手機號碼 + 驗證碼 + 可選 2FA → StringSession 加密存儲
+- **注意**：非官方 API 使用會被 Telegram 自動監控，避免大量自動化操作
+
+---
+
 ## Bot Token — Discord
 
 1. 前往 [Discord Developer Portal](https://discord.com/developers/applications) → **New Application**

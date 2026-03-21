@@ -95,6 +95,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.github.desc": "管理 repo、issue、PR 和查看程式碼",
     "app.line.desc": "發送訊息、廣播和管理追蹤者",
     "app.telegram.desc": "發送訊息、照片和管理 Bot Webhook",
+    "app.telegram_user.desc": "以你的帳號讀取聊天記錄、搜尋訊息、加入頻道",
     "app.discord.desc": "發送訊息、管理頻道、成員和角色",
     "app.slack.desc": "發送訊息、管理頻道、使用者和釘選",
     "app.canva.desc": "管理設計、匯出 PDF/PNG、素材和資料夾",
@@ -501,11 +502,23 @@ const translations: Record<Locale, Record<string, string>> = {
     "account.delete_success": "帳號已刪除，正在跳轉...",
     "account.delete_error": "刪除失敗，請稍後再試",
 
-    // Token 輸入彈窗（bot_token / api_key 類 App）
-    "token_modal.title": "連接 {app}",
+    // Token 內嵌輸入（bot_token / api_key 類 App 卡片用）
     "token_modal.placeholder": "貼上 Token...",
     "token_modal.submit": "連接",
     "token_modal.error": "連接失敗，請確認 Token 是否正確",
+    "token_modal.hint.telegram": "從 @BotFather 取得 Bot Token",
+    "token_modal.hint.discord": "從 Discord Developer Portal 取得 Bot Token",
+    "token_modal.hint.line": "從 LINE Developers Console 取得 Channel Access Token",
+
+    // Phone auth 多步驟驗證
+    "phone_auth.phone_placeholder": "+886912345678",
+    "phone_auth.send_code": "發送驗證碼",
+    "phone_auth.code_placeholder": "驗證碼",
+    "phone_auth.verify": "驗證",
+    "phone_auth.2fa_placeholder": "兩步驗證密碼",
+    "phone_auth.hint_phone": "輸入 Telegram 手機號碼（含國碼）",
+    "phone_auth.hint_code": "驗證碼已發送到你的 Telegram App",
+    "phone_auth.hint_2fa": "請輸入你的兩步驗證密碼",
 
     // Feedback
     "feedback.btn": "反饋",
@@ -621,6 +634,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.github.desc": "Manage repos, issues, PRs, and view code",
     "app.line.desc": "Send messages, broadcast, and manage followers",
     "app.telegram.desc": "Send messages, photos, and manage Bot webhooks",
+    "app.telegram_user.desc": "Read chat history, search messages, and join channels with your account",
     "app.discord.desc": "Send messages, manage channels, members, and roles",
     "app.slack.desc": "Send messages, manage channels, users, and pins",
     "app.canva.desc": "Manage designs, export PDF/PNG, assets, and folders",
@@ -1027,11 +1041,23 @@ const translations: Record<Locale, Record<string, string>> = {
     "account.delete_success": "Account deleted. Redirecting...",
     "account.delete_error": "Deletion failed. Please try again later.",
 
-    // Token input modal (bot_token / api_key apps)
-    "token_modal.title": "Connect {app}",
+    // Token inline input (bot_token / api_key app cards)
     "token_modal.placeholder": "Paste Token...",
     "token_modal.submit": "Connect",
     "token_modal.error": "Connection failed. Please check your token.",
+    "token_modal.hint.telegram": "Get Bot Token from @BotFather",
+    "token_modal.hint.discord": "Get Bot Token from Discord Developer Portal",
+    "token_modal.hint.line": "Get Channel Access Token from LINE Developers Console",
+
+    // Phone auth multi-step verification
+    "phone_auth.phone_placeholder": "+886912345678",
+    "phone_auth.send_code": "Send Code",
+    "phone_auth.code_placeholder": "Verification Code",
+    "phone_auth.verify": "Verify",
+    "phone_auth.2fa_placeholder": "2FA Password",
+    "phone_auth.hint_phone": "Enter Telegram phone number with country code",
+    "phone_auth.hint_code": "Code sent to your Telegram app",
+    "phone_auth.hint_2fa": "Enter your two-step verification password",
 
     // Feedback
     "feedback.btn": "Feedback",

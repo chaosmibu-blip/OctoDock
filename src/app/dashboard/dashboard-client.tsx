@@ -22,7 +22,8 @@ interface DashboardProps {
 }
 
 /* App 定義清單 — 已上線的 */
-const APP_KEYS = [
+/* authType: 區分 OAuth（一鍵跳轉）和 token 類（卡片內嵌輸入框） */
+const APP_KEYS: Array<{ name: string; displayName: string; descKey: string; authType?: "bot_token" | "api_key" | "phone_auth" }> = [
   // 筆記 / 文件
   { name: "notion", displayName: "Notion", descKey: "app.notion.desc" },
   { name: "google_docs", displayName: "Google Docs", descKey: "app.google_docs.desc" },
@@ -39,9 +40,10 @@ const APP_KEYS = [
   // 開發
   { name: "github", displayName: "GitHub", descKey: "app.github.desc" },
   // 通訊
-  { name: "line", displayName: "LINE", descKey: "app.line.desc" },
-  { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc" },
-  { name: "discord", displayName: "Discord", descKey: "app.discord.desc" },
+  { name: "line", displayName: "LINE", descKey: "app.line.desc", authType: "api_key" },
+  { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc", authType: "bot_token" },
+  { name: "telegram_user", displayName: "Telegram (User)", descKey: "app.telegram_user.desc", authType: "phone_auth" },
+  { name: "discord", displayName: "Discord", descKey: "app.discord.desc", authType: "bot_token" },
   { name: "slack", displayName: "Slack", descKey: "app.slack.desc" },
   // 社群
   { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
@@ -80,11 +82,19 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
   /* #8: 連結中 loading 狀態 */
   const [connectingApp, setConnectingApp] = useState<string | null>(null);
-  /* Token 輸入 modal 狀態（bot_token / api_key 類 App 用） */
-  const [tokenModal, setTokenModal] = useState<{ app: string; displayName: string; instructions: string } | null>(null);
-  const [tokenInput, setTokenInput] = useState("");
-  const [tokenSubmitting, setTokenSubmitting] = useState(false);
-  const [tokenError, setTokenError] = useState("");
+  /* Token 內嵌輸入狀態（bot_token / api_key 類 App 卡片用） */
+  const [tokenInputs, setTokenInputs] = useState<Record<string, string>>({});
+  const [tokenSubmitting, setTokenSubmitting] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  /* Phone auth 多步驟狀態（telegram_user 等） */
+  const [phoneAuth, setPhoneAuth] = useState<Record<string, {
+    step: "phone" | "code" | "2fa";
+    phone: string;
+    code: string;
+    password: string;
+    loading: boolean;
+    error: string;
+  }>>({});
   const router = useRouter();
   const { t } = useI18n();
 
@@ -187,56 +197,26 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     }
   }, [t]);
 
-  /* #8 #10: 連結 App — OAuth 用 redirect，bot_token / api_key 彈出 token 輸入框 */
-  const connectApp = useCallback(async (appName: string) => {
+  /* #8 #10: 連結 OAuth App — 直接跳轉到授權頁 */
+  const connectApp = useCallback((appName: string) => {
     setConnectingApp(appName);
-    try {
-      /* 先 fetch 取得認證類型（bot_token / api_key 回 JSON，oauth2 會 redirect） */
-      const res = await fetch(`/api/connect/${appName}`, { redirect: "manual" });
-      /* OAuth 類：API 回 redirect（302），手動跟隨 */
-      if (res.type === "opaqueredirect" || res.status === 302) {
-        window.location.href = `/api/connect/${appName}`;
-        return;
-      }
-      /* bot_token / api_key 類：回 JSON，彈出 token 輸入框 */
-      if (res.ok) {
-        const data = await res.json();
-        if (data.authType === "bot_token" || data.authType === "api_key") {
-          const lang = document.documentElement.lang === "en" ? "en" : "zh";
-          const appDisplay = APP_KEYS.find(a => a.name === appName)?.displayName ?? appName;
-          setTokenModal({
-            app: appName,
-            displayName: appDisplay,
-            instructions: data.instructions?.[lang] || data.instructions?.en || "",
-          });
-          setTokenInput("");
-          setTokenError("");
-          setConnectingApp(null);
-          return;
-        }
-      }
-      /* fallback：直接跳轉 */
-      window.location.href = `/api/connect/${appName}`;
-    } catch {
-      /* fetch 失敗時 fallback 到直接跳轉 */
-      window.location.href = `/api/connect/${appName}`;
-    }
+    window.location.href = `/api/connect/${appName}`;
   }, []);
 
-  /* 提交 bot token / api key */
-  const submitToken = useCallback(async () => {
-    if (!tokenModal || !tokenInput.trim()) return;
-    setTokenSubmitting(true);
-    setTokenError("");
+  /* 提交 bot token / api key（卡片內嵌輸入框用） */
+  const submitToken = useCallback(async (appName: string) => {
+    const token = tokenInputs[appName]?.trim();
+    if (!token) return;
+    setTokenSubmitting(appName);
+    setTokenError(null);
     try {
-      const res = await fetch(`/api/connect/${tokenModal.app}`, {
+      const res = await fetch(`/api/connect/${appName}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: tokenInput.trim() }),
+        body: JSON.stringify({ token }),
       });
       if (res.ok) {
-        setTokenModal(null);
-        setTokenInput("");
+        setTokenInputs(prev => { const next = { ...prev }; delete next[appName]; return next; });
         router.refresh();
       } else {
         const data = await res.json().catch(() => ({}));
@@ -245,9 +225,75 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     } catch {
       setTokenError(t("token_modal.error"));
     } finally {
-      setTokenSubmitting(false);
+      setTokenSubmitting(null);
     }
-  }, [tokenModal, tokenInput, router, t]);
+  }, [tokenInputs, router, t]);
+
+  /* Phone auth 多步驟處理（send_code → verify → 2fa） */
+  const handlePhoneAuth = useCallback(async (appName: string) => {
+    const state = phoneAuth[appName];
+    if (!state) return;
+    const update = (patch: Partial<typeof state>) =>
+      setPhoneAuth(prev => ({ ...prev, [appName]: { ...prev[appName], ...patch } }));
+    update({ loading: true, error: "" });
+
+    try {
+      if (state.step === "phone") {
+        /* 步驟 1：發送驗證碼 */
+        const res = await fetch(`/api/connect/${appName}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ step: "send_code", phone: state.phone }),
+        });
+        const data = await res.json();
+        if (!res.ok) { update({ loading: false, error: data.error || t("token_modal.error") }); return; }
+        update({ step: "code", loading: false });
+      } else if (state.step === "code") {
+        /* 步驟 2：驗證碼 */
+        const res = await fetch(`/api/connect/${appName}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ step: "verify", code: state.code }),
+        });
+        const data = await res.json();
+        if (!res.ok) { update({ loading: false, error: data.error || t("token_modal.error") }); return; }
+        if (data.step === "need_2fa") {
+          update({ step: "2fa", loading: false });
+          return;
+        }
+        if (data.success) {
+          setPhoneAuth(prev => { const next = { ...prev }; delete next[appName]; return next; });
+          router.refresh();
+          return;
+        }
+      } else if (state.step === "2fa") {
+        /* 步驟 3：2FA 密碼 */
+        const res = await fetch(`/api/connect/${appName}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ step: "2fa", password: state.password }),
+        });
+        const data = await res.json();
+        if (!res.ok) { update({ loading: false, error: data.error || t("token_modal.error") }); return; }
+        if (data.success) {
+          setPhoneAuth(prev => { const next = { ...prev }; delete next[appName]; return next; });
+          router.refresh();
+          return;
+        }
+      }
+    } catch {
+      update({ loading: false, error: t("token_modal.error") });
+    }
+    update({ loading: false });
+  }, [phoneAuth, router, t]);
+
+  /* 初始化 phone auth 狀態 */
+  const initPhoneAuth = useCallback((appName: string) => {
+    setPhoneAuth(prev => ({
+      ...prev,
+      [appName]: { step: "phone", phone: "", code: "", password: "", loading: false, error: "" },
+    }));
+  }, []);
 
   /* #5 #6: 中斷連結（帶確認 + 錯誤處理 + timer cleanup） */
   const disconnectApp = useCallback(async (appName: string) => {
@@ -626,17 +672,134 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {available.map((app) => {
                 const isConnecting = connectingApp === app.name;
+                const isTokenApp = app.authType === "bot_token" || app.authType === "api_key";
+                const isPhoneAuth = app.authType === "phone_auth";
+                const isSubmitting = tokenSubmitting === app.name;
+                const pa = phoneAuth[app.name]; // phone auth state
                 return (
                   <div key={app.name} className="rounded-lg border border-dashed border-gray-300 bg-white p-4">
                     <h3 className="text-sm text-gray-400 mb-1">{app.displayName}</h3>
                     <p className="text-[11px] text-gray-300 leading-snug mb-3">{t(app.descKey)}</p>
-                    <button
-                      onClick={() => connectApp(app.name)}
-                      disabled={isConnecting}
-                      className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isConnecting ? t("common.loading") : t("dashboard.connect")}
-                    </button>
+                    {isPhoneAuth ? (
+                      /* phone_auth 類：多步驟手機驗證 */
+                      !pa ? (
+                        /* 尚未開始 → 顯示「連接」按鈕 */
+                        <button
+                          onClick={() => initPhoneAuth(app.name)}
+                          className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                        >
+                          {t("dashboard.connect")}
+                        </button>
+                      ) : (
+                        <div className="space-y-2">
+                          {/* 步驟 1：手機號碼 */}
+                          {pa.step === "phone" && (
+                            <div className="flex gap-1.5">
+                              <input
+                                type="tel"
+                                value={pa.phone}
+                                onChange={(e) => setPhoneAuth(prev => ({ ...prev, [app.name]: { ...prev[app.name], phone: e.target.value } }))}
+                                onKeyDown={(e) => { if (e.key === "Enter" && pa.phone.trim()) handlePhoneAuth(app.name); }}
+                                placeholder={t("phone_auth.phone_placeholder")}
+                                className="flex-1 min-w-0 px-2 py-1.5 text-[11px] border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0F6E56]"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handlePhoneAuth(app.name)}
+                                disabled={!pa.phone.trim() || pa.loading}
+                                className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                              >
+                                {pa.loading ? t("common.loading") : t("phone_auth.send_code")}
+                              </button>
+                            </div>
+                          )}
+                          {/* 步驟 2：驗證碼 */}
+                          {pa.step === "code" && (
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                value={pa.code}
+                                onChange={(e) => setPhoneAuth(prev => ({ ...prev, [app.name]: { ...prev[app.name], code: e.target.value } }))}
+                                onKeyDown={(e) => { if (e.key === "Enter" && pa.code.trim()) handlePhoneAuth(app.name); }}
+                                placeholder={t("phone_auth.code_placeholder")}
+                                className="flex-1 min-w-0 px-2 py-1.5 text-[11px] border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0F6E56] tracking-widest text-center"
+                                autoFocus
+                                maxLength={6}
+                              />
+                              <button
+                                onClick={() => handlePhoneAuth(app.name)}
+                                disabled={!pa.code.trim() || pa.loading}
+                                className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                              >
+                                {pa.loading ? t("common.loading") : t("phone_auth.verify")}
+                              </button>
+                            </div>
+                          )}
+                          {/* 步驟 3：2FA 密碼 */}
+                          {pa.step === "2fa" && (
+                            <div className="flex gap-1.5">
+                              <input
+                                type="password"
+                                value={pa.password}
+                                onChange={(e) => setPhoneAuth(prev => ({ ...prev, [app.name]: { ...prev[app.name], password: e.target.value } }))}
+                                onKeyDown={(e) => { if (e.key === "Enter" && pa.password.trim()) handlePhoneAuth(app.name); }}
+                                placeholder={t("phone_auth.2fa_placeholder")}
+                                className="flex-1 min-w-0 px-2 py-1.5 text-[11px] border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0F6E56]"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handlePhoneAuth(app.name)}
+                                disabled={!pa.password.trim() || pa.loading}
+                                className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                              >
+                                {pa.loading ? t("common.loading") : t("phone_auth.verify")}
+                              </button>
+                            </div>
+                          )}
+                          {/* 步驟提示 */}
+                          <p className="text-[10px] text-gray-300">
+                            {pa.step === "phone" && t("phone_auth.hint_phone")}
+                            {pa.step === "code" && t("phone_auth.hint_code")}
+                            {pa.step === "2fa" && t("phone_auth.hint_2fa")}
+                          </p>
+                          {pa.error && <p className="text-[10px] text-red-500">{pa.error}</p>}
+                        </div>
+                      )
+                    ) : isTokenApp ? (
+                      /* bot_token / api_key 類：卡片內嵌 token 輸入框 */
+                      <div className="space-y-2">
+                        <div className="flex gap-1.5">
+                          <input
+                            type="password"
+                            value={tokenInputs[app.name] ?? ""}
+                            onChange={(e) => setTokenInputs(prev => ({ ...prev, [app.name]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === "Enter" && tokenInputs[app.name]?.trim()) submitToken(app.name); }}
+                            placeholder={t("token_modal.placeholder")}
+                            className="flex-1 min-w-0 px-2 py-1.5 text-[11px] border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0F6E56] font-mono"
+                          />
+                          <button
+                            onClick={() => submitToken(app.name)}
+                            disabled={!tokenInputs[app.name]?.trim() || isSubmitting}
+                            className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                          >
+                            {isSubmitting ? t("common.loading") : t("token_modal.submit")}
+                          </button>
+                        </div>
+                        {tokenError && tokenSubmitting === null && (
+                          <p className="text-[10px] text-red-500">{tokenError}</p>
+                        )}
+                        <p className="text-[10px] text-gray-300">{t(`token_modal.hint.${app.name}`)}</p>
+                      </div>
+                    ) : (
+                      /* OAuth 類：一鍵連接按鈕 */
+                      <button
+                        onClick={() => connectApp(app.name)}
+                        disabled={isConnecting}
+                        className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isConnecting ? t("common.loading") : t("dashboard.connect")}
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -662,46 +825,6 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
             {t("account.delete_btn")}
           </button>
         </div>
-
-        {/* Token 輸入彈窗（bot_token / api_key 類 App） */}
-        {tokenModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-sm w-full p-6 space-y-4">
-              <h3 className="text-base font-semibold text-gray-900">
-                {t("token_modal.title").replace("{app}", tokenModal.displayName)}
-              </h3>
-              {/* 設定步驟說明 */}
-              <div className="text-xs text-gray-500 whitespace-pre-line leading-relaxed bg-gray-50 rounded-lg p-3">
-                {tokenModal.instructions}
-              </div>
-              <input
-                type="password"
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && tokenInput.trim()) submitToken(); }}
-                placeholder={t("token_modal.placeholder")}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F6E56] font-mono"
-                autoFocus
-              />
-              {tokenError && <p className="text-xs text-red-500">{tokenError}</p>}
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => { setTokenModal(null); setTokenInput(""); setTokenError(""); }}
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  {t("account.delete_cancel")}
-                </button>
-                <button
-                  onClick={submitToken}
-                  disabled={!tokenInput.trim() || tokenSubmitting}
-                  className="px-4 py-2 text-sm bg-[#0F6E56] text-white rounded-lg hover:bg-[#0a5a46] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {tokenSubmitting ? t("common.loading") : t("token_modal.submit")}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* U23: 刪除帳號確認彈窗 — #9: 統一 rounded-lg #15: loading 走 i18n */}
         {showDeleteModal && (

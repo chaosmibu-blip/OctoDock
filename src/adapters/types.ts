@@ -29,8 +29,14 @@ export type BotTokenConfig = {
   setupWebhook: boolean; // 是否需要設定 webhook
 };
 
-/** 三種認證方式的聯合類型 */
-export type AuthConfig = OAuthConfig | ApiKeyConfig | BotTokenConfig;
+/** 手機號碼認證設定（Telegram Client API 等需要手機驗證碼的平台） */
+export type PhoneAuthConfig = {
+  type: "phone_auth";
+  instructions: Record<string, string>; // 多語系設定說明
+};
+
+/** 四種認證方式的聯合類型 */
+export type AuthConfig = OAuthConfig | ApiKeyConfig | BotTokenConfig | PhoneAuthConfig;
 
 // ============================================================
 // 工具類型定義
@@ -94,7 +100,7 @@ export interface AppAdapter {
   displayName: Record<string, string>; // 多語系顯示名稱：{ zh: 'Notion', en: 'Notion' }
   icon: string; // 圖示識別碼
 
-  authType: "oauth2" | "api_key" | "bot_token"; // 使用的認證方式
+  authType: "oauth2" | "api_key" | "bot_token" | "phone_auth"; // 使用的認證方式
   authConfig: AuthConfig; // 認證設定細節
 
   tools: ToolDefinition[]; // 內部工具定義（用於 execute 的路由）
