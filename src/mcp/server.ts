@@ -12,6 +12,7 @@ import { runPostCheck } from "./middleware/post-check";
 import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
 import { getErrorHint } from "./error-hints";
 import { checkParams } from "./middleware/param-guard";
+import { learnFromError } from "./middleware/error-learner";
 // suggestion-engine 已廢棄（N 組實測：AI 完全不看 suggestions/ai_hints/user_notices）
 import { learnIdentifier, resolveIdentifier, listMemory, queryMemory } from "@/services/memory-engine";
 import { detectSopCandidate } from "@/services/sop-detector";
@@ -525,6 +526,12 @@ function registerDoTool(
           if (!result.warnings) result.warnings = [];
           result.warnings.push(preContext.duplicateWarning);
         }
+
+        // 第三層：歷史錯誤模式提示
+        if (preContext.errorPatternHint) {
+          if (!result.warnings) result.warnings = [];
+          result.warnings.push(preContext.errorPatternHint);
+        }
       }
 
       // P3: 標註自動套用的偏好參數
@@ -645,6 +652,11 @@ function registerDoTool(
         } catch {
           // 自動搜尋失敗不影響錯誤回傳
         }
+      }
+
+      // ── 第三層：全域錯誤學習 — 失敗時記錄到 memory ──
+      if (!result.ok && result.error) {
+        learnFromError(userId, app, action, translatedParams, result.error, result.errorCode).catch(() => {});
       }
 
       // ── 高頻失敗偵測：同一 action 連續失敗多次時提醒 ──

@@ -29,6 +29,30 @@ export interface ParamGuardResult {
 }
 
 /**
+ * 第二層：camelCase → snake_case 自動轉換
+ * AI 模型可能用不同命名風格，統一成 snake_case
+ * 例如 spreadsheetId → spreadsheet_id, documentId → document_id
+ */
+function normalizeParamKeys(params: Record<string, unknown>): { normalized: Record<string, unknown>; renames: string[] } {
+  const normalized: Record<string, unknown> = {};
+  const renames: string[] = [];
+
+  for (const [key, value] of Object.entries(params)) {
+    // 將 camelCase 轉成 snake_case
+    const snakeKey = key.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+    if (snakeKey !== key) {
+      // camelCase 被轉換了 → 記錄
+      normalized[snakeKey] = value;
+      renames.push(`${key} → ${snakeKey}`);
+    } else {
+      normalized[key] = value;
+    }
+  }
+
+  return { normalized, renames };
+}
+
+/**
  * 在 action 執行前檢查參數
  * 回傳 null 表示通過，不需要攔截
  */
@@ -38,6 +62,17 @@ export function checkParams(
   params: Record<string, unknown>,
 ): ParamGuardResult | null {
   const warnings: string[] = [];
+
+  // ── 第二層：camelCase → snake_case 自動轉換 ──
+  const { normalized, renames } = normalizeParamKeys(params);
+  if (renames.length > 0) {
+    // 用轉換後的參數覆蓋原始參數
+    for (const key of Object.keys(params)) {
+      delete params[key];
+    }
+    Object.assign(params, normalized);
+    warnings.push(`Auto-renamed params: ${renames.join(", ")}`);
+  }
 
   // ── J3a: Notion UUID 格式檢查 ──
   if (app === "notion") {

@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { operations } from "@/db/schema";
 import { and, eq, gte, sql } from "drizzle-orm";
+import { getErrorPattern } from "./error-learner";
 
 // ============================================================
 // C1 + C4: Pre-context Middleware
@@ -41,6 +42,7 @@ export interface PreContextResult {
   crossAppContext?: Array<{ app: string; type: string; title: string; date?: string }>; // O1+U9: 跨 App 相關資源
   childResources?: Array<{ id: string; title: string; type: string }>; // G2: 破壞性操作前掃描子資源
   duplicateWarning?: string; // G3: 同名資源建立提醒
+  errorPatternHint?: string; // 第三層：歷史錯誤模式提示
 }
 
 /**
@@ -231,6 +233,18 @@ async function doPreContext(
         hasData = true;
       }
     }
+  }
+
+  // 第三層：查歷史錯誤模式 — 如果此 action 曾經多次失敗，提前警告 AI
+  try {
+    const action = toolName.replace(/^[a-z]+_/, ""); // 從 toolName 提取 action（移除 app_ 前綴）
+    const errorHint = await getErrorPattern(userId, appName, action);
+    if (errorHint) {
+      context.errorPatternHint = errorHint;
+      hasData = true;
+    }
+  } catch {
+    // 錯誤模式查詢失敗不影響主操作
   }
 
   // U9/O1: 跨 App 上下文 — create_page 時從標題提取關鍵字，查 Calendar + Gmail
