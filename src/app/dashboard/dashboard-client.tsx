@@ -407,7 +407,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
             {/* #17: Cursor 教學 — 複製 MCP config JSON */}
             {selectedPlatform === "cursor" && (
               <div className="bg-white/70 rounded-lg px-4 py-3 space-y-3">
-                <p className="text-xs text-[#085041]">{t("dashboard.guide_cursor_steps")}</p>
+                <p className="text-xs text-[#085041] whitespace-pre-line">{t("dashboard.guide_cursor_steps")}</p>
                 <code className="block text-[11px] font-mono text-[#085041] bg-[#F1EFE8] rounded-lg px-3 py-2 overflow-x-auto whitespace-pre">
 {`{
   "mcpServers": {
