@@ -739,13 +739,22 @@ export async function executeSystemAction(
         const toolName = adapter.actionMap?.[a.action];
         if (!toolName) return { ok: false, error: `Unknown action "${a.action}" for ${a.app}` };
         try {
+          const actionParams = { ...(a.params ?? {}) };
+
+          // 走 param-guard（參數防呆 + camelCase → snake_case 轉換）
+          const { checkParams } = await import("@/mcp/middleware/param-guard");
+          const guardResult = checkParams(a.app, toolName, actionParams);
+          if (guardResult?.blocked) {
+            return { ok: false, error: guardResult.error };
+          }
+
           const token = await getValidToken(userId, a.app);
           // 透過 middleware 執行（記錄日誌、取 token 等）
           const toolResult = await executeWithMiddleware(
             userId,
             a.app,
             toolName,
-            a.params ?? {},
+            actionParams,
             (p, t) => adapter.execute(toolName, p, t),
             { prefetchedToken: token },
           );
@@ -753,6 +762,13 @@ export async function executeSystemAction(
           const result: DoResult = toolResult.isError
             ? { ok: false, error: toolResult.content[0]?.text ?? "Unknown error" }
             : { ok: true, data: (() => { try { return JSON.parse(toolResult.content[0]?.text ?? ""); } catch { return toolResult.content[0]?.text; } })() };
+
+          // 套用 error-hints（智慧錯誤引導）
+          if (!result.ok && result.error && adapter.formatError) {
+            const betterError = adapter.formatError(a.action, result.error);
+            if (betterError) result.error = betterError;
+          }
+
           // 套用 formatResponse
           if (result.ok && result.data && adapter.formatResponse) {
             try {
@@ -760,6 +776,10 @@ export async function executeSystemAction(
             } catch {
               // 格式轉換失敗保留原始 data
             }
+          }
+          // 附帶 param-guard 的 warnings
+          if (guardResult?.warnings) {
+            result.warnings = guardResult.warnings;
           }
           return result;
         } catch (err) {
