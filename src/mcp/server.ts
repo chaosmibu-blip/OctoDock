@@ -41,6 +41,22 @@ import type { DoResult } from "@/adapters/types";
 
 type User = { id: string; email: string; name: string | null };
 
+/** A: Action alias — AI 常猜錯的 action 名自動對應正確名稱 */
+const ACTION_ALIASES: Record<string, string> = {
+  list_events: "get_events",
+  list_event: "get_events",
+  create_draft: "draft",
+  new_draft: "draft",
+  send_email: "send",
+  search_email: "search",
+  list_files: "search",
+  find_files: "search",
+  list_pages: "search",
+  find_page: "search",
+  read_sheet: "read",
+  write_sheet: "write",
+};
+
 /** A1: 從 HTTP request headers 提取 Agent 實例識別資訊 */
 function extractAgentInstanceId(headers?: Headers): string | null {
   if (!headers) return null;
@@ -291,26 +307,7 @@ function registerDoTool(
         };
       }
 
-      // A: Action alias 機制 — AI 猜的名字自動對應正確 action
-      const ACTION_ALIASES: Record<string, string> = {
-        // Calendar
-        list_events: "get_events",
-        list_event: "get_events",
-        // Gmail
-        create_draft: "draft",
-        new_draft: "draft",
-        send_email: "send",
-        search_email: "search",
-        // Drive
-        list_files: "search",
-        find_files: "search",
-        // Notion
-        list_pages: "search",
-        find_page: "search",
-        // Sheets
-        read_sheet: "read",
-        write_sheet: "write",
-      };
+      // A: Action alias 機制 — AI 猜的名字自動對應正確 action（ACTION_ALIASES 定義在 module scope）
       const resolvedAction = adapter.actionMap?.[action] ? action : (ACTION_ALIASES[action] ?? action);
 
       // 透過 actionMap 找到內部工具名稱

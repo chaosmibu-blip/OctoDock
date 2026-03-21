@@ -74,8 +74,13 @@ export function convertTimestamps(data: unknown): unknown {
     const obj = data as Record<string, unknown>;
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
-      // 常見 timestamp 欄位名
-      if (/created_at|updated_at|created_time|modified_time|timestamp/i.test(key) && typeof value === "number") {
+      // 只對已知 timestamp 欄位名做數字轉換（避免誤轉 fileSize 等數值）
+      if (/created_at|updated_at|created_time|modified_time|timestamp|last_run_at/i.test(key) && typeof value === "number") {
+        result[key] = convertTimestamps(value);
+      } else if (typeof value === "string") {
+        result[key] = cleanHiddenChars(value);
+      } else if (typeof value === "object" && value !== null) {
+        // 遞迴處理巢狀物件
         result[key] = convertTimestamps(value);
       } else {
         result[key] = value;

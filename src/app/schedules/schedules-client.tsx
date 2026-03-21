@@ -70,14 +70,18 @@ export function SchedulesClient({ schedules: initialSchedules }: SchedulesProps)
   const toggleSchedule = useCallback(async (id: string, isActive: boolean) => {
     setToggling(id);
     try {
-      await fetch("/api/schedules", {
+      const res = await fetch("/api/schedules", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, isActive: !isActive }),
       });
-      setSchedules((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s)),
-      );
+      if (res.ok) {
+        setSchedules((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s)),
+        );
+      }
+    } catch {
+      // 切換失敗不更新本地狀態
     } finally {
       setToggling(null);
     }
@@ -85,12 +89,18 @@ export function SchedulesClient({ schedules: initialSchedules }: SchedulesProps)
 
   /** 刪除排程 */
   const deleteSchedule = useCallback(async (id: string) => {
-    await fetch("/api/schedules", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    setSchedules((prev) => prev.filter((s) => s.id !== id));
+    try {
+      const res = await fetch("/api/schedules", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        setSchedules((prev) => prev.filter((s) => s.id !== id));
+      }
+    } catch {
+      // 刪除失敗不更新本地狀態
+    }
     setDeleteConfirm(null);
   }, []);
 

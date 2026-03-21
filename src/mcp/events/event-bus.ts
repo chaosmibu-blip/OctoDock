@@ -19,6 +19,9 @@ const connections = new Map<string, Set<SSEConnection>>();
  * @param close 關閉連線的 callback
  * @returns 連線物件（用於後續取消註冊）
  */
+/** 每個用戶最多同時持有的 SSE 連線數（防止資源耗盡） */
+const MAX_CONNECTIONS_PER_USER = 5;
+
 export function registerConnection(
   userId: string,
   send: (event: OctoDockEvent) => void,
@@ -35,7 +38,19 @@ export function registerConnection(
   if (!connections.has(userId)) {
     connections.set(userId, new Set());
   }
-  connections.get(userId)!.add(conn);
+  const userConns = connections.get(userId)!;
+
+  // 超過上限 → 關閉最舊的連線
+  if (userConns.size >= MAX_CONNECTIONS_PER_USER) {
+    const oldest = [...userConns][0];
+    if (oldest) {
+      oldest.close();
+      userConns.delete(oldest);
+      console.log(`[event-bus] 用戶 ${userId} 連線數超限，關閉最舊連線`);
+    }
+  }
+
+  userConns.add(conn);
 
   console.log(`[event-bus] 用戶 ${userId} 新增 SSE 連線（目前 ${connections.get(userId)!.size} 個）`);
   return conn;
@@ -92,8 +107,9 @@ export function emitEvent(
     timestamp: new Date().toISOString(),
   };
 
-  // 廣播給該用戶的所有連線
-  for (const conn of userConns) {
+  // 廣播給該用戶的所有連線（先複製 Set 避免迭代中刪除）
+  const snapshot = [...userConns];
+  for (const conn of snapshot) {
     try {
       conn.send(event);
     } catch (err) {

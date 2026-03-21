@@ -237,7 +237,9 @@ async function doPreContext(
 
   // 第三層：查歷史錯誤模式 — 如果此 action 曾經多次失敗，提前警告 AI
   try {
-    const action = toolName.replace(/^[a-z]+_/, ""); // 從 toolName 提取 action（移除 app_ 前綴）
+    // 從 toolName 提取 action：移除 app 前綴（支援 google_drive_ 等多段前綴）
+    const appPrefixes = ["notion_", "gmail_", "gcal_", "gdrive_", "gsheets_", "gdocs_", "gtasks_", "github_", "canva_", "youtube_", "line_", "tg_", "discord_", "slack_", "threads_", "instagram_", "gamma_"];
+    const action = appPrefixes.reduce((name, prefix) => name.startsWith(prefix) ? name.slice(prefix.length) : name, toolName);
     const errorHint = await getErrorPattern(userId, appName, action);
     if (errorHint) {
       context.errorPatternHint = errorHint;

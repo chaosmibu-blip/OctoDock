@@ -120,7 +120,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     // 呼叫 OctoDock 雲端的 REST API 執行回覆操作
     const response = await fetch(
-      `https://octo-dock.com/api/tools/${app}`,
+      `${config.serverUrl}/api/tools/${app}`,
       {
         method: "POST",
         headers: {

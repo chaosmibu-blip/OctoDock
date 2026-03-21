@@ -111,9 +111,10 @@ export function checkParams(
       const isDriveApiSyntax = DRIVE_QUERY_OPERATORS.test(query) ||
         /\b(mimeType|modifiedTime|createdTime|trashed|viewedByMeTime|sharedWithMe|owners|writers|readers)\b/.test(query);
       if (!isDriveApiSyntax) {
-        // 自然語言 → 自動轉換成 name contains 'xxx'
-        params.query = `name contains '${query}'`;
-        warnings.push(`Auto-converted natural language query to Drive syntax: name contains '${query}'`);
+        // 自然語言 → 自動轉換成 name contains 'xxx'（跳脫單引號防注入）
+        const escapedQuery = query.replace(/'/g, "\\'");
+        params.query = `name contains '${escapedQuery}'`;
+        warnings.push(`Auto-converted natural language query to Drive syntax: name contains '${escapedQuery}'`);
       }
     }
   }

@@ -100,6 +100,7 @@ async function processWebhookEvent(event: WebhookEvent): Promise<void> {
   // Log the incoming message as an operation + 推送事件到 Channel Plugin
   for (const config of configs) {
     // 推送事件到 event-bus（Channel Plugin 會透過 SSE 收到）
+    // 不傳 raw payload（可能含 token/auth 資訊）
     emitEvent(
       config.userId,
       event.platform,
@@ -111,7 +112,6 @@ async function processWebhookEvent(event: WebhookEvent): Promise<void> {
         chat_id: event.chatId,
         has_reply_token: !!event.replyToken,
       },
-      event.raw,
     );
 
     db.insert(operations)

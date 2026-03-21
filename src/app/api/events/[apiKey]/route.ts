@@ -51,9 +51,9 @@ export async function GET(
 
   const stream = new ReadableStream({
     start(controller) {
-      // 發送初始連線確認事件
+      // 發送初始連線確認事件（不暴露內部 userId）
       controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "connected", userId: user!.id })}\n\n`),
+        encoder.encode(`data: ${JSON.stringify({ type: "connected", status: "ok" })}\n\n`),
       );
 
       // 3. 註冊到 event-bus
@@ -114,7 +114,7 @@ export async function GET(
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       "Connection": "keep-alive",
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": "https://octo-dock.com",
     },
   });
 }
@@ -124,7 +124,7 @@ export async function OPTIONS() {
   return new Response(null, {
     status: 204,
     headers: {
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": "https://octo-dock.com",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     },
