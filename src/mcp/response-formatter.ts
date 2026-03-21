@@ -37,6 +37,56 @@ function extractTitle(data: unknown): string | undefined {
 }
 
 /**
+ * B: 清除 HTML 隱藏字元（zero-width spaces、invisible separators 等）
+ * 適用於所有文字回傳（Gmail snippet、Notion content、Docs 等）
+ */
+export function cleanHiddenChars(text: string): string {
+  return text
+    // Zero-width spaces 和 invisible characters
+    .replace(/[\u200B\u200C\u200D\u200E\u200F\uFEFF]/g, "")
+    // Invisible separators
+    .replace(/[\u2028\u2029\u00AD]/g, "")
+    // 多餘的連續空白（保留單個空格和換行）
+    .replace(/[^\S\n]{2,}/g, " ")
+    .trim();
+}
+
+/**
+ * H: Unix timestamp → ISO date 轉換
+ * 適用於所有 App（Canva 等回傳 Unix timestamp 的場景）
+ */
+export function convertTimestamps(data: unknown): unknown {
+  if (typeof data === "number" && data > 1_000_000_000 && data < 10_000_000_000) {
+    // 10 位數 Unix timestamp（秒）
+    return new Date(data * 1000).toISOString();
+  }
+  if (typeof data === "number" && data > 1_000_000_000_000 && data < 10_000_000_000_000) {
+    // 13 位數 Unix timestamp（毫秒）
+    return new Date(data).toISOString();
+  }
+  if (typeof data === "string") {
+    return cleanHiddenChars(data);
+  }
+  if (Array.isArray(data)) {
+    return data.map(convertTimestamps);
+  }
+  if (data && typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      // 常見 timestamp 欄位名
+      if (/created_at|updated_at|created_time|modified_time|timestamp/i.test(key) && typeof value === "number") {
+        result[key] = convertTimestamps(value);
+      } else {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+  return data;
+}
+
+/**
  * J1: 格式化成功回傳
  * 根據 action 類型（create/update/delete/query）產生統一的人話格式
  */

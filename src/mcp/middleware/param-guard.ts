@@ -103,13 +103,18 @@ export function checkParams(
     }
   }
 
-  // ── J3b: Google Drive 查詢語法偵測 ──
+  // ── J3b: Google Drive 查詢語法偵測（C: 智慧判斷已是 API 語法則不轉） ──
   if (toolName.includes("gdrive_search") || (app === "google_drive" && toolName.includes("search"))) {
     const query = params.query as string | undefined;
-    if (query && !DRIVE_QUERY_OPERATORS.test(query)) {
-      // 自然語言 → 自動轉換成 name contains 'xxx'
-      params.query = `name contains '${query}'`;
-      warnings.push(`Auto-converted natural language query to Drive syntax: name contains '${query}'`);
+    if (query) {
+      // C: 檢查是否已經是 Drive API 語法（包含 = > < 或 API 關鍵字）
+      const isDriveApiSyntax = DRIVE_QUERY_OPERATORS.test(query) ||
+        /\b(mimeType|modifiedTime|createdTime|trashed|viewedByMeTime|sharedWithMe|owners|writers|readers)\b/.test(query);
+      if (!isDriveApiSyntax) {
+        // 自然語言 → 自動轉換成 name contains 'xxx'
+        params.query = `name contains '${query}'`;
+        warnings.push(`Auto-converted natural language query to Drive syntax: name contains '${query}'`);
+      }
     }
   }
 

@@ -11,6 +11,7 @@ import { getPreContext } from "./middleware/pre-context";
 import { runPostCheck } from "./middleware/post-check";
 import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
 import { getErrorHint } from "./error-hints";
+import { cleanHiddenChars, convertTimestamps } from "./response-formatter";
 import { checkParams } from "./middleware/param-guard";
 import { learnFromError } from "./middleware/error-learner";
 // suggestion-engine 已廢棄（N 組實測：AI 完全不看 suggestions/ai_hints/user_notices）
@@ -288,8 +289,30 @@ function registerDoTool(
         };
       }
 
+      // A: Action alias 機制 — AI 猜的名字自動對應正確 action
+      const ACTION_ALIASES: Record<string, string> = {
+        // Calendar
+        list_events: "get_events",
+        list_event: "get_events",
+        // Gmail
+        create_draft: "draft",
+        new_draft: "draft",
+        send_email: "send",
+        search_email: "search",
+        // Drive
+        list_files: "search",
+        find_files: "search",
+        // Notion
+        list_pages: "search",
+        find_page: "search",
+        // Sheets
+        read_sheet: "read",
+        write_sheet: "write",
+      };
+      const resolvedAction = adapter.actionMap?.[action] ? action : (ACTION_ALIASES[action] ?? action);
+
       // 透過 actionMap 找到內部工具名稱
-      const toolName = adapter.actionMap?.[action];
+      const toolName = adapter.actionMap?.[resolvedAction];
       if (!toolName) {
         // actionMap 裡找不到 → 回傳可用的 action 列表
         const availableActions = adapter.actionMap
@@ -562,6 +585,15 @@ function registerDoTool(
           result.data = formatted;
         } catch {
           // 格式轉換失敗不影響主流程，保留原始 data
+        }
+      }
+
+      // B: 清除 HTML 隱藏字元 + H: timestamp 轉換
+      if (result.ok && result.data) {
+        if (typeof result.data === "string") {
+          result.data = cleanHiddenChars(result.data);
+        } else {
+          result.data = convertTimestamps(result.data);
         }
       }
 

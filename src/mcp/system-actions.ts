@@ -376,27 +376,63 @@ export async function executeSystemAction(
           }
 
           // 常見意圖對應
+          // G: 中英文意圖關鍵字對應表（擴充中文覆蓋）
           const intentMap: Record<string, string[]> = {
+            // 英文
             "email": ["gmail"],
+            "calendar": ["calendar", "event"],
+            "schedule": ["calendar", "event", "schedule"],
+            "spreadsheet": ["sheets"],
+            "presentation": ["canva", "gamma"],
+            "issue": ["github"],
+            "pr": ["github", "pull"],
+            "pull request": ["github", "pull"],
+            "design": ["canva"],
+            // 中文 — 信件
             "信": ["gmail"],
+            "信件": ["gmail"],
             "郵件": ["gmail"],
+            "草稿": ["gmail", "draft"],
+            "寄信": ["gmail", "send"],
+            "收件": ["gmail", "search"],
+            // 中文 — 行事曆
             "行程": ["calendar", "event"],
             "會議": ["calendar", "event"],
             "日曆": ["calendar"],
+            "行事曆": ["calendar"],
+            "活動": ["calendar", "event"],
+            "排程": ["schedule"],
+            // 中文 — 檔案
             "檔案": ["drive", "file"],
             "文件": ["docs", "drive", "notion"],
             "筆記": ["notion", "docs"],
             "頁面": ["notion", "page"],
+            "資料庫": ["notion", "database"],
+            // 中文 — 試算表
             "試算表": ["sheets", "spreadsheet"],
             "表格": ["sheets", "spreadsheet"],
+            "工作表": ["sheets"],
+            // 中文 — 待辦
             "待辦": ["tasks", "todo"],
             "任務": ["tasks", "todo"],
+            "清單": ["tasks", "list"],
+            // 中文 — 影音
             "影片": ["youtube", "video"],
+            "字幕": ["youtube", "transcript"],
+            "頻道": ["youtube", "channel"],
+            // 中文 — 通訊
             "訊息": ["line", "telegram", "message"],
+            "聊天": ["line", "telegram", "discord"],
+            // 中文 — 社群
             "貼文": ["threads", "instagram", "publish"],
+            "發文": ["threads", "instagram", "publish"],
+            // 中文 — 開發
             "程式碼": ["github", "code"],
-            "issue": ["github"],
-            "pr": ["github", "pull"],
+            "程式": ["github", "code"],
+            "倉庫": ["github", "repo"],
+            // 中文 — 設計
+            "設計": ["canva", "design"],
+            "簡報": ["canva", "gamma", "presentation"],
           };
 
           for (const [keyword, targets] of Object.entries(intentMap)) {
@@ -807,10 +843,17 @@ export async function executeSystemAction(
         }
       }
 
+      // E: partial_success — 部分成功時 ok:true + partial:true，不要回 ok:false
       const successCount = results.filter((r) => r.ok).length;
+      const allSucceeded = successCount === results.length;
+      const anySucceeded = successCount > 0;
       return {
-        ok: successCount === results.length,
-        data: { results, summary: `${successCount}/${results.length} succeeded` },
+        ok: anySucceeded,
+        data: {
+          results,
+          summary: `${successCount}/${results.length} succeeded`,
+          ...(anySucceeded && !allSucceeded ? { partial: true } : {}),
+        },
       };
     }
 
@@ -984,6 +1027,8 @@ export async function executeSystemAction(
       // 並行搜尋，每個 App 設 5 秒 timeout
       const SEARCH_TIMEOUT_MS = 5_000;
       const results: Array<{ app: string; type: string; title: string; url?: string; snippet?: string; updated_at?: string }> = [];
+      // F: 記錄搜尋失敗的 App
+      const failedApps: Array<{ app: string; error: string }> = [];
 
       const searchPromises = appsToSearch.map(async (appName) => {
         const adapter = getAdapter(appName);
@@ -1020,15 +1065,19 @@ export async function executeSystemAction(
               updated_at: (item.last_edited_time as string) ?? (item.modifiedTime as string) ?? (item.date as string),
             });
           }
-        } catch {
-          // 搜尋失敗不影響其他 App
+        } catch (err) {
+          // F: 搜尋失敗記錄到 failedApps，不靜默吞掉
+          failedApps.push({ app: appName, error: err instanceof Error ? err.message : "Unknown error" });
         }
       });
 
       await Promise.allSettled(searchPromises);
 
       if (results.length === 0) {
-        return { ok: true, data: `No results found for "${query}" across ${appsToSearch.length} apps.` };
+        const failInfo = failedApps.length > 0
+          ? ` (${failedApps.length} app(s) failed: ${failedApps.map((f) => `${f.app}: ${f.error}`).join("; ")})`
+          : "";
+        return { ok: true, data: `No results found for "${query}" across ${appsToSearch.length} apps.${failInfo}` };
       }
 
       return {
@@ -1037,6 +1086,7 @@ export async function executeSystemAction(
           query,
           totalResults: results.length,
           searchedApps: appsToSearch,
+          ...(failedApps.length > 0 ? { failedApps } : {}),
           results,
         },
       };
