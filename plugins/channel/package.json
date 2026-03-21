@@ -1,0 +1,27 @@
+{
+  "name": "@octodock/channel-plugin",
+  "version": "0.1.0",
+  "description": "OctoDock Channel Plugin for Claude Code — receive app events in your session",
+  "type": "module",
+  "main": "dist/index.mjs",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --out-dir dist --dts",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "eventsource": "^3.0.2"
+  },
+  "devDependencies": {
+    "@types/eventsource": "^3.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    ".claude-plugin",
+    ".mcp.json",
+    "README.md"
+  ]
+}
