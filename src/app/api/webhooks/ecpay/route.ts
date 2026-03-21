@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/db";
-import { subscriptions } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { users, subscriptions } from "@/db/schema";
+import { eq, like } from "drizzle-orm";
 
 // ============================================================
 // 綠界 ECPay Webhook 處理器
@@ -57,7 +57,7 @@ async function handleEcpayNotification(
   const tradeNo = params.TradeNo; // 綠界交易編號
 
   // 訂單編號格式：AGENTDOCK_{userId}_{timestamp}
-  const userId = extractUserIdFromTradeNo(merchantTradeNo);
+  const userId = await extractUserIdFromTradeNo(merchantTradeNo);
   if (!userId) {
     console.error(
       "[CRITICAL] ECPay webhook: cannot extract userId from trade no:",
@@ -111,15 +111,29 @@ async function handleEcpayNotification(
  * 從訂單編號提取 userId
  * 訂單編號格式：AD{userId前8碼}{timestamp}
  */
-function extractUserIdFromTradeNo(tradeNo: string): string | null {
+async function extractUserIdFromTradeNo(tradeNo: string): Promise<string | null> {
   // 格式由建立訂單時決定，這裡做反向解析
   // 實際格式需要跟建立訂單的邏輯一致
   if (!tradeNo || !tradeNo.startsWith("AD")) return null;
-  // userId 前 8 碼在 AD 後面
+
+  // userId 前 8 碼在 AD 後面（UUID 去掉連字號的前 8 碼）
   const shortId = tradeNo.slice(2, 10);
-  // TODO: 從 DB 用前 8 碼模糊查找 userId
-  // 暫時回傳 null，等建立訂單邏輯確定後再完善
-  return null;
+  if (shortId.length !== 8) return null;
+
+  // 從 DB 用前 8 碼模糊查找 userId
+  // UUID 格式：xxxxxxxx-xxxx-...，前 8 碼對應第一段
+  const matched = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(like(users.id, `${shortId}%`))
+    .limit(1);
+
+  if (matched.length === 0) {
+    console.warn(`[ECPay] No user found for shortId: ${shortId} (tradeNo: ${tradeNo})`);
+    return null;
+  }
+
+  return matched[0].id;
 }
 
 /**
