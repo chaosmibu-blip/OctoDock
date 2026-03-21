@@ -60,9 +60,11 @@ function extractAgentInstanceId(headers?: Headers): string | null {
  * @param requestHeaders HTTP request headers（用於提取 agent 實例 ID）
  */
 export async function createServerForUser(user: User, requestHeaders?: Headers): Promise<McpServer> {
+  // 動態版本號：用 git SHA 讓客戶端知道 server 有更新
+  const serverVersion = process.env.NEXT_PUBLIC_GIT_SHA ?? "1.0.0";
   const server = new McpServer({
     name: "octodock",
-    version: "1.0.0",
+    version: serverVersion,
     instructions: [
       "OctoDock is the user's unified app gateway. It connects to the user's authorized apps (Google Calendar, Gmail, Notion, GitHub, etc.) through a single interface.",
       "",
