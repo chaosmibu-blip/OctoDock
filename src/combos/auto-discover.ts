@@ -11,7 +11,7 @@
 
 import { db } from "@/db";
 import { operations } from "@/db/schema";
-import { eq, and, gte, desc } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 import { getAllAdapters } from "@/mcp/registry";
 
 /** 自動發現的候選組合技 */

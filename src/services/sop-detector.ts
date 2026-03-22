@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { operations } from "@/db/schema";
-import { eq, and, desc, gte } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 
 // ============================================================
 // SOP 自動辨識引擎（Phase 8）

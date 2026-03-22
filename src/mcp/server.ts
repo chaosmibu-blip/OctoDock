@@ -5,7 +5,7 @@ import { connectedApps, storedResults } from "@/db/schema";
 import { eq, lt, or, isNull, and, gte, desc, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getAdapter, getAllAdapters } from "./registry";
-import { executeWithMiddleware, type MiddlewareOptions } from "./middleware/logger";
+import { executeWithMiddleware } from "./middleware/logger";
 import { checkMcpRateLimit } from "@/lib/rate-limit";
 import { getPreContext } from "./middleware/pre-context";
 import { runPostCheck } from "./middleware/post-check";
@@ -375,7 +375,7 @@ function registerDoTool(
       const isDryRunEligible = /delete|trash|replace|update/.test(toolName);
       if (isDryRun && isDryRunEligible) {
         // 移除 dryRun 參數避免傳給上游 API
-        const { dryRun: _, ...cleanParams } = translatedParams;
+        const { dryRun: _dryRun, ...cleanParams } = translatedParams;
         try {
           const { getValidToken: gvt } = await import("@/services/token-manager");
           const dryToken = await gvt(userId, app);
@@ -391,7 +391,7 @@ function registerDoTool(
               wouldAffect: dryContext?.targetInfo ?? dryContext?.currentContent ?? null,
             },
           };
-        } catch (err) {
+        } catch (_err) {
           result = {
             ok: true,
             data: { dryRun: true, wouldAffect: null, note: "Could not preview target" },
@@ -724,7 +724,7 @@ function registerDoTool(
 
         // 並行執行 post-success 的 DB 查詢（C2、SOP、E1、E4），避免串行拖慢回應
         const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string);
-        const [postCheckResult, sopResult, nextSuggestionResult, crossAppResult] = await Promise.allSettled([
+        const [postCheckResult, _sopResult, nextSuggestionResult, crossAppResult] = await Promise.allSettled([
           runPostCheck(userId, app, toolName, translatedParams),
           detectSopCandidate(userId),
           suggestNextAction(userId, app, toolName),

@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { conversations, storedResults, operations } from "@/db/schema";
-import { eq, and, desc, lt, gt, or, isNull, sql } from "drizzle-orm";
+import { conversations, storedResults } from "@/db/schema";
+import { eq, and, desc, gt, or, isNull, sql } from "drizzle-orm";
 import {
   queryMemory,
   storeMemory,
@@ -448,7 +448,7 @@ export async function executeSystemAction(
           if (score > 0) {
             // 找到 simplified action name
             const actionName = adapter.actionMap
-              ? Object.entries(adapter.actionMap).find(([_, v]) => v === tool.name)?.[0] || tool.name
+              ? Object.entries(adapter.actionMap).find(([_k, v]) => v === tool.name)?.[0] || tool.name
               : tool.name;
             matches.push({ app: adapter.name, action: actionName, description: tool.description, score });
           }

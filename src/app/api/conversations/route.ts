@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { conversations } from "@/db/schema";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 
 // GET /api/conversations?platform=line&platformUserId=xxx&limit=50
 export async function GET(req: NextRequest) {

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { schedules, connectedApps } from "@/db/schema";
-import { eq, and, lte, sql } from "drizzle-orm";
+import { eq, and, lte } from "drizzle-orm";
 import { getAdapter } from "@/mcp/registry";
 import { executeWithMiddleware } from "@/mcp/middleware/logger";
 import { queryMemory } from "./memory-engine";
@@ -197,7 +197,7 @@ async function executeSchedule(
  * 支援完整 5 欄位 cron：分 時 日 月 週
  * 暴力搜尋最多 366 天內的下一個匹配時間點
  */
-export function calculateNextRun(cronExpr: string, _timezone: string): Date {
+export function calculateNextRun(cronExpr: string, __timezone: string): Date {
   const parts = cronExpr.split(" ");
   if (parts.length !== 5) {
     const fallback = new Date();
