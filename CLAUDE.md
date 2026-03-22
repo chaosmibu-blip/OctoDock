@@ -76,6 +76,8 @@ Markdown 流程文件，存在 memory 表 category='sop'。AI 透過 do/help 取
 
 **治標不如治本，今日事今日畢。** 看到的任務就是一次做完，不要只做一半或拆成多個對話。檢查文件時發現問題，修正後直接執行，不要只列出問題等用戶確認。
 
+**Replit 不會自動 deploy。** 改完程式碼並 `npm run build` 成功後，必須提醒用戶去 Replit 手動點 Deploy / Publish。MCP 呼叫走的是 production（octo-dock.com），不是 localhost，所以 localhost 測試通過不代表 MCP 會生效。
+
 **Claude Code memory 不進 repo。** `.claude/projects/` 已加入 `.gitignore`。Memory 檔案只存本地供跨對話使用，不 commit 到開源 repo。需要跨對話持久化的知識寫 CLAUDE.md 或 skills，不要依賴 memory 檔案作為唯一來源。
 
 ## 開發原則

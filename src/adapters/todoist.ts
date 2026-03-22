@@ -23,7 +23,7 @@ const authConfig: OAuthConfig = {
 };
 
 // ── API 基礎設定 ───────────────────────────────────────────
-const TODOIST_API = "https://api.todoist.com/rest/v2";
+const TODOIST_API = "https://api.todoist.com/api/v1";
 
 // ── 輔助函式：Todoist API 請求封裝 ──────────────────────────
 async function todoistFetch(
