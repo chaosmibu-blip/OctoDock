@@ -66,12 +66,18 @@ export function HomeClient() {
               ))}
             </ul>
             {/* CTA 按鈕 */}
-            <div className="pt-4 animate-fadein opacity-0 [animation-delay:0.8s]">
+            <div className="pt-4 animate-fadein opacity-0 [animation-delay:0.8s] flex flex-col sm:flex-row gap-3">
               <Link
                 href="/api/auth/signin"
                 className="inline-flex h-12 items-center justify-center rounded-lg bg-black px-8 text-white text-sm font-medium transition-colors hover:bg-gray-800"
               >
                 {t("common.login")}
+              </Link>
+              <Link
+                href="/developers"
+                className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 px-6 text-gray-600 text-sm font-medium transition-colors hover:bg-gray-100"
+              >
+                {t("dev.landing_cta")}
               </Link>
             </div>
           </div>

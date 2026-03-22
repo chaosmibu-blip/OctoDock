@@ -299,3 +299,30 @@ export const feedback = pgTable("feedback", {
 }, (table) => [
   index("idx_feedback_user").on(table.userId),
 ]);
+
+// ============================================================
+// 4.8 app_submissions（開發者入口：App 請求 + Adapter 提交）
+// 不需要登入，匿名提交，用 email 聯絡
+// ============================================================
+export const appSubmissions = pgTable(
+  "app_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type").notNull(), // 'request'（許願 App）| 'submit'（提交 Adapter）
+    appName: text("app_name").notNull(), // App 名稱
+    email: text("email").notNull(), // 聯絡 email
+    // request 專用
+    reason: text("reason"), // 為什麼想要這個 App
+    // submit 專用
+    apiDocsUrl: text("api_docs_url"), // API 文件 URL
+    authType: text("auth_type"), // 'oauth_own' | 'api_key' | 'oauth_octodock'
+    authDetails: text("auth_details"), // OAuth URL/scopes 或連接說明
+    adapterSpec: text("adapter_spec"), // AI 生成的 adapter 規格
+    // 共用
+    status: text("status").notNull().default("pending"), // 'pending' | 'reviewed' | 'accepted' | 'rejected'
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_app_submissions_status").on(table.status),
+  ],
+);

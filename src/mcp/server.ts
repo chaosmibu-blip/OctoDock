@@ -830,19 +830,43 @@ function registerHelpTool(
       if (!app) {
         const appList: string[] = [];
 
-        // 列出已連結的 App 及其簡述
+        /* 每個 App 的一行自然語言描述（不列 action，節省 context） */
+        const APP_DESCRIPTIONS: Record<string, string> = {
+          notion: "Notes, databases, and wiki pages",
+          gmail: "Read, send, and manage emails",
+          google_calendar: "Events, schedules, and reminders",
+          google_drive: "Files, folders, and sharing",
+          google_sheets: "Spreadsheets and data",
+          google_docs: "Documents and collaborative editing",
+          google_tasks: "To-do lists and task management",
+          youtube: "Videos, channels, and comments",
+          github: "Repos, issues, PRs, and code",
+          line: "Messages and broadcasts",
+          telegram: "Bot messages, groups, and webhooks",
+          telegram_user: "Your Telegram account: chat history, search, channels",
+          discord: "Messages, channels, and server management",
+          slack: "Messages, channels, and workspace",
+          threads: "Posts and replies on Threads",
+          instagram: "Posts, comments, and insights",
+          canva: "Designs, exports, and assets",
+          gamma: "AI presentations and documents",
+          microsoft_excel: "Spreadsheets: cells, tables, charts, formulas",
+          microsoft_word: "Create and read Word documents",
+          microsoft_powerpoint: "Create and read presentations",
+          todoist: "Tasks and projects",
+        };
+
+        // 列出已連結的 App，用自然語言描述
         for (const appName of connectedAppNames) {
           const adapter = getAdapter(appName);
           if (adapter) {
-            const actionCount = adapter.actionMap
-              ? Object.keys(adapter.actionMap).length
-              : adapter.tools.length;
-            appList.push(`- **${appName}** (${actionCount} actions)`);
+            const desc = APP_DESCRIPTIONS[appName] || `${Object.keys(adapter.actionMap || {}).length} actions`;
+            appList.push(`- **${appName}** — ${desc}`);
           }
         }
 
-        // 加上 system 虛擬 App（P6: 曝光 batch_do 跨 App 批次能力）
-        appList.push(`- **system** (memory, scheduling, **batch_do** — execute multiple actions across apps in one call)`);
+        // 加上 system 虛擬 App
+        appList.push(`- **system** — Memory, PDF tools, QR code, image processing, charts, file conversion, batch operations`);
 
         // 列出未連結但可用的 App
         const allAdapters = getAllAdapters();
@@ -1085,10 +1109,18 @@ function registerHelpTool(
       // 優先用 getSkill()（精簡版）
       // U5: 頻率排序 — 從 operations 表統計使用次數，常用的排前面
       // I9: 對破壞性 action 加 ⚠️ destructive 標記
-      // U5: 在 getSkill 回傳後附加頻率排序摘要
+      // Context 壓縮：超過 1500 字元只回傳 action 名稱清單 + 提示用 help(app, action) 查詳情
       if (adapter.getSkill) {
         let skillText = adapter.getSkill() ?? "";
         if (!skillText) return { content: [{ type: "text", text: `No help available for ${app}.` }] };
+
+        /* Context 壓縮：action 太多時只回傳精簡清單，避免爆 context */
+        const MAX_SKILL_LENGTH = 1500;
+        if (skillText.length > MAX_SKILL_LENGTH) {
+          const actionNames = Object.keys(adapter.actionMap || {});
+          const compactList = actionNames.map(a => `\`${a}\``).join(", ");
+          skillText = `**${app}** — ${actionNames.length} actions available:\n${compactList}\n\nUse \`octodock_help(app:"${app}", action:"ACTION_NAME")\` to see details and examples for a specific action.`;
+        }
 
         // I9/U4: 在 action 列表中標注破壞性操作（⚠️ destructive）
         // 匹配格式：action_name(...) — description 或 - **action_name** 等格式

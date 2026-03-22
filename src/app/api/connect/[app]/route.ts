@@ -12,6 +12,9 @@ import { getOAuthClientId } from "@/lib/oauth-env";
 // Google 系列 App 名稱（用於一鍵連接）
 const GOOGLE_APPS = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
 
+// Microsoft 系列 App 名稱（用於一鍵連接）
+const MICROSOFT_APPS = ["microsoft_excel", "microsoft_word", "microsoft_powerpoint"];
+
 import { createHmac, randomBytes, createHash } from "crypto";
 
 /** HMAC 簽名用的 key — 用 TOKEN_ENCRYPTION_KEY 派生，確保無法偽造 state */
@@ -70,6 +73,33 @@ export async function GET(
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("scope", [...allScopes].join(" "));
     authUrl.searchParams.set("access_type", "offline");
+    authUrl.searchParams.set("prompt", "consent");
+
+    return NextResponse.redirect(authUrl.toString());
+  }
+
+  // ── Microsoft 一鍵連接：合併所有 Microsoft App 的 scope，一次授權 ──
+  if (appName === "microsoft_all") {
+    const allScopes = new Set<string>();
+    for (const msApp of MICROSOFT_APPS) {
+      const adapter = getAdapter(msApp);
+      if (adapter?.authConfig.type === "oauth2") {
+        for (const scope of (adapter.authConfig as OAuthConfig).scopes) {
+          allScopes.add(scope);
+        }
+      }
+    }
+
+    const state = generateState(session.user.id, from);
+    const clientId = getOAuthClientId("microsoft_excel"); // Microsoft 系共用同一組
+    const redirectUri = `${APP_URL}/callback/microsoft_all`;
+
+    const authUrl = new URL("https://login.microsoftonline.com/common/oauth2/v2.0/authorize");
+    authUrl.searchParams.set("client_id", clientId);
+    authUrl.searchParams.set("redirect_uri", redirectUri);
+    authUrl.searchParams.set("response_type", "code");
+    authUrl.searchParams.set("state", state);
+    authUrl.searchParams.set("scope", [...allScopes].join(" "));
     authUrl.searchParams.set("prompt", "consent");
 
     return NextResponse.redirect(authUrl.toString());

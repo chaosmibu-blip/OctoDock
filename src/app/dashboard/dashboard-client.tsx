@@ -652,6 +652,31 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           );
         })()}
 
+        {/* ── Microsoft 一鍵連接 ── */}
+        {(() => {
+          const msApps = APP_KEYS.filter((a) => a.name.startsWith("microsoft_")).map((a) => a.name);
+          const msConnected = msApps.filter((a) => isConnected(a)).length;
+          const msTotal = msApps.length;
+          if (msConnected >= msTotal || msTotal === 0) return null;
+          const label = msConnected === 0
+            ? t("dashboard.microsoft_all")
+            : t("dashboard.microsoft_remaining");
+          return (
+            <div className="bg-[#E8F0FE] border border-[#4285F4]/20 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div>
+                <span className="text-sm font-medium text-[#1a73e8]">{label}</span>
+                <span className="text-xs text-gray-500 ml-2">({msConnected}/{msTotal})</span>
+              </div>
+              <button
+                onClick={() => connectApp("microsoft_all")}
+                className="px-4 py-1.5 bg-[#1a73e8] text-white text-xs font-medium rounded-lg hover:bg-[#1557b0] transition-colors"
+              >
+                {t("dashboard.microsoft_all_btn")}
+              </button>
+            </div>
+          );
+        })()}
+
         {/* ── 可連結 App ── #8: 連結按鈕加 loading 狀態 */}
         {available.length > 0 && (
           <div>
@@ -793,13 +818,13 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
                 );
               })}
             </div>
-            {/* 「希望新增的 App」入口 — 預選 app_request 分類 */}
-            <button
-              onClick={() => openFeedback("app_request")}
-              className="mt-3 text-xs text-[#0F6E56] hover:underline cursor-pointer"
+            {/* 「想要更多 App」入口 — 連到開發者入口頁面 */}
+            <Link
+              href="/developers"
+              className="mt-3 inline-block px-4 py-2 text-xs bg-[#1D9E75] text-white rounded-lg hover:bg-[#0F6E56] transition-colors"
             >
-              {t("feedback.missing_app")} →
-            </button>
+              {t("dev.dashboard_cta")}
+            </Link>
           </div>
         )}
 

@@ -17,6 +17,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/blog`, lastModified: new Date(), changeFrequency: "daily", priority: 0.9 },
     // 文件頁（給開發者和 AI 爬蟲）
     { url: `${base}/docs`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },
+    // 開發者入口
+    { url: `${base}/developers`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.7 },
     // AI 可讀格式（讓搜尋引擎索引）
     { url: `${base}/llms.txt`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.6 },
     // 隱私權政策

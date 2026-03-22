@@ -54,6 +54,22 @@ export const systemActionMap: Record<string, string> = {
   resource_group_create: "system_resource_group_create", // K1: 建立資源群組
   resource_group_get: "system_resource_group_get",       // K1: 取得資源群組
   undo_last: "system_undo_last",                         // K2: 復原最近一次高風險操作
+
+  // PDF 工具（OctoDock 自有功能，不依賴外部 API）
+  read_pdf: "system_read_pdf",           // 讀取 PDF 文字內容
+  create_pdf: "system_create_pdf",       // 從文字/Markdown 建立 PDF
+  merge_pdf: "system_merge_pdf",         // 合併多個 PDF
+  pdf_info: "system_pdf_info",           // 取得 PDF 基本資訊（頁數等）
+
+  // 文件轉換工具
+  docx_to_markdown: "system_docx_to_markdown",   // DOCX → Markdown
+  docx_to_html: "system_docx_to_html",           // DOCX → HTML
+
+  // 檔案生成工具（生成後自動上傳到已連接的雲端）
+  create_qr: "system_create_qr",             // QR Code 生成
+  process_image: "system_process_image",     // 圖片處理（resize/compress/convert/watermark）
+  create_chart: "system_create_chart",       // 圖表生成 PNG
+  svg_to_png: "system_svg_to_png",           // SVG 轉 PNG
 };
 
 /**
@@ -83,6 +99,19 @@ export function getSystemSkill(): string {
   resolve_name(name, app?, type?) — resolve a human-readable name to an ID (e.g. "MIBU-Notes" → page ID). Searches memory first, then app APIs.
   param_suggest(app, action) — get suggested default params for an action based on user's history and patterns
   multi_search(query, apps?) — search across multiple apps at once. Returns unified format results. apps: array of app names (default: all connected)
+## PDF Tools
+  read_pdf(url) — extract text from a PDF (URL or base64)
+  create_pdf(title, content) — create a PDF from text/Markdown. Auto-uploads to cloud.
+  merge_pdf(urls) — merge multiple PDFs into one. Auto-uploads to cloud.
+  pdf_info(url) — get PDF metadata (page count, title, author)
+## Document Conversion
+  docx_to_markdown(url) — convert a .docx file (URL) to Markdown text
+  docx_to_html(url) — convert a .docx file (URL) to HTML
+## File Generation (auto-uploads to connected Google Drive / OneDrive)
+  create_qr(text, size?) — generate a QR Code PNG
+  process_image(url, operations) — process image: resize/compress/convert/watermark. operations:[{type:"resize",width:800},{type:"compress",quality:80}]
+  create_chart(type, labels, datasets, title?) — generate chart PNG. type: "bar"|"line"|"pie"|"doughnut"|"radar"
+  svg_to_png(svg, width?, height?) — convert SVG code to PNG image
 SOPs persist across agents and sessions.`;
 }
 
@@ -1138,6 +1167,518 @@ export async function executeSystemAction(
         return { ok: false, error: `Unsupported undo action: ${data.action}` };
       } catch (err) {
         return { ok: false, error: `Undo failed: ${err instanceof Error ? err.message : "Unknown error"}` };
+      }
+    }
+
+    // ── PDF 工具（OctoDock 自有功能） ──
+
+    case "read_pdf": {
+      /* 從 URL 下載 PDF 並提取文字內容 */
+      const url = params.url as string;
+      if (!url) return { ok: false, error: "url is required" };
+
+      try {
+        let pdfBuffer: Buffer;
+        if (url.startsWith("data:") || url.startsWith("base64:")) {
+          /* base64 編碼的 PDF */
+          const b64 = url.replace(/^(data:[^;]+;base64,|base64:)/, "");
+          pdfBuffer = Buffer.from(b64, "base64");
+        } else {
+          /* 從 URL 下載 */
+          const res = await fetch(url);
+          if (!res.ok) return { ok: false, error: `Failed to download PDF: ${res.status}` };
+          pdfBuffer = Buffer.from(await res.arrayBuffer());
+        }
+
+        const pdfParse = (await import("pdf-parse")).default;
+        const parsed = await pdfParse(pdfBuffer);
+        return {
+          ok: true,
+          data: parsed.text,
+          summary: {
+            pages: parsed.numpages,
+            characters: parsed.text.length,
+            title: parsed.info?.Title || null,
+            author: parsed.info?.Author || null,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: `PDF 讀取失敗: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    case "create_pdf": {
+      /* 從文字/Markdown 建立 PDF，回傳 base64 */
+      const title = (params.title as string) || "Document";
+      const content = params.content as string;
+      if (!content) return { ok: false, error: "content is required" };
+
+      try {
+        const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+        const doc = await PDFDocument.create();
+        const font = await doc.embedFont(StandardFonts.Helvetica);
+        const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+
+        /* 設定頁面參數 */
+        const pageWidth = 595; // A4
+        const pageHeight = 842;
+        const margin = 50;
+        const lineHeight = 16;
+        const maxWidth = pageWidth - margin * 2;
+
+        let page = doc.addPage([pageWidth, pageHeight]);
+        let y = pageHeight - margin;
+
+        /* 標題 */
+        page.drawText(title, { x: margin, y, font: boldFont, size: 20, color: rgb(0.1, 0.1, 0.1) });
+        y -= 35;
+
+        /* 內容逐行寫入，自動換頁 */
+        const lines = content.split("\n");
+        for (const line of lines) {
+          const isHeading = line.startsWith("# ") || line.startsWith("## ") || line.startsWith("### ");
+          const currentFont = isHeading ? boldFont : font;
+          const fontSize = isHeading ? (line.startsWith("### ") ? 13 : line.startsWith("## ") ? 15 : 17) : 11;
+          const text = line.replace(/^#{1,3}\s/, "").replace(/\*\*/g, ""); // 移除 Markdown 標記
+
+          /* 簡易自動換行 */
+          const words = text.split(" ");
+          let currentLine = "";
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            const testWidth = currentFont.widthOfTextAtSize(testLine, fontSize);
+            if (testWidth > maxWidth && currentLine) {
+              if (y < margin + lineHeight) {
+                page = doc.addPage([pageWidth, pageHeight]);
+                y = pageHeight - margin;
+              }
+              page.drawText(currentLine, { x: margin, y, font: currentFont, size: fontSize, color: rgb(0.15, 0.15, 0.15) });
+              y -= lineHeight;
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          /* 寫入最後一行 */
+          if (currentLine || text === "") {
+            if (y < margin + lineHeight) {
+              page = doc.addPage([pageWidth, pageHeight]);
+              y = pageHeight - margin;
+            }
+            if (currentLine) {
+              page.drawText(currentLine, { x: margin, y, font: currentFont, size: fontSize, color: rgb(0.15, 0.15, 0.15) });
+            }
+            y -= isHeading ? lineHeight * 1.5 : lineHeight;
+          }
+        }
+
+        const pdfBytes = await doc.save();
+        const pdfBuffer = Buffer.from(pdfBytes);
+        /* 自動上傳到雲端 */
+        const { saveToCloud } = await import("@/services/cloud-storage");
+        const cloudResult = await saveToCloud(pdfBuffer, `${title}.pdf`, "application/pdf", userId);
+        return {
+          ok: true,
+          data: cloudResult.saved
+            ? `PDF created: **${cloudResult.fileName}**\nURL: ${cloudResult.url}`
+            : cloudResult.base64,
+          url: cloudResult.url,
+          summary: {
+            pages: doc.getPageCount(),
+            size: pdfBytes.length,
+            title,
+            storage: cloudResult.storage,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: `PDF 建立失敗: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    case "merge_pdf": {
+      /* 合併多個 PDF（從 URL 列表下載後合併） */
+      const urls = params.urls as string[];
+      if (!urls || !Array.isArray(urls) || urls.length < 2) {
+        return { ok: false, error: "urls array with at least 2 PDF URLs is required" };
+      }
+
+      try {
+        const { PDFDocument } = await import("pdf-lib");
+        const mergedDoc = await PDFDocument.create();
+
+        for (const url of urls) {
+          const res = await fetch(url);
+          if (!res.ok) return { ok: false, error: `Failed to download: ${url} (${res.status})` };
+          const buffer = await res.arrayBuffer();
+          const srcDoc = await PDFDocument.load(buffer);
+          const pages = await mergedDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+          for (const page of pages) {
+            mergedDoc.addPage(page);
+          }
+        }
+
+        const pdfBytes = await mergedDoc.save();
+        const pdfBuffer = Buffer.from(pdfBytes);
+        /* 自動上傳到雲端 */
+        const { saveToCloud: saveToCloud2 } = await import("@/services/cloud-storage");
+        const cloudResult = await saveToCloud2(pdfBuffer, `merged_${Date.now()}.pdf`, "application/pdf", userId);
+        return {
+          ok: true,
+          data: cloudResult.saved
+            ? `PDF merged: **${cloudResult.fileName}** (${mergedDoc.getPageCount()} pages)\nURL: ${cloudResult.url}`
+            : cloudResult.base64,
+          url: cloudResult.url,
+          summary: {
+            pages: mergedDoc.getPageCount(),
+            size: pdfBytes.length,
+            mergedFrom: urls.length,
+            storage: cloudResult.storage,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: `PDF 合併失敗: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    case "pdf_info": {
+      /* 取得 PDF 基本資訊（頁數、標題、作者等） */
+      const url = params.url as string;
+      if (!url) return { ok: false, error: "url is required" };
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return { ok: false, error: `Failed to download PDF: ${res.status}` };
+        const buffer = Buffer.from(await res.arrayBuffer());
+
+        const pdfParse = (await import("pdf-parse")).default;
+        const parsed = await pdfParse(buffer);
+        return {
+          ok: true,
+          data: {
+            pages: parsed.numpages,
+            title: parsed.info?.Title || null,
+            author: parsed.info?.Author || null,
+            creator: parsed.info?.Creator || null,
+            producer: parsed.info?.Producer || null,
+            creationDate: parsed.info?.CreationDate || null,
+            characters: parsed.text.length,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: `PDF 資訊讀取失敗: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    // ── QR Code 生成 ──
+    case "create_qr": {
+      const text = params.text as string;
+      if (!text) return { ok: false, error: "text is required" };
+      const size = (params.size as number) || 300;
+
+      try {
+        const QRCode = (await import("qrcode")).default;
+        const pngBuffer = await QRCode.toBuffer(text, {
+          width: size,
+          margin: 2,
+          color: { dark: "#000000", light: "#FFFFFF" },
+        });
+
+        const { saveToCloud } = await import("@/services/cloud-storage");
+        const cloudResult = await saveToCloud(
+          pngBuffer,
+          `qr_${Date.now()}.png`,
+          "image/png",
+          userId,
+        );
+
+        return {
+          ok: true,
+          data: cloudResult.saved
+            ? `QR Code created!\nContent: ${text}\nURL: ${cloudResult.url}`
+            : cloudResult.base64,
+          url: cloudResult.url,
+          summary: { text, size, storage: cloudResult.storage },
+        };
+      } catch (err) {
+        return { ok: false, error: `QR Code 生成失敗: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    // ── 圖片處理（resize / compress / convert / watermark） ──
+    case "process_image": {
+      const url = params.url as string;
+      const ops = params.operations as Array<{
+        type: "resize" | "compress" | "convert" | "watermark";
+        width?: number;
+        height?: number;
+        quality?: number;
+        format?: string;
+        text?: string;
+      }>;
+      if (!url) return { ok: false, error: "url is required" };
+      if (!ops || !Array.isArray(ops) || ops.length === 0) {
+        return { ok: false, error: "operations array is required. Example: [{type:\"resize\",width:800}]" };
+      }
+
+      try {
+        /* 下載原圖 */
+        const res = await fetch(url);
+        if (!res.ok) return { ok: false, error: `Failed to download image: ${res.status}` };
+        const imageBuffer = Buffer.from(await res.arrayBuffer());
+
+        const sharp = (await import("sharp")).default;
+        let pipeline = sharp(imageBuffer);
+        let outputFormat = "png";
+
+        /* 依序套用操作 */
+        for (const op of ops) {
+          switch (op.type) {
+            case "resize":
+              pipeline = pipeline.resize(op.width || undefined, op.height || undefined, { fit: "inside" });
+              break;
+            case "compress":
+              pipeline = pipeline.png({ quality: op.quality || 80 });
+              break;
+            case "convert":
+              outputFormat = op.format || "png";
+              if (outputFormat === "jpg" || outputFormat === "jpeg") {
+                pipeline = pipeline.jpeg({ quality: op.quality || 85 });
+                outputFormat = "jpeg";
+              } else if (outputFormat === "webp") {
+                pipeline = pipeline.webp({ quality: op.quality || 85 });
+              } else {
+                pipeline = pipeline.png();
+              }
+              break;
+            case "watermark":
+              if (op.text) {
+                /* 用 SVG 疊加浮水印文字 */
+                const meta = await sharp(imageBuffer).metadata();
+                const w = meta.width || 800;
+                const h = meta.height || 600;
+                const svgWatermark = `<svg width="${w}" height="${h}">
+                  <text x="50%" y="50%" font-size="48" fill="rgba(0,0,0,0.15)"
+                    text-anchor="middle" dominant-baseline="middle"
+                    transform="rotate(-30 ${w / 2} ${h / 2})">${op.text}</text>
+                </svg>`;
+                pipeline = pipeline.composite([{ input: Buffer.from(svgWatermark), blend: "over" }]);
+              }
+              break;
+          }
+        }
+
+        const resultBuffer = await pipeline.toBuffer();
+        const mimeType = outputFormat === "jpeg" ? "image/jpeg" : outputFormat === "webp" ? "image/webp" : "image/png";
+        const ext = outputFormat === "jpeg" ? "jpg" : outputFormat;
+
+        const { saveToCloud } = await import("@/services/cloud-storage");
+        const cloudResult = await saveToCloud(
+          resultBuffer,
+          `processed_${Date.now()}.${ext}`,
+          mimeType,
+          userId,
+        );
+
+        return {
+          ok: true,
+          data: cloudResult.saved
+            ? `Image processed! (${ops.map(o => o.type).join(" → ")})\nURL: ${cloudResult.url}`
+            : cloudResult.base64,
+          url: cloudResult.url,
+          summary: {
+            operations: ops.map(o => o.type),
+            originalSize: imageBuffer.length,
+            resultSize: resultBuffer.length,
+            storage: cloudResult.storage,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: `圖片處理失敗: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    // ── 圖表生成 PNG ──
+    case "create_chart": {
+      const chartType = (params.type as string) || "bar";
+      const labels = params.labels as string[];
+      const datasets = params.datasets as Array<{ label: string; data: number[]; color?: string }>;
+      const chartTitle = params.title as string | undefined;
+
+      if (!labels || !datasets) {
+        return { ok: false, error: "labels and datasets are required. Example: labels:[\"A\",\"B\"], datasets:[{label:\"Sales\",data:[10,20]}]" };
+      }
+
+      try {
+        const { ChartJSNodeCanvas } = await import("chartjs-node-canvas");
+        const width = (params.width as number) || 800;
+        const height = (params.height as number) || 500;
+        const chartCanvas = new ChartJSNodeCanvas({ width, height, backgroundColour: "white" });
+
+        /* 預設顏色 */
+        const defaultColors = [
+          "rgba(54,162,235,0.7)", "rgba(255,99,132,0.7)", "rgba(75,192,192,0.7)",
+          "rgba(255,206,86,0.7)", "rgba(153,102,255,0.7)", "rgba(255,159,64,0.7)",
+        ];
+
+        const chartConfig = {
+          type: chartType as "bar" | "line" | "pie" | "doughnut" | "radar",
+          data: {
+            labels,
+            datasets: datasets.map((ds, i) => ({
+              label: ds.label,
+              data: ds.data,
+              backgroundColor: ds.color || defaultColors[i % defaultColors.length],
+              borderColor: (ds.color || defaultColors[i % defaultColors.length]).replace("0.7", "1"),
+              borderWidth: 2,
+            })),
+          },
+          options: {
+            responsive: false,
+            plugins: {
+              title: chartTitle ? { display: true, text: chartTitle, font: { size: 18 } } : undefined,
+              legend: { display: datasets.length > 1 },
+            },
+          },
+        };
+
+        const chartBuffer = await chartCanvas.renderToBuffer(chartConfig as Parameters<typeof chartCanvas.renderToBuffer>[0]);
+
+        const { saveToCloud } = await import("@/services/cloud-storage");
+        const cloudResult = await saveToCloud(
+          chartBuffer,
+          `chart_${chartType}_${Date.now()}.png`,
+          "image/png",
+          userId,
+        );
+
+        return {
+          ok: true,
+          data: cloudResult.saved
+            ? `Chart created! (${chartType}${chartTitle ? `: ${chartTitle}` : ""})\nURL: ${cloudResult.url}`
+            : cloudResult.base64,
+          url: cloudResult.url,
+          summary: {
+            type: chartType,
+            title: chartTitle,
+            dataPoints: labels.length,
+            datasets: datasets.length,
+            storage: cloudResult.storage,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: `圖表生成失敗: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    // ── SVG → PNG 轉換 ──
+    case "svg_to_png": {
+      const svg = params.svg as string;
+      if (!svg) return { ok: false, error: "svg (SVG code string) is required" };
+
+      try {
+        const sharp = (await import("sharp")).default;
+        const width = (params.width as number) || undefined;
+        const height = (params.height as number) || undefined;
+
+        let pipeline = sharp(Buffer.from(svg));
+        if (width || height) {
+          pipeline = pipeline.resize(width, height);
+        }
+        const pngBuffer = await pipeline.png().toBuffer();
+
+        const { saveToCloud } = await import("@/services/cloud-storage");
+        const cloudResult = await saveToCloud(
+          pngBuffer,
+          `svg_${Date.now()}.png`,
+          "image/png",
+          userId,
+        );
+
+        return {
+          ok: true,
+          data: cloudResult.saved
+            ? `SVG converted to PNG!\nURL: ${cloudResult.url}`
+            : cloudResult.base64,
+          url: cloudResult.url,
+          summary: { size: pngBuffer.length, storage: cloudResult.storage },
+        };
+      } catch (err) {
+        return { ok: false, error: `SVG → PNG 轉換失敗: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    // ── DOCX → Markdown ──
+    case "docx_to_markdown": {
+      const url = params.url as string;
+      if (!url) return { ok: false, error: "url (DOCX file URL) is required" };
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return { ok: false, error: `Failed to download DOCX: ${res.status}` };
+        const buffer = Buffer.from(await res.arrayBuffer());
+
+        const mammoth = await import("mammoth");
+        /* 先轉 HTML，再簡易轉 Markdown */
+        const htmlResult = await mammoth.convertToHtml({ buffer });
+        const html = htmlResult.value;
+
+        /* 簡易 HTML → Markdown 轉換 */
+        const md = html
+          .replace(/<h1[^>]*>(.*?)<\/h1>/gi, "# $1\n")
+          .replace(/<h2[^>]*>(.*?)<\/h2>/gi, "## $1\n")
+          .replace(/<h3[^>]*>(.*?)<\/h3>/gi, "### $1\n")
+          .replace(/<h4[^>]*>(.*?)<\/h4>/gi, "#### $1\n")
+          .replace(/<strong>(.*?)<\/strong>/gi, "**$1**")
+          .replace(/<b>(.*?)<\/b>/gi, "**$1**")
+          .replace(/<em>(.*?)<\/em>/gi, "*$1*")
+          .replace(/<i>(.*?)<\/i>/gi, "*$1*")
+          .replace(/<li>(.*?)<\/li>/gi, "- $1\n")
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<p>(.*?)<\/p>/gi, "$1\n\n")
+          .replace(/<[^>]+>/g, "") // 移除剩餘的 HTML 標籤
+          .replace(/\n{3,}/g, "\n\n") // 壓縮多餘換行
+          .trim();
+
+        return {
+          ok: true,
+          data: md,
+          summary: {
+            characters: md.length,
+            warnings: htmlResult.messages.length > 0
+              ? htmlResult.messages.map((m: { message: string }) => m.message).slice(0, 3)
+              : undefined,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: `DOCX → Markdown 轉換失敗: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+
+    // ── DOCX → HTML ──
+    case "docx_to_html": {
+      const url = params.url as string;
+      if (!url) return { ok: false, error: "url (DOCX file URL) is required" };
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return { ok: false, error: `Failed to download DOCX: ${res.status}` };
+        const buffer = Buffer.from(await res.arrayBuffer());
+
+        const mammoth = await import("mammoth");
+        const result = await mammoth.convertToHtml({ buffer });
+
+        return {
+          ok: true,
+          data: result.value,
+          summary: {
+            characters: result.value.length,
+            warnings: result.messages.length > 0
+              ? result.messages.map((m: { message: string }) => m.message).slice(0, 3)
+              : undefined,
+          },
+        };
+      } catch (err) {
+        return { ok: false, error: `DOCX → HTML 轉換失敗: ${err instanceof Error ? err.message : String(err)}` };
       }
     }
 

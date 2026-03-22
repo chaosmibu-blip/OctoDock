@@ -10,6 +10,9 @@ import { getOAuthClientId, getOAuthClientSecret } from "@/lib/oauth-env";
 // Google 系列 App 名稱（用於一鍵連接 callback）
 const GOOGLE_APPS = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
 
+// Microsoft 系列 App 名稱（用於一鍵連接 callback）
+const MICROSOFT_APPS = ["microsoft_excel", "microsoft_word", "microsoft_powerpoint"];
+
 import { createHmac, timingSafeEqual } from "crypto";
 
 /** HMAC 簽名用的 key — 跟 connect route 用同一個派生邏輯 */
@@ -223,6 +226,89 @@ export async function GET(
       }
       return NextResponse.redirect(
         new URL("/dashboard?error=oauth_failed&app=google_all", APP_URL),
+      );
+    }
+  }
+
+  // ── Microsoft 一鍵連接 callback ──
+  if (appName === "microsoft_all") {
+    try {
+      const redirectUri = `${APP_URL}/callback/microsoft_all`;
+      const body = new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code!,
+        redirect_uri: redirectUri,
+        client_id: getOAuthClientId("microsoft_excel"),
+        client_secret: getOAuthClientSecret("microsoft_excel"),
+        scope: "offline_access Files.ReadWrite User.Read",
+      });
+      const tokenRes = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+      if (!tokenRes.ok) {
+        const err = await tokenRes.text();
+        throw new Error(`Token exchange failed for microsoft_all: ${tokenRes.status} ${err}`);
+      }
+      const tokens = await tokenRes.json();
+
+      // 同一組 token 寫入 3 個 Microsoft App
+      for (const msApp of MICROSOFT_APPS) {
+        const msAdapter = getAdapter(msApp);
+        if (!msAdapter) continue;
+        await db
+          .insert(connectedApps)
+          .values({
+            userId,
+            appName: msApp,
+            authType: "oauth2",
+            accessToken: encrypt(tokens.access_token),
+            refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : null,
+            tokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
+            scopes: (msAdapter.authConfig as OAuthConfig).scopes,
+            status: "active",
+          })
+          .onConflictDoUpdate({
+            target: [connectedApps.userId, connectedApps.appName],
+            set: {
+              accessToken: encrypt(tokens.access_token),
+              refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined,
+              tokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
+              status: "active",
+              updatedAt: new Date(),
+            },
+          });
+      }
+
+      if (fromSkillTree) {
+        return new NextResponse(
+          `<!DOCTYPE html><html><head><title>連接成功</title></head><body>
+          <p style="font-family:sans-serif;text-align:center;margin-top:40vh">
+            ✅ Microsoft Office 全系列連接成功，此視窗即將關閉…
+          </p>
+          <script>window.close();</script>
+          </body></html>`,
+          { headers: { "Content-Type": "text/html" } },
+        );
+      }
+      return NextResponse.redirect(
+        new URL("/dashboard?connected=microsoft_all", APP_URL),
+      );
+    } catch (error) {
+      console.error("Microsoft All OAuth callback error:", error);
+      if (fromSkillTree) {
+        return new NextResponse(
+          `<!DOCTYPE html><html><head><title>連接失敗</title></head><body>
+          <p style="font-family:sans-serif;text-align:center;margin-top:40vh;color:#e24b4a">
+            ❌ Microsoft 連接失敗，請關閉此視窗後重試。
+          </p>
+          </body></html>`,
+          { headers: { "Content-Type": "text/html" } },
+        );
+      }
+      return NextResponse.redirect(
+        new URL("/dashboard?error=oauth_failed&app=microsoft_all", APP_URL),
       );
     }
   }

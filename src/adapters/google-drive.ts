@@ -808,10 +808,9 @@ async function execute(
       }
       const buffer = Buffer.from(await dlRes.arrayBuffer());
 
-      // 2. 用 pdf-parse v2 提取文字
-      const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const pdfData = await parser.getText();
+      // 2. 用 pdf-parse 提取文字
+      const pdfParse = (await import("pdf-parse")).default;
+      const pdfData = await pdfParse(buffer);
 
       // 3. 掃描型 PDF（無文字層）回傳提示
       if (!pdfData.text || pdfData.text.trim().length === 0) {
@@ -827,7 +826,7 @@ async function execute(
       }
 
       return {
-        content: [{ type: "text", text: JSON.stringify({ text: pdfData.text, pages: pdfData.total }) }],
+        content: [{ type: "text", text: JSON.stringify({ text: pdfData.text, pages: pdfData.numpages }) }],
       };
     }
 
