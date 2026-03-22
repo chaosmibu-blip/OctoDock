@@ -37,26 +37,5 @@ deploymentTarget = "autoscale"
 run = ["sh", "-c", "npm run start"]
 build = ["npm", "run", "build"]
 
-[workflows]
-runButton = "Project"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Start application"
-
-[[workflows.workflow]]
-name = "Start application"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npm run start"
-waitForPort = 3000
-
 [agent]
 expertMode = true

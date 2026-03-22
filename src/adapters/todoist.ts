@@ -778,8 +778,8 @@ async function execute(
     }
 
     case "todoist_quick_add": {
-      /* Quick Add 走的是 Sync API 端點 */
-      const data = await fetch("https://api.todoist.com/api/v1/quick/add", {
+      /* Quick Add 端點 */
+      const data = await fetch("https://api.todoist.com/api/v1/tasks/quick_add", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
