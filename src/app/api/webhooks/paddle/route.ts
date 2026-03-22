@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/db";
-import { subscriptions, users } from "@/db/schema";
+import { subscriptions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 // ============================================================

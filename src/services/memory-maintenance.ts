@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { memory, operations, connectedApps } from "@/db/schema";
-import { eq, and, sql, lt, isNull, or, desc, ne } from "drizzle-orm";
+import { memory } from "@/db/schema";
+import { eq, and, sql, or, desc } from "drizzle-orm";
 import { inferPreferences } from "./preference-inference";
 
 // ============================================================

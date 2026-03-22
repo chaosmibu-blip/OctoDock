@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { schedules, connectedApps } from "@/db/schema";
-import { eq, and, lte, sql } from "drizzle-orm";
+import { eq, and, lte } from "drizzle-orm";
 import { getAdapter } from "@/mcp/registry";
 import { executeWithMiddleware } from "@/mcp/middleware/logger";
 import { queryMemory } from "./memory-engine";
