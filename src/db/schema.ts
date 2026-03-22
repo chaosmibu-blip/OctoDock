@@ -321,3 +321,17 @@ export const botConfigs = pgTable("bot_configs", {
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
+
+// 4.11 feedback（用戶反饋記錄）
+export const feedback = pgTable("feedback", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  category: text("category").notNull(), // 'bug' | 'feature' | 'app_request' | 'other'
+  content: text("content").notNull(),
+  email: text("email"), // 用戶提供的聯絡 email（可選）
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_feedback_user").on(table.userId),
+]);

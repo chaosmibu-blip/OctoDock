@@ -314,23 +314,36 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     }
   }, [router]);
 
-  /** 反饋表單送出 — 使用 FormSubmit.co 發送到信箱 */
+  /** 反饋表單送出 — 同時存 DB + FormSubmit.co 寄信 */
   const handleFeedbackSubmit = useCallback(async () => {
     if (!feedbackContent.trim()) return;
     setFeedbackStatus("submitting");
     try {
-      const res = await fetch("https://formsubmit.co/ajax/s8869420@gmail.com", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          _subject: `[OctoDock Feedback] ${feedbackCategory}`,
-          category: feedbackCategory,
-          content: feedbackContent,
-          email: feedbackEmail || user.email,
-          user_name: user.name,
+      /* 並行：存 DB + 寄 email */
+      const [dbRes, emailRes] = await Promise.all([
+        fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            category: feedbackCategory,
+            content: feedbackContent,
+            email: feedbackEmail || user.email,
+          }),
         }),
-      });
-      if (res.ok) {
+        fetch("https://formsubmit.co/ajax/s8869420@gmail.com", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            _subject: `[OctoDock Feedback] ${feedbackCategory}`,
+            category: feedbackCategory,
+            content: feedbackContent,
+            email: feedbackEmail || user.email,
+            user_name: user.name,
+          }),
+        }),
+      ]);
+      const res = dbRes.ok ? emailRes : dbRes; // 只要 DB 成功就算成功
+      if (res.ok || dbRes.ok) {
         setFeedbackStatus("success");
         // 2 秒後關閉並重置表單
         setTimeout(() => {
@@ -448,25 +461,7 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           <div className="rounded-lg bg-[#E1F5EE] px-5 py-5 space-y-4">
             <p className="text-sm font-medium text-[#085041]">{t("dashboard.guide_title")}</p>
 
-            {/* Step 1: 複製 MCP URL — #2: 手機改 flex-col */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-              <span className="text-xs font-semibold text-[#0F6E56] shrink-0">{t("dashboard.guide_step1")}</span>
-              <code className="w-full sm:flex-1 text-xs font-mono text-[#085041] bg-[#F1EFE8] rounded-lg px-3 py-2 overflow-x-auto">
-                {mcpUrl}
-              </code>
-              <button
-                onClick={() => { copyMcpUrl(); }}
-                className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-                  copied
-                    ? "bg-[#085041] text-white"
-                    : "bg-[#0F6E56] text-white hover:bg-[#0a5a46]"
-                }`}
-              >
-                {copied ? t("dashboard.guide_step1_done") : t("dashboard.guide_copy")}
-              </button>
-            </div>
-
-            {/* Step 2: 選擇 AI 工具平台 */}
+            {/* 選擇 AI 工具平台（MCP URL 已在上方顯示，不重複） */}
             <div>
               <span className="text-xs font-semibold text-[#0F6E56]">{t("dashboard.guide_step2")}</span>
               <div className="flex gap-3 mt-2">
