@@ -16,6 +16,7 @@ import { getActionZh } from "@/data/action-i18n";
  * 未登入時仍回傳完整清單，但 connected/unlocked 全部為 false
  */
 export async function GET() {
+  try {
   /* 載入所有 adapter 和組合技 */
   await loadAdapters();
   await loadCombos();
@@ -119,4 +120,9 @@ export async function GET() {
   }
 
   return NextResponse.json({ apps, combos, discovered });
+  } catch (error) {
+    // 技能樹資料查詢失敗
+    console.error("[SKILLS]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

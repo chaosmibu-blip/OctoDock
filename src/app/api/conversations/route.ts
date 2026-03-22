@@ -6,56 +6,68 @@ import { and, eq, desc, sql } from "drizzle-orm";
 
 // GET /api/conversations?platform=line&platformUserId=xxx&limit=50
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = req.nextUrl;
+    const platform = searchParams.get("platform");
+    const platformUserId = searchParams.get("platformUserId");
+    const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 200);
+
+    const conditions = [eq(conversations.userId, session.user.id)];
+    if (platform) conditions.push(eq(conversations.platform, platform));
+    if (platformUserId)
+      conditions.push(eq(conversations.platformUserId, platformUserId));
+
+    const results = await db
+      .select({
+        id: conversations.id,
+        platform: conversations.platform,
+        platformUserId: conversations.platformUserId,
+        role: conversations.role,
+        content: conversations.content,
+        createdAt: conversations.createdAt,
+      })
+      .from(conversations)
+      .where(and(...conditions))
+      .orderBy(desc(conversations.createdAt))
+      .limit(limit);
+
+    return NextResponse.json(results);
+  } catch (error) {
+    // 查詢對話紀錄失敗
+    console.error("[CONVERSATIONS_GET]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const { searchParams } = req.nextUrl;
-  const platform = searchParams.get("platform");
-  const platformUserId = searchParams.get("platformUserId");
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 200);
-
-  const conditions = [eq(conversations.userId, session.user.id)];
-  if (platform) conditions.push(eq(conversations.platform, platform));
-  if (platformUserId)
-    conditions.push(eq(conversations.platformUserId, platformUserId));
-
-  const results = await db
-    .select({
-      id: conversations.id,
-      platform: conversations.platform,
-      platformUserId: conversations.platformUserId,
-      role: conversations.role,
-      content: conversations.content,
-      createdAt: conversations.createdAt,
-    })
-    .from(conversations)
-    .where(and(...conditions))
-    .orderBy(desc(conversations.createdAt))
-    .limit(limit);
-
-  return NextResponse.json(results);
 }
 
 // DELETE /api/conversations?platform=line&platformUserId=xxx
 // Clear conversation history for a specific platform user
 export async function DELETE(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = req.nextUrl;
+    const platform = searchParams.get("platform");
+    const platformUserId = searchParams.get("platformUserId");
+
+    const conditions = [eq(conversations.userId, session.user.id)];
+    if (platform) conditions.push(eq(conversations.platform, platform));
+    if (platformUserId)
+      conditions.push(eq(conversations.platformUserId, platformUserId));
+
+    await db.delete(conversations).where(and(...conditions));
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    // 清除對話紀錄失敗
+    console.error("[CONVERSATIONS_DELETE]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const { searchParams } = req.nextUrl;
-  const platform = searchParams.get("platform");
-  const platformUserId = searchParams.get("platformUserId");
-
-  const conditions = [eq(conversations.userId, session.user.id)];
-  if (platform) conditions.push(eq(conversations.platform, platform));
-  if (platformUserId)
-    conditions.push(eq(conversations.platformUserId, platformUserId));
-
-  await db.delete(conversations).where(and(...conditions));
-
-  return NextResponse.json({ success: true });
 }

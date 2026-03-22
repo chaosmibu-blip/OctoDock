@@ -3,21 +3,27 @@ import { auth } from "@/auth";
 import { deleteMemory } from "@/services/memory-engine";
 
 export async function DELETE(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { key, category } = body;
+
+    if (!key || !category) {
+      return NextResponse.json(
+        { error: "key and category are required" },
+        { status: 400 },
+      );
+    }
+
+    await deleteMemory(session.user.id, key, category);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    // 刪除記憶失敗
+    console.error("[MEMORY_DELETE]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const body = await req.json();
-  const { key, category } = body;
-
-  if (!key || !category) {
-    return NextResponse.json(
-      { error: "key and category are required" },
-      { status: 400 },
-    );
-  }
-
-  await deleteMemory(session.user.id, key, category);
-  return NextResponse.json({ success: true });
 }

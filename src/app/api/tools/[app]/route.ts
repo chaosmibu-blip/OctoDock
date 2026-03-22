@@ -6,25 +6,31 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ app: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { app: appName } = await params;
+
+    // Ensure adapters are loaded
+    await loadAdapters();
+
+    const adapter = getAdapter(appName);
+    if (!adapter) {
+      return NextResponse.json({ error: "App not found" }, { status: 404 });
+    }
+
+    const tools = adapter.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+    }));
+
+    return NextResponse.json({ appName, toolCount: tools.length, tools });
+  } catch (error) {
+    // 查詢 App 工具列表失敗
+    console.error("[TOOLS_APP]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const { app: appName } = await params;
-
-  // Ensure adapters are loaded
-  await loadAdapters();
-
-  const adapter = getAdapter(appName);
-  if (!adapter) {
-    return NextResponse.json({ error: "App not found" }, { status: 404 });
-  }
-
-  const tools = adapter.tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-  }));
-
-  return NextResponse.json({ appName, toolCount: tools.length, tools });
 }

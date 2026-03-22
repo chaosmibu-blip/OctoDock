@@ -36,96 +36,102 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ app: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const { app: appName } = await params;
-  await ensureAdapters();
+    const { app: appName } = await params;
+    await ensureAdapters();
 
-  /* 讀取來源參數（技能樹頁面傳 from=skill-tree，callback 會自動關閉新分頁） */
-  const from = new URL(req.url).searchParams.get("from") ?? undefined;
+    /* 讀取來源參數（技能樹頁面傳 from=skill-tree，callback 會自動關閉新分頁） */
+    const from = new URL(req.url).searchParams.get("from") ?? undefined;
 
-  // ── Google 一鍵連接：合併所有 Google App 的 scope，一次授權 ──
-  if (appName === "google_all") {
-    const allScopes = new Set<string>();
-    for (const gApp of GOOGLE_APPS) {
-      const adapter = getAdapter(gApp);
-      if (adapter?.authConfig.type === "oauth2") {
-        for (const scope of (adapter.authConfig as OAuthConfig).scopes) {
-          allScopes.add(scope);
+    // ── Google 一鍵連接：合併所有 Google App 的 scope，一次授權 ──
+    if (appName === "google_all") {
+      const allScopes = new Set<string>();
+      for (const gApp of GOOGLE_APPS) {
+        const adapter = getAdapter(gApp);
+        if (adapter?.authConfig.type === "oauth2") {
+          for (const scope of (adapter.authConfig as OAuthConfig).scopes) {
+            allScopes.add(scope);
+          }
         }
       }
+
+      const state = generateState(session.user.id, from);
+      const clientId = getOAuthClientId("gmail"); // Google 系共用同一組
+      const redirectUri = `${APP_URL}/callback/google_all`;
+
+      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("state", state);
+      authUrl.searchParams.set("scope", [...allScopes].join(" "));
+      authUrl.searchParams.set("access_type", "offline");
+      authUrl.searchParams.set("prompt", "consent");
+
+      return NextResponse.redirect(authUrl.toString());
     }
 
-    const state = generateState(session.user.id, from);
-    const clientId = getOAuthClientId("gmail"); // Google 系共用同一組
-    const redirectUri = `${APP_URL}/callback/google_all`;
-
-    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.set("client_id", clientId);
-    authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("state", state);
-    authUrl.searchParams.set("scope", [...allScopes].join(" "));
-    authUrl.searchParams.set("access_type", "offline");
-    authUrl.searchParams.set("prompt", "consent");
-
-    return NextResponse.redirect(authUrl.toString());
-  }
-
-  const adapter = getAdapter(appName);
-  if (!adapter) {
-    return NextResponse.json({ error: "Unknown app" }, { status: 404 });
-  }
-
-  if (adapter.authConfig.type === "oauth2") {
-    const config = adapter.authConfig as OAuthConfig;
-    const state = generateState(session.user.id, from);
-    const clientId = getOAuthClientId(appName);
-    const redirectUri = `${APP_URL}/callback/${appName}`;
-
-    const authUrl = new URL(config.authorizeUrl);
-    authUrl.searchParams.set("client_id", clientId);
-    authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("state", state);
-
-    if (config.scopes.length > 0) {
-      authUrl.searchParams.set("scope", config.scopes.join(" "));
+    const adapter = getAdapter(appName);
+    if (!adapter) {
+      return NextResponse.json({ error: "Unknown app" }, { status: 404 });
     }
 
-    // 讓 adapter 自己聲明需要的額外 OAuth 參數（access_type, prompt, owner 等）
-    if (config.extraParams) {
-      for (const [key, value] of Object.entries(config.extraParams)) {
-        // U21: PKCE — 如果 adapter 聲明需要 code_challenge_method，自動產生 PKCE 參數
-        if (key === "code_challenge_method" && value === "S256") {
-          // 產生 code_verifier（43-128 字元的隨機 base64url 字串）
-          const codeVerifier = randomBytes(32).toString("base64url");
-          // 計算 code_challenge = base64url(sha256(code_verifier))
-          const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
-          authUrl.searchParams.set("code_challenge_method", "S256");
-          authUrl.searchParams.set("code_challenge", codeChallenge);
-          // 把 code_verifier 加密嵌入 state 參數（不依賴 cookie，避免跨站丟失）
-          // 重新產生 state，把 code_verifier 放進 payload
-          const pkceState = generateState(session.user.id, from, codeVerifier);
-          authUrl.searchParams.set("state", pkceState);
-          continue;
-        }
-        authUrl.searchParams.set(key, value);
+    if (adapter.authConfig.type === "oauth2") {
+      const config = adapter.authConfig as OAuthConfig;
+      const state = generateState(session.user.id, from);
+      const clientId = getOAuthClientId(appName);
+      const redirectUri = `${APP_URL}/callback/${appName}`;
+
+      const authUrl = new URL(config.authorizeUrl);
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("state", state);
+
+      if (config.scopes.length > 0) {
+        authUrl.searchParams.set("scope", config.scopes.join(" "));
       }
+
+      // 讓 adapter 自己聲明需要的額外 OAuth 參數（access_type, prompt, owner 等）
+      if (config.extraParams) {
+        for (const [key, value] of Object.entries(config.extraParams)) {
+          // U21: PKCE — 如果 adapter 聲明需要 code_challenge_method，自動產生 PKCE 參數
+          if (key === "code_challenge_method" && value === "S256") {
+            // 產生 code_verifier（43-128 字元的隨機 base64url 字串）
+            const codeVerifier = randomBytes(32).toString("base64url");
+            // 計算 code_challenge = base64url(sha256(code_verifier))
+            const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+            authUrl.searchParams.set("code_challenge_method", "S256");
+            authUrl.searchParams.set("code_challenge", codeChallenge);
+            // 把 code_verifier 加密嵌入 state 參數（不依賴 cookie，避免跨站丟失）
+            // 重新產生 state，把 code_verifier 放進 payload
+            const pkceState = generateState(session.user.id, from, codeVerifier);
+            authUrl.searchParams.set("state", pkceState);
+            continue;
+          }
+          authUrl.searchParams.set(key, value);
+        }
+      }
+
+      return NextResponse.redirect(authUrl.toString());
     }
 
-    return NextResponse.redirect(authUrl.toString());
+    // API key / Bot token / Phone auth — return instructions
+    const instructions = (adapter.authConfig as ApiKeyConfig | PhoneAuthConfig).instructions;
+    return NextResponse.json({
+      authType: adapter.authConfig.type,
+      instructions,
+    });
+  } catch (error) {
+    // 啟動 OAuth 連接流程失敗
+    console.error("[CONNECT_GET]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  // API key / Bot token / Phone auth — return instructions
-  const instructions = (adapter.authConfig as ApiKeyConfig | PhoneAuthConfig).instructions;
-  return NextResponse.json({
-    authType: adapter.authConfig.type,
-    instructions,
-  });
 }
 
 // ── Phone Auth 暫存（send_code → verify 之間保留 TelegramClient） ──
@@ -388,22 +394,28 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ app: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { app: appName } = await params;
+
+    await db
+      .update(connectedApps)
+      .set({ status: "revoked", updatedAt: new Date() })
+      .where(
+        and(
+          eq(connectedApps.userId, session.user.id),
+          eq(connectedApps.appName, appName),
+        ),
+      );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    // 斷開 App 連接失敗
+    console.error("[CONNECT_DELETE]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const { app: appName } = await params;
-
-  await db
-    .update(connectedApps)
-    .set({ status: "revoked", updatedAt: new Date() })
-    .where(
-      and(
-        eq(connectedApps.userId, session.user.id),
-        eq(connectedApps.appName, appName),
-      ),
-    );
-
-  return NextResponse.json({ success: true });
 }
