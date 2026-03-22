@@ -18,6 +18,8 @@ const ENV_PREFIX_MAP: Record<string, string> = {
   github: "GITHUB_APP",
   // Slack 獨立
   slack: "SLACK",
+  // Todoist 獨立
+  todoist: "TODOIST",
   // Canva 獨立
   canva: "CANVA",
   // Gamma 獨立

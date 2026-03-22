@@ -6,8 +6,7 @@
  * 1. connectedApps — 所有已連結 App 的 token
  * 2. operations — 所有使用紀錄
  * 3. memory — 所有記憶
- * 4. schedules — 所有排程
- * 5. conversations — 所有 Bot 對話
+ * 4. conversations — 所有 Bot 對話
  * 6. botConfigs — 所有 Bot 設定
  * 7. subscriptions — 訂閱記錄
  * 8. storedResults — 暫存的大回傳
@@ -24,7 +23,6 @@ import {
   connectedApps,
   operations,
   memory,
-  schedules,
   conversations,
   botConfigs,
   subscriptions,
@@ -72,10 +70,7 @@ export async function DELETE(request: NextRequest) {
       // 3. 刪除所有記憶
       await tx.delete(memory).where(eq(memory.userId, userId));
 
-      // 4. 刪除所有排程
-      await tx.delete(schedules).where(eq(schedules.userId, userId));
-
-      // 5. 刪除所有 Bot 對話
+      // 4. 刪除所有 Bot 對話
       await tx.delete(conversations).where(eq(conversations.userId, userId));
 
       // 6. 刪除所有 Bot 設定
@@ -96,7 +91,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      message: "帳號已永久刪除。所有資料（包括已連接的 App token、記憶、使用紀錄、SOP 和排程）已全部清除。",
+      message: "帳號已永久刪除。所有資料（包括已連接的 App token、記憶、使用紀錄、SOP）已全部清除。",
     });
   } catch (err) {
     console.error("[account-delete] Failed to delete account:", err);

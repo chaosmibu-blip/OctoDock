@@ -48,6 +48,8 @@ const APP_KEYS: Array<{ name: string; displayName: string; descKey: string; auth
   // 社群
   { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
   { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
+  // 待辦
+  { name: "todoist", displayName: "Todoist", descKey: "app.todoist.desc" },
   // 設計
   { name: "canva", displayName: "Canva", descKey: "app.canva.desc" },
   // 簡報
@@ -409,18 +411,6 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
               className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
             >
               {t("nav.bots")}
-            </Link>
-            <Link
-              href="/skill-tree"
-              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              {t("nav.skill_tree")}
-            </Link>
-            <Link
-              href="/schedules"
-              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              {t("nav.schedules")}
             </Link>
             <Link
               href="/preferences"

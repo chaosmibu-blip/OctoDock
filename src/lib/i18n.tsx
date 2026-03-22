@@ -78,7 +78,6 @@ const translations: Record<Locale, Record<string, string>> = {
     // Nav
     "nav.bots": "Bot 設定",
     "nav.skill_tree": "技能樹",
-    "nav.schedules": "排程",
     "nav.memory": "記憶",
 
     // Apps
@@ -92,6 +91,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.youtube.desc": "搜尋影片、查看播放清單和留言",
     "app.threads.desc": "發布貼文、回覆和查看洞察",
     "app.instagram.desc": "發布照片、管理留言和查看洞察",
+    "app.todoist.desc": "管理任務、專案、標籤和留言",
     "app.github.desc": "管理 repo、issue、PR 和查看程式碼",
     "app.line.desc": "發送訊息、廣播和管理追蹤者",
     "app.telegram.desc": "發送訊息、照片和管理 Bot Webhook",
@@ -492,7 +492,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // U23: 帳號刪除
     "account.delete_title": "危險區域",
-    "account.delete_desc": "刪除帳號後，所有資料（連結的 App、記憶、操作紀錄、排程）將永久移除，無法復原。",
+    "account.delete_desc": "刪除帳號後，所有資料（連結的 App、記憶、操作紀錄）將永久移除，無法復原。",
     "account.delete_btn": "刪除帳號",
     "account.delete_confirm_title": "確認刪除帳號",
     "account.delete_confirm_desc": "此操作不可復原。請輸入 DELETE 以確認刪除。",
@@ -539,16 +539,6 @@ const translations: Record<Locale, Record<string, string>> = {
     "feedback.cancel": "取消",
     "feedback.missing_app": "沒有找到你要的 App？告訴我們",
 
-    // Schedules
-    "schedules.title": "排程管理",
-    "schedules.empty": "尚無排程",
-    "schedules.empty_hint": "透過 AI 用 octodock_do(app:\"system\", action:\"schedule_create\") 建立排程",
-    "schedules.active": "啟用中",
-    "schedules.paused": "已暫停",
-    "schedules.pause": "暫停",
-    "schedules.resume": "恢復",
-    "schedules.last_run": "上次執行",
-    "schedules.next_run": "下次執行",
   },
   en: {
     // Common
@@ -617,7 +607,6 @@ const translations: Record<Locale, Record<string, string>> = {
     // Nav
     "nav.bots": "Bots",
     "nav.skill_tree": "Skill Tree",
-    "nav.schedules": "Schedules",
     "nav.memory": "Memory",
 
     // Apps
@@ -631,6 +620,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.youtube.desc": "Search videos, view playlists and comments",
     "app.threads.desc": "Publish posts, reply, and view insights",
     "app.instagram.desc": "Publish photos, manage comments, and view insights",
+    "app.todoist.desc": "Manage tasks, projects, labels, and comments",
     "app.github.desc": "Manage repos, issues, PRs, and view code",
     "app.line.desc": "Send messages, broadcast, and manage followers",
     "app.telegram.desc": "Send messages, photos, and manage Bot webhooks",
@@ -1031,7 +1021,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // U23: Account deletion
     "account.delete_title": "Danger Zone",
-    "account.delete_desc": "Deleting your account will permanently remove all data (connected apps, memories, operation logs, schedules). This cannot be undone.",
+    "account.delete_desc": "Deleting your account will permanently remove all data (connected apps, memories, operation logs). This cannot be undone.",
     "account.delete_btn": "Delete Account",
     "account.delete_confirm_title": "Confirm Account Deletion",
     "account.delete_confirm_desc": "This action is irreversible. Type DELETE to confirm.",
@@ -1078,16 +1068,6 @@ const translations: Record<Locale, Record<string, string>> = {
     "feedback.cancel": "Cancel",
     "feedback.missing_app": "Can't find your app? Let us know",
 
-    // Schedules
-    "schedules.title": "Schedules",
-    "schedules.empty": "No schedules yet",
-    "schedules.empty_hint": "Create schedules via AI: octodock_do(app:\"system\", action:\"schedule_create\")",
-    "schedules.active": "Active",
-    "schedules.paused": "Paused",
-    "schedules.pause": "Pause",
-    "schedules.resume": "Resume",
-    "schedules.last_run": "Last run",
-    "schedules.next_run": "Next run",
   },
 };
 

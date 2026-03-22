@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "octodock": {
-      "command": "node",
-      "args": ["dist/index.mjs"],
-      "env": {}
-    }
-  }
-}

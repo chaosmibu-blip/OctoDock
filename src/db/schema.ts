@@ -173,43 +173,7 @@ export const conversations = pgTable(
 );
 
 // ============================================================
-// 4.6 schedules（Phase 5：排程引擎）
-// 用戶設定的排程任務，時間到時由 OctoDock 內部執行
-// 簡單排程用規則引擎（零成本），需要理解的用內部 Haiku
-// ============================================================
-export const schedules = pgTable(
-  "schedules",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    name: text("name").notNull(), // 排程名稱，例如「每週五週報」
-    cronExpression: text("cron_expression").notNull(), // cron 格式，例如 "0 17 * * 5"
-    timezone: text("timezone").default("Asia/Taipei"), // 用戶時區
-    actionType: text("action_type").notNull(), // 'simple' | 'sop' | 'ai'
-    // simple: 直接執行 octodock_do 指令（規則引擎，零成本）
-    // sop: 執行指定的 SOP（內部 AI 讀 SOP 並一步步執行）
-    // ai: 用自然語言描述任務（內部 AI 理解並執行）
-    actionConfig: jsonb("action_config").notNull(),
-    // simple: { app, action, params }
-    // sop: { sop_name }
-    // ai: { prompt }
-    isActive: boolean("is_active").default(true), // 啟用/停用
-    lastRunAt: timestamp("last_run_at", { withTimezone: true }), // 最近一次執行時間
-    lastRunResult: jsonb("last_run_result"), // 最近一次執行結果
-    nextRunAt: timestamp("next_run_at", { withTimezone: true }), // 下次預計執行時間
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-  },
-  (table) => [
-    index("idx_schedules_user").on(table.userId),
-    index("idx_schedules_next_run").on(table.nextRunAt).where(sql`is_active = true`),
-  ],
-);
-
-// ============================================================
-// 4.7 subscriptions（Phase 6：訂閱管理）
+// 4.6 subscriptions（Phase 6：訂閱管理）
 // 記錄用戶的付費方案、付款來源、到期時間
 // 支援三種付款渠道：Paddle（網站）、IAP（iOS）、ECPay（台灣企業）
 // ============================================================

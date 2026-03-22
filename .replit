@@ -1,5 +1,5 @@
 modules = ["nodejs-20", "web", "postgresql-16"]
-run = "npm run dev & node scripts/scheduler-ticker.js & wait"
+run = "npm run dev"
 hidden = [".config", ".git", "node_modules", ".next"]
 
 [nix]
@@ -34,7 +34,7 @@ PORT = "3000"
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["sh", "-c", "npm run start & node scripts/scheduler-ticker.js & wait"]
+run = ["sh", "-c", "npm run start"]
 build = ["npm", "run", "build"]
 
 [workflows]

@@ -4,8 +4,6 @@ import { botConfigs, operations } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { decrypt } from "@/lib/crypto";
 import { handleAutoReply } from "@/services/auto-reply";
-import { emitEvent } from "@/mcp/events/event-bus";
-
 interface WebhookEvent {
   platform: string;
   botId: string;
@@ -97,23 +95,8 @@ async function processWebhookEvent(event: WebhookEvent): Promise<void> {
     return;
   }
 
-  // Log the incoming message as an operation + 推送事件到 Channel Plugin
+  // Log the incoming message as an operation
   for (const config of configs) {
-    // 推送事件到 event-bus（Channel Plugin 會透過 SSE 收到）
-    // 不傳 raw payload（可能含 token/auth 資訊）
-    emitEvent(
-      config.userId,
-      event.platform,
-      "message",
-      `New ${event.platform} message from ${event.userId}: ${event.message.slice(0, 100)}`,
-      {
-        source: event.platform,
-        sender: event.userId,
-        chat_id: event.chatId,
-        has_reply_token: !!event.replyToken,
-      },
-    );
-
     db.insert(operations)
       .values({
         userId: config.userId,

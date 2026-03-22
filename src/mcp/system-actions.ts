@@ -10,12 +10,6 @@ import {
   deleteAllMemory,
   exportMemory,
 } from "@/services/memory-engine";
-import {
-  createSchedule,
-  listSchedules,
-  toggleSchedule,
-  deleteSchedule,
-} from "@/services/scheduler";
 import type { DoResult } from "@/adapters/types";
 
 // ============================================================
@@ -51,11 +45,6 @@ export const systemActionMap: Record<string, string> = {
   get_stored: "system_get_stored",
   // 通用 HTTP 請求（混合模式）
   http_request: "system_http_request",
-  // 排程引擎（Phase 5）
-  schedule_list: "system_schedule_list",
-  schedule_create: "system_schedule_create",
-  schedule_toggle: "system_schedule_toggle",
-  schedule_delete: "system_schedule_delete",
   // G 組：System API — AI 操作輔助層
   batch_do: "system_batch_do",         // G1: 批次執行
   resolve_name: "system_resolve_name", // G5: 名稱解析為 ID
@@ -87,13 +76,6 @@ export function getSystemSkill(): string {
   sop_delete(name) — delete a SOP
   note(text) — quick note for cross-agent memory
   import_memory(memories) — batch import memories from AI (for onboarding)
-  schedule_list() — list all scheduled tasks
-  schedule_create(name, cron, action_type, action_config, timezone?) — create schedule
-    action_type: "simple" (direct do call) | "sop" (run a SOP) | "ai" (natural language task)
-    action_config: {app, action, params} for simple | {sop_name} for sop | {prompt} for ai
-    cron: standard 5-field cron expression (min hour day month weekday)
-  schedule_toggle(schedule_id, is_active) — enable/disable schedule
-  schedule_delete(schedule_id) — delete schedule
   get_stored(ref, lines?) — retrieve full content of a truncated response (e.g. ref:"abc123", lines:"50-100")
   find_tool(task) — find the right app and action for a task (e.g. "send an email", "create a note")
   http_request(url, method?, headers?, body?) — make a generic HTTP request to any API (requires user's connected app token)
@@ -101,7 +83,7 @@ export function getSystemSkill(): string {
   resolve_name(name, app?, type?) — resolve a human-readable name to an ID (e.g. "MIBU-Notes" → page ID). Searches memory first, then app APIs.
   param_suggest(app, action) — get suggested default params for an action based on user's history and patterns
   multi_search(query, apps?) — search across multiple apps at once. Returns unified format results. apps: array of app names (default: all connected)
-SOPs and schedules persist across agents and sessions.`;
+SOPs persist across agents and sessions.`;
 }
 
 /**
@@ -381,7 +363,7 @@ export async function executeSystemAction(
             // 英文
             "email": ["gmail"],
             "calendar": ["calendar", "event"],
-            "schedule": ["calendar", "event", "schedule"],
+            "schedule": ["calendar", "event"],
             "spreadsheet": ["sheets"],
             "presentation": ["canva", "gamma"],
             "issue": ["github"],
@@ -401,7 +383,7 @@ export async function executeSystemAction(
             "日曆": ["calendar"],
             "行事曆": ["calendar"],
             "活動": ["calendar", "event"],
-            "排程": ["schedule"],
+            "排程": ["calendar", "event"],
             // 中文 — 檔案
             "檔案": ["drive", "file"],
             "文件": ["docs", "drive", "notion"],
@@ -413,8 +395,8 @@ export async function executeSystemAction(
             "表格": ["sheets", "spreadsheet"],
             "工作表": ["sheets"],
             // 中文 — 待辦
-            "待辦": ["tasks", "todo"],
-            "任務": ["tasks", "todo"],
+            "待辦": ["tasks", "todo", "todoist"],
+            "任務": ["tasks", "todo", "todoist"],
             "清單": ["tasks", "list"],
             // 中文 — 影音
             "影片": ["youtube", "video"],
@@ -565,11 +547,6 @@ export async function executeSystemAction(
       };
     }
 
-    // ============================================================
-    // 排程引擎（Phase 5）
-    // 讓用戶設定定時任務，OctoDock 在時間到時自動執行
-    // ============================================================
-
     // ── 通用 HTTP 請求（混合模式）──
     // 讓 AI 可以呼叫未預定義的 API endpoint
     // 用於長尾需求：核心功能用預定義 action，邊緣功能用 http_request
@@ -685,56 +662,6 @@ export async function executeSystemAction(
       } catch (err) {
         return { ok: false, error: `Request failed: ${err instanceof Error ? err.message : "Unknown error"}` };
       }
-    }
-
-    // ── 排程列表 ──
-    case "schedule_list": {
-      const items = await listSchedules(userId);
-      if (items.length === 0) {
-        return { ok: true, data: "No schedules found. Create one with schedule_create." };
-      }
-      const list = items.map((s) => {
-        const status = s.isActive ? "✅" : "⏸️";
-        const config = s.actionConfig as Record<string, unknown>;
-        let desc = "";
-        if (s.actionType === "simple") desc = `do(${config.app}/${config.action})`;
-        else if (s.actionType === "sop") desc = `SOP: ${config.sop_name}`;
-        else if (s.actionType === "ai") desc = `AI: ${String(config.prompt).substring(0, 50)}`;
-        const lastRun = s.lastRunAt ? ` | last: ${new Date(s.lastRunAt).toLocaleString()}` : "";
-        const nextRun = s.nextRunAt ? ` | next: ${new Date(s.nextRunAt).toLocaleString()}` : "";
-        return `${status} **${s.name}** (${s.cronExpression}) — ${desc}\n  ID: ${s.id}${lastRun}${nextRun}`;
-      }).join("\n");
-      return { ok: true, data: `## Your Schedules\n\n${list}` };
-    }
-
-    // ── 建立排程 ──
-    case "schedule_create": {
-      const id = await createSchedule(
-        userId,
-        params.name as string,
-        params.cron as string,
-        params.action_type as string,
-        params.action_config as Record<string, unknown>,
-        params.timezone as string | undefined,
-      );
-      return { ok: true, data: `Schedule "${params.name}" created. ID: ${id}` };
-    }
-
-    // ── 啟用/停用排程 ──
-    case "schedule_toggle": {
-      await toggleSchedule(
-        userId,
-        params.schedule_id as string,
-        params.is_active as boolean,
-      );
-      const status = params.is_active ? "enabled" : "disabled";
-      return { ok: true, data: `Schedule ${status}.` };
-    }
-
-    // ── 刪除排程 ──
-    case "schedule_delete": {
-      await deleteSchedule(userId, params.schedule_id as string);
-      return { ok: true, data: "Schedule deleted." };
     }
 
     // ============================================================

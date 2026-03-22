@@ -32,7 +32,7 @@ export default function TermsPage() {
             <p className="mt-3">
               OctoDock provides a unified MCP (Model Context Protocol) endpoint that allows AI
               agents to interact with multiple third-party applications on your behalf. The Service
-              includes app connections, cross-agent memory, bot auto-reply, and scheduled operations.
+              includes app connections, cross-agent memory, and bot auto-reply.
             </p>
           </section>
 

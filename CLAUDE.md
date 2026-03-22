@@ -6,6 +6,17 @@
 
 OctoDock 是一個面向非技術用戶的基礎設施產品。用戶只需設定一個 MCP URL，就能讓任何 AI agent 操作所有已授權的 App，並擁有跨 agent 共享的操作記憶。
 
+**OctoDock 的定位：做 Claude Code 做不到的事，不重複 Claude Code 已有的功能。**
+
+三個核心方向：
+1. **跨 App 操作層**：讓 AI 一句話同時操作多個 App（Notion + Gmail + GitHub + Calendar 等），這是 Claude Code 內建 connector 做不到的深度整合
+2. **記憶層**：跨 session、跨 agent 記住用戶偏好、操作模式、常用 ID。不管用戶用哪個 AI、開幾個 session，記憶都在
+3. **AI 使用體驗優化層**：pre-context（操作前自動查現狀）、action-chain（操作後建議下一步）、param-suggest（自動補參數）、SOP 自動偵測（重複操作自動變工作流）、response compression（大回傳壓縮）
+
+不做的事（用 Claude Code 本身的功能）：
+- 排程 → 用 Claude Code 的 /loop、Desktop /schedule、雲端排程
+- Channel 即時推送 → 用 Claude Code 的官方 Telegram/Discord Channel
+
 ## 技術棧
 
 - **語言**：TypeScript
@@ -50,13 +61,6 @@ Markdown 流程文件，存在 memory 表 category='sop'。AI 透過 do/help 取
 2. OctoDock 自動偵測重複操作 → 建議存成 SOP
 3. OctoDock 主動優化 SOP（合併步驟、建議排程）
 
-### 排程引擎
-
-cron-based 排程，三種類型：
-- simple：規則引擎直接執行（零成本）
-- sop：內部 AI 讀 SOP 執行
-- ai：內部 AI 理解自然語言執行
-
 ### 訂閱系統
 
 三條收款線：Paddle（網站）、IAP（iOS，未來）、ECPay（台灣企業）。
@@ -87,7 +91,7 @@ cron-based 排程，三種類型：
 7. **用戶介面多語系**：Dashboard 等用戶看的介面預設繁中
 8. **所有程式碼都要加註解**：每個函式、每個區塊都要有中文註解說明用途和邏輯
 9. **時間統一台灣時間（UTC+8）**：cron 表達式、log、報告、跟用戶溝通，全部用台灣時間
-10. **優先使用 OctoDock 自有功能**：排程用 OctoDock schedule 系統而非 crontab；操作已連結的 App（Notion/Gmail/GitHub 等）用 OctoDock MCP 而非直接呼叫 API；記憶和 SOP 用 OctoDock memory/sop 系統。只有 OctoDock 沒有的功能才用其他方式
+10. **優先使用 OctoDock 自有功能**：操作已連結的 App（Notion/Gmail/GitHub 等）用 OctoDock MCP 而非直接呼叫 API；記憶和 SOP 用 OctoDock memory/sop 系統。只有 OctoDock 沒有的功能才用其他方式。排程用 Claude Code 的 /loop 或雲端排程，Channel 用 Claude Code 官方的 Telegram/Discord plugin
 
 ## Adapter 品質基準線
 
