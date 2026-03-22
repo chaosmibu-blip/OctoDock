@@ -86,6 +86,8 @@ cron-based 排程，三種類型：
 6. **MCP 工具描述英文**：name 和 description 一律英文（模型理解最佳）
 7. **用戶介面多語系**：Dashboard 等用戶看的介面預設繁中
 8. **所有程式碼都要加註解**：每個函式、每個區塊都要有中文註解說明用途和邏輯
+9. **時間統一台灣時間（UTC+8）**：cron 表達式、log、報告、跟用戶溝通，全部用台灣時間
+10. **優先使用 OctoDock 自有功能**：排程用 OctoDock schedule 系統而非 crontab；操作已連結的 App（Notion/Gmail/GitHub 等）用 OctoDock MCP 而非直接呼叫 API；記憶和 SOP 用 OctoDock memory/sop 系統。只有 OctoDock 沒有的功能才用其他方式
 
 ## Adapter 品質基準線
 
