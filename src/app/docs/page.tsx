@@ -7,6 +7,7 @@ import Link from "next/link";
 export const metadata = {
   title: "Documentation - OctoDock",
   description: "OctoDock documentation for developers and users",
+  alternates: { canonical: "https://octo-dock.com/docs" },
 };
 
 export default function DocsPage() {

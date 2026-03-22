@@ -3,6 +3,8 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Privacy Policy - OctoDock",
+  description: "OctoDock privacy policy — how we handle your data and connected app tokens.",
+  alternates: { canonical: "https://octo-dock.com/privacy" },
 };
 
 export default function PrivacyPage() {

@@ -3,6 +3,8 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Terms of Service - OctoDock",
+  description: "OctoDock terms of service — usage rules for the unified MCP endpoint.",
+  alternates: { canonical: "https://octo-dock.com/terms" },
 };
 
 export default function TermsPage() {

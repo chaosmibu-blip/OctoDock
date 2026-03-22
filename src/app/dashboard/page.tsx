@@ -10,6 +10,7 @@ import { DashboardClient } from "./dashboard-client";
 export const metadata: Metadata = {
   title: "Dashboard | OctoDock",
   description: "管理你的 MCP 連結、App 和 AI 工具設定",
+  robots: { index: false, follow: false },
 };
 
 export default async function DashboardPage() {
