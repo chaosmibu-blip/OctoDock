@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useI18n, LanguageSwitcher } from "@/lib/i18n";
 import Image from "next/image";
@@ -63,7 +62,6 @@ export function SchedulesClient({ schedules: initialSchedules }: SchedulesProps)
   const [schedules, setSchedules] = useState(initialSchedules);
   const [toggling, setToggling] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const router = useRouter();
   const { t } = useI18n();
 
   /** 啟停排程 */

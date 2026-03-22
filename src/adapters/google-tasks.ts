@@ -217,7 +217,6 @@ function formatTask(task: GTaskItem): string {
 }
 
 // ── do+help 架構：格式化回應（將原始資料轉為 AI 友善格式）─
-/* eslint-disable @typescript-eslint/no-explicit-any */
 function formatResponse(action: string, rawData: unknown): string {
   if (typeof rawData !== "object" || rawData === null) return String(rawData);
   const data = rawData as Record<string, unknown>;

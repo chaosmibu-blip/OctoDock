@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { connectedApps, operations } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { loadAdapters, getAllAdapters } from "@/mcp/registry";
 import { loadCombos, getCombosWithStatus } from "@/combos/registry";
 import { discoverCombos } from "@/combos/auto-discover";

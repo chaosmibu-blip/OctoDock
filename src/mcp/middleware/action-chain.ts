@@ -14,7 +14,6 @@ const SUGGESTION_PROBABILITY_THRESHOLD = 0.6;
 /** E1: 統計的歷史天數 */
 const CHAIN_HISTORY_DAYS = 30;
 /** E1: 後續操作的時間窗口（毫秒） */
-const CHAIN_WINDOW_MS = 5 * 60 * 1000; // 5 分鐘
 /** E4: 跨 App 關聯的最大回傳筆數 */
 const MAX_CROSS_APP_RESULTS = 3;
 

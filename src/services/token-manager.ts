@@ -109,7 +109,7 @@ async function refreshAndUpdateToken(
       );
 
     return tokenSet.access_token;
-  } catch (error) {
+  } catch (_error) {
     // Mark as expired on refresh failure
     await db
       .update(connectedApps)

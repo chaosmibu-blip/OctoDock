@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { botConfigs } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { encrypt, decrypt } from "@/lib/crypto";
+import { encrypt } from "@/lib/crypto";
 
 // GET /api/bot-config — List user's bot configs (without sensitive data)
 export async function GET() {
