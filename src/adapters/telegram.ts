@@ -25,17 +25,35 @@ const authConfig: BotTokenConfig = {
 
 const TG_API = "https://api.telegram.org";
 
+/** Bot API 請求超時時間（毫秒） */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 // ── Telegram API fetch 封裝 ──────────────────────────────
 async function tgFetch(
   method: string,
   token: string,
   body?: Record<string, unknown>,
 ): Promise<unknown> {
-  const res = await fetch(`${TG_API}/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  /* AbortController 超時保護，避免請求無限掛起 */
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${TG_API}/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    clearTimeout(timer);
+    if (err?.name === "AbortError") {
+      throw new Error("Telegram Bot API 請求逾時 (TG_BOT_REQUEST_TIMEOUT)");
+    }
+    throw err;
+  }
+  clearTimeout(timer);
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ description: res.statusText }));

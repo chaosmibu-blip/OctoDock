@@ -210,8 +210,18 @@ export async function POST(
 
         const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
           connectionRetries: 3,
+          retryDelay: 1000,
+          timeout: 10,
         }) as unknown as TgClient;
-        await client.connect();
+
+        /* 連線超時保護（15 秒），避免 MTProto DC 不通時無限等待 */
+        const connectPromise = client.connect();
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(
+            "Telegram 連線逾時，請稍後再試 (TG_CONNECT_TIMEOUT)"
+          )), 15_000);
+        });
+        await Promise.race([connectPromise, timeoutPromise]);
 
         const sendCodeResult = await client.invoke(new Api.auth.SendCode({
           phoneNumber: phone,

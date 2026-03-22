@@ -44,6 +44,9 @@ function getTgCredentials(): { apiId: number; apiHash: string } {
   return { apiId, apiHash };
 }
 
+/** 連線超時時間（毫秒） */
+const CONNECT_TIMEOUT_MS = 15_000;
+
 /** 建立 TelegramClient 並連線（token = StringSession 字串） */
 async function createClient(sessionString: string) {
   const { TelegramClient, StringSession } = await getGramJS();
@@ -52,9 +55,18 @@ async function createClient(sessionString: string) {
     new StringSession(sessionString),
     apiId,
     apiHash,
-    { connectionRetries: 3, retryDelay: 1000 },
+    { connectionRetries: 3, retryDelay: 1000, timeout: 10 },
   );
-  await client.connect();
+
+  /* 加上連線超時保護，避免 MTProto DC 不通時無限等待 */
+  const connectPromise = client.connect();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(
+      "Telegram 連線逾時，請稍後再試 (TG_CONNECT_TIMEOUT)"
+    )), CONNECT_TIMEOUT_MS);
+  });
+  await Promise.race([connectPromise, timeoutPromise]);
+
   return client;
 }
 
