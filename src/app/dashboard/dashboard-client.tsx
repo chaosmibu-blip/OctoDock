@@ -50,6 +50,10 @@ const APP_KEYS: Array<{ name: string; displayName: string; descKey: string; auth
   { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
   // 待辦
   { name: "todoist", displayName: "Todoist", descKey: "app.todoist.desc" },
+  // Microsoft Office
+  { name: "microsoft_excel", displayName: "Excel", descKey: "app.microsoft_excel.desc" },
+  { name: "microsoft_word", displayName: "Word", descKey: "app.microsoft_word.desc" },
+  { name: "microsoft_powerpoint", displayName: "PowerPoint", descKey: "app.microsoft_powerpoint.desc" },
   // 設計
   { name: "canva", displayName: "Canva", descKey: "app.canva.desc" },
   // 簡報

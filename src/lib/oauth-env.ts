@@ -20,6 +20,10 @@ const ENV_PREFIX_MAP: Record<string, string> = {
   slack: "SLACK",
   // Todoist 獨立
   todoist: "TODOIST",
+  // Microsoft 系列共用
+  microsoft_excel: "MICROSOFT",
+  microsoft_word: "MICROSOFT",
+  microsoft_powerpoint: "MICROSOFT",
   // Canva 獨立
   canva: "CANVA",
   // Gamma 獨立

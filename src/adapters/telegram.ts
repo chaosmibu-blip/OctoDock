@@ -46,9 +46,9 @@ async function tgFetch(
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     clearTimeout(timer);
-    if (err?.name === "AbortError") {
+    if (err instanceof Error && err.name === "AbortError") {
       throw new Error("Telegram Bot API 請求逾時 (TG_BOT_REQUEST_TIMEOUT)");
     }
     throw err;

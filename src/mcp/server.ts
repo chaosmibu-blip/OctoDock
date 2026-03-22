@@ -1155,6 +1155,9 @@ function registerHelpTool(
               instagram: "publish（發佈貼文）、get_posts（取得貼文）、get_comments（取得留言）",
               canva: "list_designs（設計列表）、create_design（建立設計）、export_design（匯出設計）",
               slack: "send_message（發送訊息）、list_channels（頻道列表）、get_messages（訊息歷史）",
+              microsoft_excel: "read_range（讀取儲存格）、write_range（寫入儲存格）、list_worksheets（工作表列表）",
+              microsoft_word: "create_document（建立文件）、read_document（讀取文件）、export_pdf（匯出 PDF）",
+              microsoft_powerpoint: "create_presentation（建立簡報）、read_presentation（讀取簡報）、export_pdf（匯出 PDF）",
             };
             const hint = TOP3_HINTS[app];
             if (hint) {

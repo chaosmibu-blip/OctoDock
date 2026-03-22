@@ -38,6 +38,10 @@ async function importAllAdapters(): Promise<void> {
     import("@/adapters/slack"),
     import("@/adapters/threads"),
     import("@/adapters/instagram"),
+    // Microsoft Office
+    import("@/adapters/microsoft-excel"),
+    import("@/adapters/microsoft-word"),
+    import("@/adapters/microsoft-powerpoint"),
     // 設計
     import("@/adapters/canva"),
     // 簡報

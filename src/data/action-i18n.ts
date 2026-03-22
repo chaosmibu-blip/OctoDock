@@ -207,6 +207,27 @@ const ACTION_ZH: Record<string, string> = {
   "telegram_user.forward_messages": "轉發訊息",
   "telegram_user.get_folders": "資料夾列表",
 
+  /* ── Microsoft Excel ── */
+  "microsoft_excel.list_files": "Excel 檔案列表",
+  "microsoft_excel.read_range": "讀取儲存格",
+  "microsoft_excel.write_range": "寫入儲存格",
+  "microsoft_excel.list_worksheets": "工作表列表",
+  "microsoft_excel.create_workbook": "建立活頁簿",
+  "microsoft_excel.list_tables": "表格列表",
+  "microsoft_excel.add_chart": "建立圖表",
+
+  /* ── Microsoft Word ── */
+  "microsoft_word.create_document": "建立文件",
+  "microsoft_word.read_document": "讀取文件",
+  "microsoft_word.list_files": "Word 檔案列表",
+  "microsoft_word.export_pdf": "匯出 PDF",
+
+  /* ── Microsoft PowerPoint ── */
+  "microsoft_powerpoint.create_presentation": "建立簡報",
+  "microsoft_powerpoint.read_presentation": "讀取簡報",
+  "microsoft_powerpoint.list_files": "PPT 檔案列表",
+  "microsoft_powerpoint.export_pdf": "匯出 PDF",
+
   /* ── Discord ── */
   "discord.send_message": "發送訊息",
   "discord.edit_message": "編輯訊息",

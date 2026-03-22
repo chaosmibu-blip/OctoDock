@@ -100,6 +100,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.slack.desc": "發送訊息、管理頻道、使用者和釘選",
     "app.canva.desc": "管理設計、匯出 PDF/PNG、素材和資料夾",
     "app.gamma.desc": "AI 生成簡報、文件，支援匯出 PDF/PPTX/PNG",
+    "app.microsoft_excel.desc": "讀寫儲存格、建立表格和圖表、管理工作表",
+    "app.microsoft_word.desc": "建立和讀取 Word 文件、匯出 PDF",
+    "app.microsoft_powerpoint.desc": "建立簡報、讀取投影片內容、匯出 PDF",
 
     // Bots
     "bots.title": "Bot 自動回覆設定",
@@ -629,6 +632,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.slack.desc": "Send messages, manage channels, users, and pins",
     "app.canva.desc": "Manage designs, export PDF/PNG, assets, and folders",
     "app.gamma.desc": "AI-generated presentations and documents, export PDF/PPTX/PNG",
+    "app.microsoft_excel.desc": "Read/write cells, create tables and charts, manage worksheets",
+    "app.microsoft_word.desc": "Create and read Word documents, export PDF",
+    "app.microsoft_powerpoint.desc": "Create presentations, read slide content, export PDF",
 
     // Bots
     "bots.title": "Bot Auto-Reply Settings",
