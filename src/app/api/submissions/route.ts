@@ -7,8 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { appSubmissions } from "@/db/schema";
 
-/* 通知 email（同 feedback 系統） */
-const NOTIFY_EMAIL = "s8869420@gmail.com";
+/* 通知 email（從環境變數讀取，不硬編碼） */
+const NOTIFY_EMAIL = process.env.FEEDBACK_EMAIL || "";
 
 export async function POST(req: NextRequest) {
   try {

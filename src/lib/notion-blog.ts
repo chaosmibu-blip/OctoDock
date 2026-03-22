@@ -4,8 +4,8 @@
  * 用 NOTION_BLOG_TOKEN 環境變數（Internal Integration Token）直接查 Notion API
  */
 
-// ── Blog 資料庫 ID ──
-const BLOG_DATABASE_ID = "328a9617-875f-81f5-8923-c66e691c57d0";
+// ── Blog 資料庫 ID（從環境變數讀取，不硬編碼） ──
+const BLOG_DATABASE_ID = process.env.NOTION_BLOG_DATABASE_ID || "";
 const NOTION_API = "https://api.notion.com/v1";
 
 // ── 文章資料型別 ──

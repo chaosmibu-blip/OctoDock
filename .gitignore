@@ -26,6 +26,7 @@
 .cache/
 .claude/settings.local.json
 .claude/projects/
+.claude/skills/
 
 # debug
 npm-debug.log*

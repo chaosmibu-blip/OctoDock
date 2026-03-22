@@ -320,36 +320,22 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
     }
   }, [router]);
 
-  /** 反饋表單送出 — 同時存 DB + FormSubmit.co 寄信 */
+  /** 反饋表單送出 — API route 負責存 DB + 寄信 */
   const handleFeedbackSubmit = useCallback(async () => {
     if (!feedbackContent.trim()) return;
     setFeedbackStatus("submitting");
     try {
-      /* 並行：存 DB + 寄 email */
-      const [dbRes, emailRes] = await Promise.all([
-        fetch("/api/feedback", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            category: feedbackCategory,
-            content: feedbackContent,
-            email: feedbackEmail || user.email,
-          }),
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: feedbackCategory,
+          content: feedbackContent,
+          email: feedbackEmail || user.email,
+          userName: user.name,
         }),
-        fetch("https://formsubmit.co/ajax/s8869420@gmail.com", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({
-            _subject: `[OctoDock Feedback] ${feedbackCategory}`,
-            category: feedbackCategory,
-            content: feedbackContent,
-            email: feedbackEmail || user.email,
-            user_name: user.name,
-          }),
-        }),
-      ]);
-      const res = dbRes.ok ? emailRes : dbRes; // 只要 DB 成功就算成功
-      if (res.ok || dbRes.ok) {
+      });
+      if (res.ok) {
         setFeedbackStatus("success");
         // 2 秒後關閉並重置表單
         setTimeout(() => {
