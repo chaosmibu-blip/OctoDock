@@ -9,6 +9,7 @@ import { z } from "zod";
 import type {
   AppAdapter,
   BotTokenConfig,
+  EntityInfo,
   ToolDefinition,
   ToolResult,
 } from "./types";
@@ -639,6 +640,28 @@ function formatError(action: string, errorMessage: string): string | null {
 }
 
 // ── Adapter 匯出 ──────────────────────────────────────────
+// ── 實體擷取：從伺服器頻道列表中提取名稱→ID 映射 ───────
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function extractEntities(action: string, rawData: unknown): EntityInfo[] {
+  const entities: EntityInfo[] = [];
+
+  switch (action) {
+    // 伺服器頻道列表：提取頻道名稱→channel ID
+    case "get_guild_channels": {
+      if (!Array.isArray(rawData)) break;
+      for (const c of rawData as any[]) {
+        if (c.name && c.id) {
+          entities.push({ name: c.name, id: String(c.id), type: "channel" });
+        }
+      }
+      break;
+    }
+  }
+
+  return entities;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const discordAdapter: AppAdapter = {
   name: "discord",
   displayName: { zh: "Discord", en: "Discord" },
@@ -650,5 +673,6 @@ export const discordAdapter: AppAdapter = {
   getSkill,
   formatResponse,
   formatError,
+  extractEntities,
   execute,
 };

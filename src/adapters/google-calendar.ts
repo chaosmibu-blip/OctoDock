@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  EntityInfo,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
@@ -897,6 +898,53 @@ const refreshGcalToken = (token: string) =>
   refreshGoogleToken(token, "Google Calendar", "GCAL_REFRESH_FAILED");
 
 // ── Adapter 匯出 ─────────────────────────────────────────
+// ── 實體擷取：從事件列表中提取事件名稱→event ID 映射 ────
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function extractEntities(action: string, rawData: unknown): EntityInfo[] {
+  const entities: EntityInfo[] = [];
+  if (typeof rawData !== "object" || rawData === null) return entities;
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // 事件列表：提取事件摘要→event ID
+    case "get_events": {
+      const items = (data as any).items as any[] | undefined;
+      if (!items) break;
+      for (const event of items) {
+        if (event.summary && event.id) {
+          entities.push({ name: event.summary, id: String(event.id), type: "event" });
+        }
+      }
+      break;
+    }
+    // 週期事件實例列表：同樣提取事件
+    case "list_recurring": {
+      const items = (data as any).items as any[] | undefined;
+      if (!items) break;
+      for (const event of items) {
+        if (event.summary && event.id) {
+          entities.push({ name: event.summary, id: String(event.id), type: "event" });
+        }
+      }
+      break;
+    }
+    // 日曆列表：提取日曆名稱→calendar ID
+    case "list_calendars": {
+      const items = (data as any).items as any[] | undefined;
+      if (!items) break;
+      for (const cal of items) {
+        if (cal.summary && cal.id) {
+          entities.push({ name: cal.summary, id: String(cal.id), type: "calendar" });
+        }
+      }
+      break;
+    }
+  }
+
+  return entities;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const googleCalendarAdapter: AppAdapter = {
   name: "google_calendar",
   displayName: { zh: "Google 日曆", en: "Google Calendar" },
@@ -907,6 +955,7 @@ export const googleCalendarAdapter: AppAdapter = {
   getSkill,
   formatResponse,
   formatError,
+  extractEntities,
   tools,
   execute,
   refreshToken: refreshGcalToken,

@@ -1607,73 +1607,33 @@ async function learnFromResult(
   userId: string,
   appName: string,
   action: string,
-  params: Record<string, unknown>,
+  _params: Record<string, unknown>,
   result: DoResult,
 ): Promise<void> {
-  // 只有 Notion 目前需要學習（未來其他 App 再擴充）
-  if (appName !== "notion") return;
   if (!result.data || typeof result.data !== "object") return;
 
-  const data = result.data as Record<string, unknown>;
+  // ── 架構層統一學習：透過 adapter 的 extractEntities 提取可學習的實體 ──
+  // 每個 adapter 自行定義「從哪些 action 的回傳中提取什麼實體」
+  // 架構層只負責呼叫 learnIdentifier，不需要知道各 App 的資料結構
+  const adapter = (await import("@/mcp/registry")).getAdapter(appName);
+  if (adapter?.extractEntities) {
+    const entities = adapter.extractEntities(action, result.data);
+    for (const entity of entities) {
+      if (entity.name && entity.id) {
+        learnIdentifier(userId, appName, entity.name, entity.id, entity.type).catch(() => {});
+      }
+    }
+  }
 
-  // ── 單一資源操作：學習 title → id ──
+  // ── 通用 fallback：從 DoResult.title + data.id 學習（所有 App 適用）──
+  const data = result.data as Record<string, unknown>;
   const id = data.id as string | undefined;
   if (id && result.title) {
-    const entityType = (data.object as string) === "database" ? "database" : "page";
-    await learnIdentifier(userId, appName, result.title, id, entityType);
-  }
-
-  // ── 搜尋 / 資料庫查詢：從結果列表中批次學習 ──
-  const results = data.results as Array<Record<string, unknown>> | undefined;
-  if (results && Array.isArray(results)) {
-    // 最多學習前 10 筆，避免大量寫入
-    const toLearn = results.slice(0, 10);
-    for (const item of toLearn) {
-      const itemId = item.id as string | undefined;
-      if (!itemId) continue;
-
-      const itemTitle = extractTitleFromItem(item);
-      if (!itemTitle) continue;
-
-      const entityType = (item.object as string) === "database" ? "database" : "page";
-      // 非同步學習，不阻塞主流程
-      learnIdentifier(userId, appName, itemTitle, itemId, entityType).catch(() => {});
-    }
+    learnIdentifier(userId, appName, result.title, id, "resource").catch(() => {});
   }
 }
 
-/**
- * 從 Notion API 的搜尋結果項目中提取標題
- * Notion 的標題可能在不同位置，取決於物件類型
- */
-function extractTitleFromItem(item: Record<string, unknown>): string | undefined {
-  const props = item.properties as Record<string, unknown> | undefined;
-  if (!props) return undefined;
-
-  // 嘗試從 title 屬性取得（頁面）
-  if (props.title) {
-    const titleProp = props.title as { title?: Array<{ plain_text: string }> };
-    if (titleProp.title?.[0]?.plain_text) {
-      return titleProp.title[0].plain_text;
-    }
-  }
-
-  // 嘗試從 Name 屬性取得（資料庫項目常用 Name 欄位）
-  if (props.Name) {
-    const nameProp = props.Name as { title?: Array<{ plain_text: string }> };
-    if (nameProp.title?.[0]?.plain_text) {
-      return nameProp.title[0].plain_text;
-    }
-  }
-
-  // 嘗試從資料庫的 title 陣列取得
-  const titleArr = item.title as Array<{ plain_text: string }> | undefined;
-  if (titleArr?.[0]?.plain_text) {
-    return titleArr[0].plain_text;
-  }
-
-  return undefined;
-}
+// extractTitleFromItem 已移至各 adapter 的 extractEntities 實作
 
 /**
  * C5: 通用 fallback — 從 rawResult 嘗試提取 id、title/name、url

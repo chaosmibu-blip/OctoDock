@@ -8,6 +8,7 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  EntityInfo,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
@@ -654,6 +655,42 @@ async function execute(
 
 // ── Adapter 匯出 ─────────────────────────────────────────
 // 注意：Slack Bot Token 不過期，不需要 refreshToken
+// ── 實體擷取：從列表結果中提取名稱→ID 映射 ─────────────
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function extractEntities(action: string, rawData: unknown): EntityInfo[] {
+  const entities: EntityInfo[] = [];
+  if (typeof rawData !== "object" || rawData === null) return entities;
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // 頻道列表：提取頻道名稱→channel ID
+    case "list_channels": {
+      const channels = (data.channels ?? []) as any[];
+      for (const c of channels) {
+        if (c.name && c.id) {
+          entities.push({ name: c.name, id: String(c.id), type: "channel" });
+        }
+      }
+      break;
+    }
+    // 使用者列表：提取顯示名稱→user ID（排除已刪除和 bot）
+    case "list_users": {
+      const members = (data.members ?? []) as any[];
+      for (const u of members) {
+        if (u.deleted || u.is_bot) continue;
+        const displayName = u.real_name ?? u.name;
+        if (displayName && u.id) {
+          entities.push({ name: displayName, id: String(u.id), type: "user" });
+        }
+      }
+      break;
+    }
+  }
+
+  return entities;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const slackAdapter: AppAdapter = {
   name: "slack",
   displayName: { zh: "Slack", en: "Slack" },
@@ -664,6 +701,7 @@ export const slackAdapter: AppAdapter = {
   getSkill,
   formatResponse,
   formatError,
+  extractEntities,
   tools,
   execute,
 };

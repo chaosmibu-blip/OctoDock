@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  EntityInfo,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
@@ -609,6 +610,31 @@ const refreshSheetsToken = (token: string) =>
   refreshGoogleToken(token, "Google Sheets", "GSHEETS_REFRESH_FAILED");
 
 // ── Adapter 匯出 ─────────────────────────────────────────
+// ── 實體擷取：從試算表資訊中提取工作表名稱→sheet ID 映射 ─
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function extractEntities(action: string, rawData: unknown): EntityInfo[] {
+  const entities: EntityInfo[] = [];
+  if (typeof rawData !== "object" || rawData === null) return entities;
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // 取得試算表資訊：提取工作表名稱→sheet ID
+    case "get": {
+      const sheets = data.sheets as Array<{ properties: { title: string; sheetId: number } }> | undefined;
+      if (!sheets) break;
+      for (const s of sheets) {
+        if (s.properties?.title != null && s.properties?.sheetId != null) {
+          entities.push({ name: s.properties.title, id: String(s.properties.sheetId), type: "sheet" });
+        }
+      }
+      break;
+    }
+  }
+
+  return entities;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const googleSheetsAdapter: AppAdapter = {
   name: "google_sheets",
   displayName: { zh: "Google 試算表", en: "Google Sheets" },
@@ -619,6 +645,7 @@ export const googleSheetsAdapter: AppAdapter = {
   getSkill,
   formatResponse,
   formatError: sheetsFormatError,
+  extractEntities,
   tools,
   execute,
   refreshToken: refreshSheetsToken,

@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  EntityInfo,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
@@ -1653,6 +1654,48 @@ async function refreshGithubToken(refreshToken: string): Promise<TokenSet> {
 }
 
 // ── Adapter 匯出 ─────────────────────────────────────────
+// ── 實體擷取：從列表結果中提取名稱→ID 映射 ─────────────
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function extractEntities(action: string, rawData: unknown): EntityInfo[] {
+  const entities: EntityInfo[] = [];
+
+  switch (action) {
+    // 倉庫列表：提取 full_name 作為名稱和 ID（GitHub 用 full_name 操作）
+    case "list_repos": {
+      if (!Array.isArray(rawData)) break;
+      for (const r of rawData as any[]) {
+        if (r.full_name) {
+          entities.push({ name: r.full_name, id: r.full_name, type: "repo" });
+        }
+      }
+      break;
+    }
+    // Issue 列表：提取標題→issue 編號
+    case "list_issues": {
+      if (!Array.isArray(rawData)) break;
+      for (const i of rawData as any[]) {
+        if (i.title && i.number != null) {
+          entities.push({ name: i.title, id: String(i.number), type: "issue" });
+        }
+      }
+      break;
+    }
+    // PR 列表：提取標題→PR 編號
+    case "list_prs": {
+      if (!Array.isArray(rawData)) break;
+      for (const p of rawData as any[]) {
+        if (p.title && p.number != null) {
+          entities.push({ name: p.title, id: String(p.number), type: "pull_request" });
+        }
+      }
+      break;
+    }
+  }
+
+  return entities;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const githubAdapter: AppAdapter = {
   name: "github",
   displayName: { zh: "GitHub", en: "GitHub" },
@@ -1663,6 +1706,7 @@ export const githubAdapter: AppAdapter = {
   getSkill,
   formatResponse,
   formatError,
+  extractEntities,
   tools,
   execute,
   refreshToken: refreshGithubToken,

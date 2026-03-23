@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  EntityInfo,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
 } from "./types";
+import { extractNotionTitle } from "./types";
 import { NOTION_MAX_BLOCKS, NOTION_API_BLOCK_LIMIT } from "@/lib/constants";
 
 // ============================================================
@@ -1703,6 +1705,51 @@ function notionFormatError(action: string, errorMessage: string): string | null 
   return null;
 }
 
+/**
+ * 從 Notion 操作結果中提取可學習的實體（名稱→ID）
+ * 涵蓋：搜尋結果、資料庫查詢、get_page 的子頁面/子資料庫
+ */
+function extractEntities(action: string, rawData: unknown): EntityInfo[] {
+  if (typeof rawData !== "object" || rawData === null) return [];
+  const data = rawData as Record<string, unknown>;
+  const entities: EntityInfo[] = [];
+
+  // ── 搜尋 / 資料庫查詢：從 results 陣列學習 ──
+  const results = data.results as Array<Record<string, unknown>> | undefined;
+  if (results && Array.isArray(results)) {
+    for (const item of results) {
+      const itemId = item.id as string | undefined;
+      if (!itemId) continue;
+      const title = extractNotionTitle(item);
+      if (!title) continue;
+      const type = (item.object as string) === "database" ? "database" : "page";
+      entities.push({ name: title, id: itemId, type });
+    }
+  }
+
+  // ── get_page：從 blocks 中學習子頁面/子資料庫 ──
+  if (action === "get_page") {
+    const blocksData = data.blocks as Record<string, unknown> | undefined;
+    const blockList = (blocksData?.results || blocksData) as Array<Record<string, unknown>> | undefined;
+    if (blockList && Array.isArray(blockList)) {
+      for (const block of blockList) {
+        const blockType = block.type as string | undefined;
+        const blockId = block.id as string | undefined;
+        if (!blockId) continue;
+        if (blockType === "child_page") {
+          const childTitle = (block.child_page as { title?: string } | undefined)?.title;
+          if (childTitle) entities.push({ name: childTitle, id: blockId, type: "page" });
+        } else if (blockType === "child_database") {
+          const childTitle = (block.child_database as { title?: string } | undefined)?.title;
+          if (childTitle) entities.push({ name: childTitle, id: blockId, type: "database" });
+        }
+      }
+    }
+  }
+
+  return entities;
+}
+
 export const notionAdapter: AppAdapter = {
   name: "notion",
   displayName: { zh: "Notion", en: "Notion" },
@@ -1710,10 +1757,10 @@ export const notionAdapter: AppAdapter = {
   authType: "oauth2",
   authConfig,
   tools,
-  actionMap, // do + help 架構：簡化 action → 內部工具對應
-  getSkill, // do + help 架構：回傳精簡操作說明
-  formatResponse, // G1/G3 通用框架：raw JSON → AI 友善格式（Markdown）
-  formatError: notionFormatError, // B3：智慧錯誤引導
+  actionMap,
+  getSkill,
+  formatResponse,
+  formatError: notionFormatError,
   execute,
-  // Notion token 不會過期 — 不需要 refreshToken
+  extractEntities, // 架構層自動學習：從回傳中提取 名稱→ID 映射
 };

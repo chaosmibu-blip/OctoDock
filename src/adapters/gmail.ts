@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  EntityInfo,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
@@ -1098,6 +1099,42 @@ function formatError(action: string, errorMessage: string): string | null {
 }
 
 // ── Adapter 匯出 ─────────────────────────────────────────
+// ── 實體擷取：從搜尋/列表結果中提取名稱→ID 映射 ─────────
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function extractEntities(action: string, rawData: unknown): EntityInfo[] {
+  const entities: EntityInfo[] = [];
+  if (typeof rawData !== "object" || rawData === null) return entities;
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // 搜尋結果：提取郵件主旨→message ID
+    case "search": {
+      const messages = Array.isArray(rawData) ? rawData : (data.messages as any[]);
+      if (!messages) break;
+      for (const e of messages) {
+        if (e.subject && e.id) {
+          entities.push({ name: e.subject, id: String(e.id), type: "message" });
+        }
+      }
+      break;
+    }
+    // 對話串列表：提取主旨→thread ID
+    case "list_threads": {
+      const threads = Array.isArray(rawData) ? rawData : (data.threads as any[]);
+      if (!threads) break;
+      for (const t of threads) {
+        if (t.subject && t.id) {
+          entities.push({ name: t.subject, id: String(t.id), type: "message" });
+        }
+      }
+      break;
+    }
+  }
+
+  return entities;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const gmailAdapter: AppAdapter = {
   name: "gmail",
   displayName: { zh: "Gmail", en: "Gmail" },
@@ -1108,6 +1145,7 @@ export const gmailAdapter: AppAdapter = {
   getSkill,
   formatResponse,
   formatError,
+  extractEntities,
   tools,
   execute,
   refreshToken: refreshGmailToken,

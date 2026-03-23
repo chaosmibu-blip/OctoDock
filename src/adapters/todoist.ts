@@ -8,6 +8,7 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  EntityInfo,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
@@ -910,6 +911,58 @@ async function execute(
 }
 
 // ── Adapter 匯出 ──────────────────────────────────────────
+// ── 實體擷取：從列表結果中提取名稱→ID 映射 ─────────────
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function extractEntities(action: string, rawData: unknown): EntityInfo[] {
+  const entities: EntityInfo[] = [];
+
+  switch (action) {
+    // 任務列表：提取任務內容→task ID
+    case "list_tasks": {
+      if (!Array.isArray(rawData)) break;
+      for (const t of rawData as any[]) {
+        if (t.content && t.id) {
+          entities.push({ name: t.content, id: String(t.id), type: "task" });
+        }
+      }
+      break;
+    }
+    // 專案列表：提取專案名稱→project ID
+    case "list_projects": {
+      if (!Array.isArray(rawData)) break;
+      for (const p of rawData as any[]) {
+        if (p.name && p.id) {
+          entities.push({ name: p.name, id: String(p.id), type: "project" });
+        }
+      }
+      break;
+    }
+    // 區段列表：提取區段名稱→section ID
+    case "list_sections": {
+      if (!Array.isArray(rawData)) break;
+      for (const s of rawData as any[]) {
+        if (s.name && s.id) {
+          entities.push({ name: s.name, id: String(s.id), type: "section" });
+        }
+      }
+      break;
+    }
+    // 標籤列表：提取標籤名稱→label ID
+    case "list_labels": {
+      if (!Array.isArray(rawData)) break;
+      for (const l of rawData as any[]) {
+        if (l.name && l.id) {
+          entities.push({ name: l.name, id: String(l.id), type: "label" });
+        }
+      }
+      break;
+    }
+  }
+
+  return entities;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const todoistAdapter: AppAdapter = {
   name: "todoist",
   displayName: { zh: "Todoist", en: "Todoist" },
@@ -921,5 +974,6 @@ export const todoistAdapter: AppAdapter = {
   getSkill,
   formatResponse,
   formatError,
+  extractEntities,
   execute,
 };

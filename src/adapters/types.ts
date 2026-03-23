@@ -147,8 +147,22 @@ export interface AppAdapter {
   /** C5: 從操作結果中提取結構化摘要（optional，有預設 fallback） */
   extractSummary?(action: string, rawResult: unknown): Record<string, unknown> | null;
 
+  /**
+   * 從操作結果中提取可學習的實體（名稱→ID 映射）
+   * 架構層會自動呼叫 learnIdentifier 學習回傳的實體
+   * 讓 AI 下次能直接用自然語言名稱操作，不用查 ID
+   */
+  extractEntities?(action: string, rawData: unknown): EntityInfo[];
+
   /** OAuth token 過期時的自動刷新（Notion 不需要，Google 等需要） */
   refreshToken?(refreshToken: string): Promise<TokenSet>;
+}
+
+/** 可學習的實體資訊（名稱→ID 映射） */
+export interface EntityInfo {
+  name: string;   // 實體名稱（頁面標題、檔名、repo 名稱等）
+  id: string;     // 實體 ID
+  type: string;   // 實體類型（page, file, repo, message, event, task 等）
 }
 
 // ============================================================

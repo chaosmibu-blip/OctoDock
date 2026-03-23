@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  EntityInfo,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
@@ -1038,6 +1039,31 @@ const refreshGDriveToken = (token: string) =>
   refreshGoogleToken(token, "Google Drive", "GDRIVE_REFRESH_FAILED");
 
 // ── Adapter 匯出 ─────────────────────────────────────────
+// ── 實體擷取：從搜尋結果中提取檔名→file ID 映射 ─────────
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function extractEntities(action: string, rawData: unknown): EntityInfo[] {
+  const entities: EntityInfo[] = [];
+  if (typeof rawData !== "object" || rawData === null) return entities;
+  const data = rawData as Record<string, unknown>;
+
+  switch (action) {
+    // 搜尋結果：提取檔名→file ID
+    case "search": {
+      const files = Array.isArray(rawData) ? rawData : (data.files as any[]);
+      if (!files) break;
+      for (const f of files) {
+        if (f.name && f.id) {
+          entities.push({ name: f.name, id: String(f.id), type: "file" });
+        }
+      }
+      break;
+    }
+  }
+
+  return entities;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const googleDriveAdapter: AppAdapter = {
   name: "google_drive",
   displayName: { zh: "Google Drive", en: "Google Drive" },
@@ -1048,6 +1074,7 @@ export const googleDriveAdapter: AppAdapter = {
   getSkill,
   formatResponse,
   formatError,
+  extractEntities,
   tools,
   execute,
   refreshToken: refreshGDriveToken,
