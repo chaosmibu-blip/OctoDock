@@ -35,10 +35,11 @@ export async function analyzePatterns(
   _toolName: string,
 ): Promise<void> {
   try {
-    // 並行執行多種分析
+    // 並行執行多種分析（含跨 App 模式偵測）
     await Promise.all([
       analyzeFrequentActions(userId, appName),
       analyzeFrequentParams(userId, appName),
+      analyzeCrossAppPatterns(userId),
     ]);
   } catch (err) {
     // 分析失敗不影響主流程
@@ -125,31 +126,95 @@ async function analyzeFrequentParams(
     .orderBy(desc(operations.createdAt))
     .limit(50);
 
-  // 統計 parent_id 使用頻率（Notion 特有）
-  if (appName === "notion") {
-    const parentCounts = new Map<string, number>();
+  // 統計常用的預設參數（folder/database/calendar 等）
+  // 各 App 的 key → param 欄位映射
+  const DEFAULT_PARAM_KEYS: Record<string, { paramField: string; memoryKey: string }[]> = {
+    notion: [
+      { paramField: "parent_id", memoryKey: `default_parent:${appName}` },
+      { paramField: "database_id", memoryKey: `default_database:${appName}` },
+    ],
+    google_calendar: [
+      { paramField: "calendar_id", memoryKey: `default_calendar:${appName}` },
+    ],
+  };
 
-    for (const op of recentOps) {
-      const params = op.params as Record<string, unknown> | null;
-      if (!params) continue;
-      const parentId = params.parent_id as string | undefined;
-      if (parentId) {
-        parentCounts.set(parentId, (parentCounts.get(parentId) ?? 0) + 1);
+  const paramConfigs = DEFAULT_PARAM_KEYS[appName];
+  if (paramConfigs) {
+    for (const config of paramConfigs) {
+      const valueCounts = new Map<string, number>();
+
+      for (const op of recentOps) {
+        const params = op.params as Record<string, unknown> | null;
+        if (!params) continue;
+        const val = params[config.paramField] as string | undefined;
+        if (val) {
+          valueCounts.set(val, (valueCounts.get(val) ?? 0) + 1);
+        }
       }
-    }
 
-    // 找出最常用的 parent（預設資料夾）
-    for (const [parentId, count] of parentCounts.entries()) {
-      if (count >= MIN_OPS_FOR_PATTERN) {
-        await storeMemory(
-          userId,
-          `default_parent:${appName}`,
-          parentId,
-          "pattern",
-          appName,
-        );
-        break; // 只記錄最常用的一個
+      // 找出最常用的值
+      let topValue = "";
+      let topCount = 0;
+      for (const [val, count] of valueCounts.entries()) {
+        if (count > topCount) {
+          topValue = val;
+          topCount = count;
+        }
+      }
+
+      if (topCount >= MIN_OPS_FOR_PATTERN) {
+        await storeMemory(userId, config.memoryKey, topValue, "pattern", appName);
       }
     }
   }
+}
+
+/**
+ * 分析跨 App 操作模式
+ * 偵測「A app 操作後 5 分鐘內接 B app」的組合模式
+ * 例如：notion.create_page 之後接 telegram.send_message
+ */
+async function analyzeCrossAppPatterns(userId: string): Promise<void> {
+  const since = new Date();
+  since.setDate(since.getDate() - ANALYSIS_WINDOW_DAYS);
+
+  // 用 SQL window function 找跨 App 的前後操作序對
+  const rows = await db.execute(sql`
+    WITH ordered_ops AS (
+      SELECT
+        app_name,
+        action,
+        created_at,
+        LEAD(app_name) OVER (ORDER BY created_at) AS next_app,
+        LEAD(action) OVER (ORDER BY created_at) AS next_action,
+        LEAD(created_at) OVER (ORDER BY created_at) AS next_time
+      FROM operations
+      WHERE user_id = ${userId}
+        AND success = true
+        AND created_at >= ${since}
+    )
+    SELECT
+      app_name || '.' || action AS current_step,
+      next_app || '.' || next_action AS next_step,
+      COUNT(*) AS cnt
+    FROM ordered_ops
+    WHERE next_app IS NOT NULL
+      AND app_name != next_app
+      AND next_time - created_at <= interval '5 minutes'
+    GROUP BY app_name, action, next_app, next_action
+    HAVING COUNT(*) >= ${MIN_OPS_FOR_PATTERN}
+    ORDER BY cnt DESC
+    LIMIT 5
+  `);
+
+  const pairs = rows.rows as unknown as Array<{ current_step: string; next_step: string; cnt: string }>;
+  if (!pairs || pairs.length === 0) return;
+
+  // 將跨 App 模式存為 pattern 記憶（null appName 表示跨 App）
+  const crossAppSummary = pairs
+    .map((p) => `${p.current_step} → ${p.next_step} (${p.cnt}x)`)
+    .join("\n");
+
+  // appName 留空 = 跨 App 記憶
+  await storeMemory(userId, "cross_app_patterns", crossAppSummary, "pattern");
 }

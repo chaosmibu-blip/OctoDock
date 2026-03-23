@@ -15,7 +15,6 @@ import { cleanHiddenChars, convertTimestamps } from "./response-formatter";
 import { checkParams } from "./middleware/param-guard";
 import { learnFromError } from "./middleware/error-learner";
 import { checkUsageLimit, incrementUsage } from "./middleware/usage-limit";
-// suggestion-engine 已廢棄（N 組實測：AI 完全不看 suggestions/ai_hints/user_notices）
 import { learnIdentifier, resolveIdentifier, listMemory, queryMemory } from "@/services/memory-engine";
 import { detectSopCandidate } from "@/services/sop-detector";
 import {
@@ -565,11 +564,15 @@ function registerDoTool(
         }
       }
 
-      // P3: 標註自動套用的偏好參數
+      // P3: 標註自動套用的偏好參數（讓 AI 告知用戶可以覆蓋）
       if (result.ok && appliedPrefs.length > 0) {
-        const prefText = appliedPrefs.map((p) => `${p.key} → ${p.value}`).join(", ");
+        const prefText = appliedPrefs.map((p) => {
+          // 將 ID 格式化成可讀的提示
+          const displayKey = p.key.replace(/_id$/, "").replace(/_/g, " ");
+          return `Auto-filled ${displayKey}: ${p.value}. Override by specifying ${p.key} explicitly.`;
+        }).join("\n");
         const existing = result.context ? result.context + "\n\n" : "";
-        result.context = existing + `Auto-applied preferences: ${prefText}`;
+        result.context = existing + prefText;
       }
 
       // C5: 操作結果帶結構化摘要
@@ -1254,16 +1257,30 @@ async function applyPreferences(
 ): Promise<AppliedPref[]> {
   const applied: AppliedPref[] = [];
   try {
-    // 查詢與 app + action 相關的偏好記憶
-    const prefs = await queryMemory(userId, `${app} ${action} default`, "preference", app, 5);
-    for (const pref of prefs) {
-      // 偏好 key 格式：「default:calendar_id」或「default_calendar_id」
+    // 同時搜 preference 和 pattern 兩個類別
+    // pattern-analyzer 把 default_parent:notion 存在 "pattern" 類別
+    // 用戶手動存的偏好在 "preference" 類別
+    const [prefs, patterns] = await Promise.all([
+      queryMemory(userId, `${app} ${action} default`, "preference", app, 5),
+      queryMemory(userId, `default ${app}`, "pattern", app, 5),
+    ]);
+    const allMatches = [...prefs, ...patterns];
+
+    for (const pref of allMatches) {
+      // 偏好 key 格式：「default:calendar_id」「default_parent:notion」「default_calendar_id」
       // 從 key 中提取參數名稱
-      const match = pref.key.match(/^default[_:](.+)$/);
+      const match = pref.key.match(/^default[_:](.+?)(?::.*)?$/);
       if (match) {
-        const paramKey = match[1];
-        // 只在用戶沒有明確傳入該參數時才補入
-        if (!(paramKey in params)) {
+        let paramKey = match[1];
+        // default_parent:notion → paramKey = "parent"，要映射到 "parent_id"
+        if (paramKey === "parent" && app === "notion") paramKey = "parent_id";
+        if (paramKey === "calendar" && app === "google_calendar") paramKey = "calendar_id";
+        if (paramKey === "database" && app === "notion") paramKey = "database_id";
+
+        // 只在用戶沒有明確傳入該參數（也沒有 alias 版本）時才補入
+        const aliases = AUTOFILL_ALIASES[paramKey] ?? [paramKey];
+        const alreadyProvided = aliases.some((a) => a in params);
+        if (!alreadyProvided) {
           params[paramKey] = pref.value;
           applied.push({ key: paramKey, value: pref.value });
         }
@@ -1274,6 +1291,13 @@ async function applyPreferences(
   }
   return applied;
 }
+
+/** 自動補參數時，檢查這些 alias 是否已由用戶傳入 */
+const AUTOFILL_ALIASES: Record<string, string[]> = {
+  parent_id: ["parent_id", "folder", "parent"],
+  database_id: ["database_id", "database"],
+  calendar_id: ["calendar_id", "calendar"],
+};
 
 // ============================================================
 // 參數格式轉換層（Phase 1.3）
@@ -1757,9 +1781,8 @@ function registerSopTool(
         return { content: [{ type: "text" as const, text: match.value }] };
       }
 
-      // 取所有 SOP
-      const allSops = await listMemory(userId);
-      let sops = allSops.filter((m) => m.category === "sop");
+      // 直接查 SOP 類別（不再取全部再 filter，避免超過 50 筆 limit 時遺漏 SOP）
+      let sops = await listMemory(userId, "sop");
 
       // 帶 category → 過濾該 App 相關的
       if (category) {

@@ -1190,7 +1190,8 @@ export async function executeSystemAction(
           pdfBuffer = Buffer.from(await res.arrayBuffer());
         }
 
-        const pdfParse = (await import("pdf-parse")).default;
+        // 繞過 pdf-parse/index.js 的 debug auto-run（會讀 ./test/data/05-versions-space.pdf）
+        const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
         const parsed = await pdfParse(pdfBuffer);
         return {
           ok: true,
@@ -1350,7 +1351,8 @@ export async function executeSystemAction(
         if (!res.ok) return { ok: false, error: `Failed to download PDF: ${res.status}` };
         const buffer = Buffer.from(await res.arrayBuffer());
 
-        const pdfParse = (await import("pdf-parse")).default;
+        // 繞過 pdf-parse/index.js 的 debug auto-run（會讀 ./test/data/05-versions-space.pdf）
+        const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
         const parsed = await pdfParse(buffer);
         return {
           ok: true,
@@ -1703,6 +1705,8 @@ interface MemoryForRender {
   value: string;
   category: string;
   appName: string | null;
+  confidence: number | null;
+  lastUsedAt: Date | null;
 }
 
 /** 將記憶陣列渲染成分類好的 Markdown 文字 */
@@ -1721,7 +1725,16 @@ function renderMemoryAsMarkdown(memories: MemoryForRender[]): string {
     sections.push(`### ${category}`);
     for (const item of items) {
       const app = item.appName ? ` (${item.appName})` : "";
-      sections.push(`- **${item.key}**${app}: ${item.value}`);
+      // 附加 confidence 和 lastUsedAt 讓 AI 判斷記憶健康度
+      const meta: string[] = [];
+      if (item.confidence !== null && item.confidence !== undefined) {
+        meta.push(`confidence: ${item.confidence.toFixed(2)}`);
+      }
+      if (item.lastUsedAt) {
+        meta.push(`lastUsed: ${item.lastUsedAt instanceof Date ? item.lastUsedAt.toISOString().slice(0, 10) : String(item.lastUsedAt).slice(0, 10)}`);
+      }
+      const metaStr = meta.length > 0 ? ` _(${meta.join(", ")})_` : "";
+      sections.push(`- **${item.key}**${app}: ${item.value}${metaStr}`);
     }
   }
 
