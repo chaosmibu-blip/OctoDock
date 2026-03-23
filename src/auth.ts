@@ -27,7 +27,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user.id) {
         await db
           .update(users)
-          .set({ mcpApiKey: generateMcpApiKey() })
+          .set({ mcpApiKey: generateMcpApiKey(), updatedAt: new Date() })
           .where(eq(users.id, user.id));
       }
     },

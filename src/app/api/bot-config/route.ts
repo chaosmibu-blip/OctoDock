@@ -78,6 +78,7 @@ export async function PUT(req: NextRequest) {
   if (llmProvider !== undefined) updates.llmProvider = llmProvider;
   if (llmApiKey !== undefined) updates.llmApiKey = llmApiKey ? encrypt(llmApiKey) : null;
   if (isActive !== undefined) updates.isActive = isActive;
+  updates.updatedAt = new Date();
 
   await db
     .update(botConfigs)

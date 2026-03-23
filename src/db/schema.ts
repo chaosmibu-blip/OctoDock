@@ -284,6 +284,7 @@ export const botConfigs = pgTable("bot_configs", {
   llmApiKey: text("llm_api_key"), // encrypted, user-provided
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 // 4.11 feedback（用戶反饋記錄）
