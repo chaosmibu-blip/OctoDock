@@ -809,7 +809,9 @@ async function execute(
       const buffer = Buffer.from(await dlRes.arrayBuffer());
 
       // 2. 用 pdf-parse 提取文字
-      const pdfParse = (await import("pdf-parse")).default;
+      // 注意：直接 import("pdf-parse") 會觸發它的 debug 模式（讀 ./test/data/05-versions-space.pdf）
+      // 改用 pdf-parse/lib/pdf-parse.js 繞過 index.js 的 auto-run 測試碼
+      const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
       const pdfData = await pdfParse(buffer);
 
       // 3. 掃描型 PDF（無文字層）回傳提示

@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import crypto from "crypto";
 import { db } from "@/db";
 import { subscriptions } from "@/db/schema";
-import { eq } from "drizzle-orm";
 
 // ============================================================
 // 綠界 ECPay Webhook 處理器
@@ -116,8 +115,8 @@ function extractUserIdFromTradeNo(tradeNo: string): string | null {
   // 實際格式需要跟建立訂單的邏輯一致
   if (!tradeNo || !tradeNo.startsWith("AD")) return null;
   // userId 前 8 碼在 AD 後面
-  const shortId = tradeNo.slice(2, 10);
-  // TODO: 從 DB 用前 8 碼模糊查找 userId
+  const _shortId = tradeNo.slice(2, 10);
+  // TODO: 從 DB 用前 8 碼（_shortId）模糊查找 userId
   // 暫時回傳 null，等建立訂單邏輯確定後再完善
   return null;
 }

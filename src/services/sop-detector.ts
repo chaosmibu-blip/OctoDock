@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { operations } from "@/db/schema";
-import { eq, and, desc, gte } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 
 // ============================================================
 // SOP 自動辨識引擎（Phase 8）
@@ -42,11 +42,12 @@ export async function detectSopCandidate(
     const since = new Date();
     since.setDate(since.getDate() - ANALYSIS_WINDOW_DAYS);
 
-    // 取得最近的操作記錄
+    // 取得最近的操作記錄（含 params，用於統計常用參數）
     const recentOps = await db
       .select({
         appName: operations.appName,
         action: operations.action,
+        params: operations.params,
         createdAt: operations.createdAt,
       })
       .from(operations)
@@ -129,16 +130,30 @@ export async function detectSopCandidate(
         finalSopName = `${sopName} ${suffix}`;
       }
       if (!existing.find((r) => r.key === finalSopName)) {
-        // 自動產生 SOP 內容（Markdown 格式）
+        // 統計每一步最常用的參數，區分固定值和動態值
+        const stepParams = analyzeStepParams(recentOps, candidate.pattern);
+
+        // 用最終 action 推斷流程描述
+        const sopDescription = inferSopDescription(candidate.pattern);
+
+        // 自動產生 SOP 內容（Markdown 格式，含參數建議）
         const sopContent = [
           `# ${finalSopName}`,
           ``,
+          sopDescription,
           `自動偵測的操作流程（出現 ${candidate.count} 次）`,
           `序列：${patternKey}`,
           ``,
           `## 步驟`,
           ...candidate.pattern.map((p, i) => {
             const [app, action] = p.split(".");
+            const paramHints = stepParams[i];
+            if (paramHints && paramHints.length > 0) {
+              const paramStr = paramHints.map((h) =>
+                h.isDynamic ? `${h.key}: <${h.description}>` : `${h.key}: "${h.value}"`,
+              ).join(", ");
+              return `${i + 1}. \`octodock_do(app:"${app}", action:"${action}", params:{${paramStr}})\``;
+            }
             return `${i + 1}. \`octodock_do(app:"${app}", action:"${action}")\``;
           }),
           ``,
@@ -165,6 +180,7 @@ export async function detectSopCandidate(
 interface OpRecord {
   appName: string;
   action: string;
+  params: unknown;
   createdAt: Date | null;
 }
 
@@ -236,4 +252,115 @@ function findRepeatingPattern(
   }
 
   return best;
+}
+
+// ============================================================
+// 參數分析 — 從操作歷史統計每一步的常用參數
+// ============================================================
+
+/** 參數提示：固定值 or 動態值 */
+interface ParamHint {
+  key: string; // 參數名稱
+  value: string; // 最常見的值（固定值）或空字串（動態值）
+  isDynamic: boolean; // true = 每次不同（如 title），false = 固定值（如 repo）
+  description: string; // 動態值的描述（如「每次不同的標題」）
+}
+
+/** 不該出現在 SOP 參數提示裡的大型內容欄位 */
+const CONTENT_FIELDS = new Set([
+  "content", "text", "body", "description", "message",
+  "markdown", "html", "raw", "data", "payload", "children",
+  "blocks", "rich_text", "caption",
+]);
+
+/**
+ * 分析 pattern 中每一步最常用的參數
+ * 從操作歷史裡找出匹配步驟的所有操作，統計參數值頻率
+ * 固定值（> 70% 相同）直接填入，動態值（每次不同）標記為 <動態>
+ */
+function analyzeStepParams(
+  allOps: OpRecord[],
+  pattern: string[],
+): ParamHint[][] {
+  return pattern.map((step) => {
+    const [app, action] = step.split(".");
+    // 找出所有匹配這一步的操作
+    const matchingOps = allOps.filter(
+      (op) => op.appName === app && op.action === action && op.params,
+    );
+    if (matchingOps.length < 2) return [];
+
+    // 統計每個參數 key 的值分佈
+    const paramValues = new Map<string, Map<string, number>>();
+    for (const op of matchingOps) {
+      const params = op.params as Record<string, unknown> | null;
+      if (!params) continue;
+      for (const [key, val] of Object.entries(params)) {
+        // 跳過大型內容欄位
+        if (CONTENT_FIELDS.has(key)) continue;
+        // 跳過值太長的（超過 100 字元視為內容）
+        const strVal = typeof val === "string" ? val : JSON.stringify(val);
+        if (strVal.length > 100) continue;
+
+        if (!paramValues.has(key)) paramValues.set(key, new Map());
+        const counts = paramValues.get(key)!;
+        counts.set(strVal, (counts.get(strVal) ?? 0) + 1);
+      }
+    }
+
+    // 判斷每個參數是固定值還是動態值
+    const hints: ParamHint[] = [];
+    for (const [key, counts] of paramValues.entries()) {
+      const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
+      // 找出最常見的值
+      let topValue = "";
+      let topCount = 0;
+      for (const [val, cnt] of counts.entries()) {
+        if (cnt > topCount) {
+          topValue = val;
+          topCount = cnt;
+        }
+      }
+
+      const ratio = topCount / total;
+      if (ratio >= 0.7) {
+        // 固定值：> 70% 的操作用同一個值
+        hints.push({ key, value: topValue, isDynamic: false, description: "" });
+      } else if (counts.size >= 3) {
+        // 動態值：有 3 種以上不同的值
+        hints.push({ key, value: "", isDynamic: true, description: `每次不同` });
+      }
+    }
+
+    // 固定值排前面，最多回傳 5 個參數提示
+    hints.sort((a, b) => (a.isDynamic ? 1 : 0) - (b.isDynamic ? 1 : 0));
+    return hints.slice(0, 5);
+  });
+}
+
+/**
+ * 從 pattern 推斷 SOP 描述（一句話說明流程目的）
+ * 根據首尾動作推斷：search → create_page = 「搜尋後建立頁面」
+ */
+function inferSopDescription(pattern: string[]): string {
+  if (pattern.length < 2) return "";
+
+  const DESC_MAP: Record<string, string> = {
+    search: "搜尋", get_page: "讀取頁面", get_file: "讀取檔案",
+    create_page: "建立頁面", append_content: "追加內容", replace_content: "替換內容",
+    send: "寄信", send_message: "發送訊息", create_event: "建立事件",
+    create_task: "建立任務", create_issue: "建立 Issue",
+    search_code: "搜尋程式碼", get_content: "讀取內容",
+  };
+
+  const firstAction = pattern[0].split(".")[1];
+  const lastAction = pattern[pattern.length - 1].split(".")[1];
+  const firstDesc = DESC_MAP[firstAction] ?? firstAction;
+  const lastDesc = DESC_MAP[lastAction] ?? lastAction;
+
+  // 跨 App 流程額外標注
+  const apps = new Set(pattern.map((p) => p.split(".")[0]));
+  const crossApp = apps.size > 1 ? `（跨 ${[...apps].join("+")}）` : "";
+
+  return `${firstDesc}後${lastDesc}的標準流程${crossApp}`;
 }

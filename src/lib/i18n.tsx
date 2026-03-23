@@ -496,6 +496,15 @@ const translations: Record<Locale, Record<string, string>> = {
     "tool.gamma_list_themes": "列出可用的 Gamma 主題",
     "tool.gamma_list_folders": "列出 Gamma 工作區的資料夾",
 
+    // 用量 + 訂閱
+    "usage.title": "本月用量",
+    "usage.upgrade": "升級 Pro",
+    "usage.upgrade_now": "立即升級",
+    "usage.manage_subscription": "管理訂閱",
+    "usage.count_prefix": "已使用 ",
+    "usage.count_suffix": " 次",
+    "usage.unlimited": "無限次 MCP tool calls",
+
     // U23: 帳號刪除
     "account.delete_title": "危險區域",
     "account.delete_desc": "刪除帳號後，所有資料（連結的 App、記憶、操作紀錄）將永久移除，無法復原。",
@@ -1070,6 +1079,15 @@ const translations: Record<Locale, Record<string, string>> = {
     "tool.gamma_get_status": "Check the status of a Gamma generation",
     "tool.gamma_list_themes": "List available Gamma themes",
     "tool.gamma_list_folders": "List folders in Gamma workspace",
+
+    // Usage + Subscription
+    "usage.title": "Monthly Usage",
+    "usage.upgrade": "Upgrade to Pro",
+    "usage.upgrade_now": "Upgrade Now",
+    "usage.manage_subscription": "Manage Subscription",
+    "usage.count_prefix": "",
+    "usage.count_suffix": " calls used",
+    "usage.unlimited": "Unlimited MCP tool calls",
 
     // U23: Account deletion
     "account.delete_title": "Danger Zone",

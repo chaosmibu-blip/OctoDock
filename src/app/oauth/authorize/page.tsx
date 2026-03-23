@@ -93,7 +93,7 @@ function AuthorizeContent() {
 
       // Redirect 回外部平台（帶 auth code）
       window.location.href = data.redirect_url;
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.");
       setIsLoading(false);
     }

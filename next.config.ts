@@ -10,6 +10,9 @@ const gitSha = (() => {
 const nextConfig: NextConfig = {
   /* 確保 URL 不帶尾斜線，避免 /blog 和 /blog/ 重複索引 */
   trailingSlash: false,
+  /* pdf-parse 的 index.js 有 debug 模式（!module.parent 時讀 test file），
+     放 serverExternalPackages 讓 Node.js 直接 require 而非 webpack 打包 */
+  serverExternalPackages: ["pdf-parse"],
   env: {
     NEXT_PUBLIC_GIT_SHA: gitSha,
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString().slice(0, 10),

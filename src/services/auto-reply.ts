@@ -1,7 +1,6 @@
 import { db } from "@/db";
 import { conversations, operations } from "@/db/schema";
 import { and, eq, desc } from "drizzle-orm";
-import { decrypt } from "@/lib/crypto";
 import { queryMemory } from "./memory-engine";
 
 interface AutoReplyContext {

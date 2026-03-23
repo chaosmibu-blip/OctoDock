@@ -1,22 +1,12 @@
 import { db } from "@/db";
-import { operations, memory } from "@/db/schema";
+import { operations } from "@/db/schema";
 import { eq, desc, sql, and, gte } from "drizzle-orm";
 import { storeMemory } from "./memory-engine";
 
 // Auto-preference inference: analyze operations to discover user patterns
 // Runs periodically or after a batch of operations
 
-interface ToolFrequency {
-  toolName: string;
-  appName: string;
-  count: number;
-}
 
-interface TimePattern {
-  hour: number;
-  appName: string;
-  count: number;
-}
 
 export async function inferPreferences(userId: string): Promise<number> {
   let memoriesStored = 0;

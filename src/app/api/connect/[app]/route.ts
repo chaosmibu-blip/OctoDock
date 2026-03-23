@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { connectedApps } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { getAdapter, getAllAdapters, ensureAdapters } from "@/mcp/registry";
+import { getAdapter, ensureAdapters } from "@/mcp/registry";
 import { APP_URL } from "@/lib/constants";
 import type { OAuthConfig, ApiKeyConfig, PhoneAuthConfig } from "@/adapters/types";
 import { encrypt } from "@/lib/crypto";

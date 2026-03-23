@@ -46,13 +46,13 @@ export default function RefundPage() {
           <section>
             <h2 className="text-xl font-semibold text-gray-900">3. Refund Eligibility</h2>
             <p className="mt-3">
-              We offer a <strong>14-day refund window</strong> from the date of each payment. If you
-              are not satisfied with OctoDock for any reason, you may request a full refund within
-              14 days of your most recent charge.
+              We offer a <strong>14 calendar day refund window</strong> from the date of each payment.
+              If you are not satisfied with OctoDock for any reason, you may request a full refund
+              within 14 calendar days from the date of purchase.
             </p>
             <ul className="mt-3 space-y-1.5 list-disc list-inside">
-              <li>Refund requests made within 14 days of payment will receive a <strong>full refund</strong></li>
-              <li>Refund requests made after 14 days will not be eligible for a refund, but you may cancel to prevent future charges</li>
+              <li>Refund requests made within 14 calendar days of the date of purchase will receive a <strong>full refund</strong></li>
+              <li>Refund requests made after 14 calendar days will not be eligible for a refund, but you may cancel to prevent future charges</li>
               <li>Refunds are processed back to the original payment method</li>
             </ul>
           </section>

@@ -10,10 +10,8 @@ import type {
   OAuthConfig,
   ToolDefinition,
   ToolResult,
-  TokenSet,
 } from "./types";
 import {
-  graphFetch,
   uploadSmallFile,
   listFiles,
   searchFiles,
