@@ -1,5 +1,5 @@
 {
-  "id": "3d3e84f3-375f-432e-ba89-2225148b2f09",
+  "id": "637e7036-576b-4356-a198-cb6e6e57e7c8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -287,6 +287,13 @@
         },
         "created_at": {
           "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false,
@@ -1041,18 +1048,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "task_id": {
-          "name": "task_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_agent": {
-          "name": "source_agent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "agent_instance_id": {
           "name": "agent_instance_id",
           "type": "text",
@@ -1089,12 +1084,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "intent": {
-          "name": "intent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "success": {
           "name": "success",
           "type": "boolean",
@@ -1105,12 +1094,6 @@
         "duration_ms": {
           "name": "duration_ms",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "record_hash": {
-          "name": "record_hash",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -1164,22 +1147,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "idx_operations_task": {
-          "name": "idx_operations_task",
-          "columns": [
-            {
-              "expression": "task_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "task_id IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -1215,7 +1182,7 @@
         },
         "user_id": {
           "name": "user_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1295,7 +1262,21 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "stored_results_user_id_users_id_fk": {
+          "name": "stored_results_user_id_users_id_fk",
+          "tableFrom": "stored_results",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

@@ -37,7 +37,8 @@ CREATE TABLE "bot_configs" (
 	"llm_provider" text DEFAULT 'claude',
 	"llm_api_key" text,
 	"is_active" boolean DEFAULT true,
-	"created_at" timestamp with time zone DEFAULT now()
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
 CREATE TABLE "connected_apps" (
@@ -123,24 +124,20 @@ CREATE TABLE "oauth_tokens" (
 CREATE TABLE "operations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
-	"task_id" uuid,
-	"source_agent" text,
 	"agent_instance_id" text,
 	"app_name" text NOT NULL,
 	"tool_name" text NOT NULL,
 	"action" text NOT NULL,
 	"params" jsonb,
 	"result" jsonb,
-	"intent" text,
 	"success" boolean DEFAULT true,
 	"duration_ms" integer,
-	"record_hash" text,
 	"created_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
 CREATE TABLE "stored_results" (
 	"id" text PRIMARY KEY NOT NULL,
-	"user_id" text NOT NULL,
+	"user_id" uuid NOT NULL,
 	"app_name" text NOT NULL,
 	"action" text NOT NULL,
 	"content" text NOT NULL,
@@ -197,6 +194,7 @@ ALTER TABLE "oauth_codes" ADD CONSTRAINT "oauth_codes_user_id_users_id_fk" FOREI
 ALTER TABLE "oauth_tokens" ADD CONSTRAINT "oauth_tokens_client_id_oauth_clients_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_clients"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_tokens" ADD CONSTRAINT "oauth_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "operations" ADD CONSTRAINT "operations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "stored_results" ADD CONSTRAINT "stored_results_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "usage_tracking" ADD CONSTRAINT "usage_tracking_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "accounts_provider_account_idx" ON "accounts" USING btree ("provider","provider_account_id");--> statement-breakpoint
@@ -209,7 +207,6 @@ CREATE INDEX "idx_oauth_tokens_user" ON "oauth_tokens" USING btree ("user_id");-
 CREATE INDEX "idx_oauth_tokens_refresh" ON "oauth_tokens" USING btree ("refresh_token");--> statement-breakpoint
 CREATE INDEX "idx_operations_user_time" ON "operations" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_operations_user_app" ON "operations" USING btree ("user_id","app_name");--> statement-breakpoint
-CREATE INDEX "idx_operations_task" ON "operations" USING btree ("task_id") WHERE task_id IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "idx_stored_results_user" ON "stored_results" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "idx_stored_results_expires" ON "stored_results" USING btree ("expires_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "subscriptions_user_idx" ON "subscriptions" USING btree ("user_id");--> statement-breakpoint
