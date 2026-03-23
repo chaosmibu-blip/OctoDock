@@ -10,7 +10,6 @@ import {
   integer,
   real,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 // ============================================================
 // 4.1 users
@@ -93,26 +92,19 @@ export const operations = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    taskId: uuid("task_id"),
-    sourceAgent: text("source_agent"), // 'claude' | 'gpt' | 'gemini' | 'other'
     agentInstanceId: text("agent_instance_id"), // 區分同類型下的不同 Agent 實例（從 header 提取）
     appName: text("app_name").notNull(),
     toolName: text("tool_name").notNull(),
     action: text("action").notNull(),
     params: jsonb("params"),
     result: jsonb("result"),
-    intent: text("intent"),
     success: boolean("success").default(true),
     durationMs: integer("duration_ms"),
-    recordHash: text("record_hash"), // 預留：未來 audit trail 防竄改用（varchar 64）
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
     index("idx_operations_user_time").on(table.userId, table.createdAt),
     index("idx_operations_user_app").on(table.userId, table.appName),
-    index("idx_operations_task")
-      .on(table.taskId)
-      .where(sql`task_id IS NOT NULL`),
   ],
 );
 
@@ -209,7 +201,7 @@ export const storedResults = pgTable(
   "stored_results",
   {
     id: text("id").primaryKey(), // nanoid 12 碼
-    userId: text("user_id").notNull(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // 改為 uuid 並加外鍵約束，與其他表一致
     appName: text("app_name").notNull(),
     action: text("action").notNull(),
     content: text("content").notNull(), // 完整的回傳內容

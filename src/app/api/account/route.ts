@@ -79,7 +79,7 @@ export async function DELETE(request: NextRequest) {
       // 7. 刪除訂閱記錄
       await tx.delete(subscriptions).where(eq(subscriptions.userId, userId));
 
-      // 8. 刪除暫存的大回傳（storedResults 的 userId 是 text 類型）
+      // 8. 刪除暫存的大回傳
       await tx.delete(storedResults).where(eq(storedResults.userId, userId));
 
       // 9. 刪除 NextAuth OAuth 連結

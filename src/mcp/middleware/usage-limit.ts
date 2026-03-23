@@ -44,7 +44,9 @@ export async function checkUsageLimit(userId: string): Promise<string | null> {
 
   const usage = await getMonthlyUsage(userId);
   if (usage >= FREE_MONTHLY_LIMIT) {
-    return `You've reached the Free plan limit of ${FREE_MONTHLY_LIMIT} MCP tool calls this month. Upgrade to Pro for unlimited usage → https://octo-dock.com/pricing`;
+    // 升級連結使用環境變數決定域名，支援 staging/dev 環境
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || "https://octo-dock.com";
+    return `You've reached the Free plan limit of ${FREE_MONTHLY_LIMIT} MCP tool calls this month. Upgrade to Pro for unlimited usage → ${baseUrl}/pricing`;
   }
   return null;
 }

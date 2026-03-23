@@ -108,6 +108,46 @@ const APP_HINTS: Record<string, Record<string, ErrorHint>> = {
       suggestion: "YouTube API has a strict daily quota (10,000 units). Search costs 100 units. Wait until tomorrow or reduce usage.",
     },
   },
+  "google-sheets": {
+    "400": {
+      explanation: "Invalid range or sheet name. Common: wrong A1 notation or sheet doesn't exist.",
+      suggestion: "Use octodock_do(app:'google_sheets', action:'list_sheets', params:{spreadsheet_id:'...'}) to check available sheets.",
+    },
+    "403": {
+      explanation: "No permission to access this spreadsheet, or Sheets API quota exceeded.",
+      suggestion: "Check if the spreadsheet is shared with the user. User may need to reconnect Google account.",
+    },
+  },
+  "google-docs": {
+    "403": {
+      explanation: "No permission to access this document.",
+      suggestion: "Check if the document is shared with the user. User may need to reconnect Google account.",
+    },
+    "404": {
+      explanation: "Document not found. It may have been deleted or the ID is wrong.",
+      suggestion: "Verify document_id is correct. Use Google Drive search to find the correct file.",
+    },
+  },
+  "google-tasks": {
+    "403": {
+      explanation: "Google Tasks API permission denied.",
+      suggestion: "User may need to reconnect Google account with Tasks scope enabled.",
+    },
+    "404": {
+      explanation: "Task or task list not found.",
+      suggestion: "Use octodock_do(app:'google_tasks', action:'list_tasklists') to find available task lists.",
+    },
+  },
+  canva: {
+    "403": {
+      explanation: "Canva API access denied. Token may be expired or insufficient permissions.",
+      suggestion: "User needs to reconnect Canva in OctoDock Dashboard.",
+    },
+    "404": {
+      explanation: "Canva design not found.",
+      suggestion: "Verify the design ID is correct.",
+    },
+  },
   // ── Microsoft 系（共用 Microsoft Graph API）──
   "microsoft-excel": {
     "403": {

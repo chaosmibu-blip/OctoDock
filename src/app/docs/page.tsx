@@ -3,11 +3,12 @@
  * /docs — 供開發者和 Claude Connectors Directory 審查用
  */
 import Link from "next/link";
+import { BASE_URL } from "@/lib/constants";
 
 export const metadata = {
   title: "Documentation - OctoDock",
   description: "OctoDock documentation for developers and users",
-  alternates: { canonical: "https://octo-dock.com/docs" },
+  alternates: { canonical: `${BASE_URL}/docs` },
 };
 
 export default function DocsPage() {

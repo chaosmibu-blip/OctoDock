@@ -439,40 +439,29 @@ octodock_do(app:"github", action:"patch_file", params:{owner:"octocat", repo:"He
 function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
-  return `github actions (${Object.keys(actionMap).length}):
-  list_repos() — list your repositories
-  get_repo(owner, repo) — get repo details (stars, forks, description)
-  search_code(query) — search code across repos
-  list_issues(owner, repo) — list open issues
-  create_issue(owner, repo, title, body?, labels?) — create issue
-  update_issue(owner, repo, issue_number, title?, body?, state?, labels?) — update issue
-  list_prs(owner, repo) — list open pull requests
-  get_pr(owner, repo, pull_number) — get PR details + diff stats
-  create_comment(owner, repo, issue_number, body) — comment on issue/PR
-  get_file(owner, repo, path, branch?) — get file content (includes SHA for update/delete)
-  create_file(owner, repo, path, content, message, branch?) — create a file with commit
-  update_file(owner, repo, path, content, message, sha, branch?) — update a file with commit
-  delete_file(owner, repo, path, message, sha, branch?) — delete a file with commit
-  list_branches(owner, repo) — list branches
-  create_branch(owner, repo, branch, from?) — create a new branch
-  list_runs(owner, repo, workflow_id?, status?) — list workflow runs
-  get_run(owner, repo, run_id) — get workflow run details
-  create_review(owner, repo, pull_number, event, body?) — review a PR
-  create_pr(owner, repo, title, body, head, base?) — create pull request
-  merge_pr(owner, repo, pull_number, merge_method?) — merge pull request
-  list_commits(owner, repo, per_page?) — list recent commits
-  create_repo(name, description?, private?) — create new repository
-  list_releases(owner, repo) — list releases
-  create_release(owner, repo, tag_name, name, body?, draft?, target_commitish?) — create release
-  list_workflows(owner, repo) — list GitHub Actions workflows
-  trigger_workflow(owner, repo, workflow_id, ref?) — trigger workflow dispatch
-  list_gists(per_page?) — list your gists
-  create_gist(description, files, public?) — create a gist
-  search_repos(query, per_page?) — search repositories
-  search_issues(query, per_page?) — search issues & PRs
-  star_repo(owner, repo) — star a repository
-  fork_repo(owner, repo) — fork a repository
-  patch_file(owner, repo, path, find, replace, message, branch?) — find/replace partial file edit
+  return `## GitHub — 程式碼與專案管理
+管理倉庫、Issues、PR、檔案、CI/CD。大部分 action 需要 owner + repo 參數。
+
+### 常見用法
+- 「看我有哪些 repo」→ list_repos()
+- 「搜尋程式碼裡的某個函式」→ search_code(query)
+- 「讀取某個檔案」→ get_file(owner, repo, path)
+- 「建 issue」→ create_issue(owner, repo, title, body?)
+- 「開 PR」→ create_pr(owner, repo, title, body, head, base?)
+- 「部分修改檔案」→ patch_file(owner, repo, path, find, replace, message)
+
+### 注意事項
+- update_file 需要 SHA（從 get_file 取得），否則會 409 conflict
+- search_code 受 GitHub 索引延遲影響，新 commit 可能幾分鐘後才搜得到
+- patch_file 是 find/replace 局部修改，比 update_file 覆蓋整個檔案更安全
+
+### 全部 actions (${Object.keys(actionMap).length})
+  list_repos, get_repo, search_code, list_issues, create_issue, update_issue,
+  list_prs, get_pr, create_comment, get_file, create_file, update_file, delete_file,
+  list_branches, create_branch, list_runs, get_run, create_review, create_pr, merge_pr,
+  list_commits, create_repo, list_releases, create_release, list_workflows,
+  trigger_workflow, list_gists, create_gist, search_repos, search_issues,
+  star_repo, fork_repo, patch_file
 Use octodock_help(app:"github", action:"ACTION") for detailed params + example.`;
 }
 

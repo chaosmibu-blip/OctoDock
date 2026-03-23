@@ -8,6 +8,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { marked } from "marked";
 import { fetchPostBySlug, fetchPostContent } from "@/lib/notion-blog";
+import { BASE_URL } from "@/lib/constants";
 
 // ISR: 1 小時重新驗證
 export const revalidate = 3600;
@@ -25,12 +26,12 @@ export async function generateMetadata({
   return {
     title: post.title,
     description: `${post.title} — ${post.category} | OctoDock Blog`,
-    alternates: { canonical: `https://octo-dock.com/blog/${slug}` },
+    alternates: { canonical: `${BASE_URL}/blog/${slug}` },
     openGraph: {
       type: "article",
       title: post.title,
       description: `${post.title} — ${post.category}`,
-      url: `https://octo-dock.com/blog/${slug}`,
+      url: `${BASE_URL}/blog/${slug}`,
       siteName: "OctoDock",
       locale: post.language === "en" ? "en_US" : "zh_TW",
       publishedTime: post.publishedDate ?? undefined,
@@ -90,11 +91,11 @@ export default async function BlogPostPage({
             publisher: {
               "@type": "Organization",
               name: "OctoDock",
-              logo: { "@type": "ImageObject", url: "https://octo-dock.com/icon-512.png" },
+              logo: { "@type": "ImageObject", url: `${BASE_URL}/icon-512.png` },
             },
             mainEntityOfPage: {
               "@type": "WebPage",
-              "@id": `https://octo-dock.com/blog/${slug}`,
+              "@id": `${BASE_URL}/blog/${slug}`,
             },
           }),
         }}

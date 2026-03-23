@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { users, connectedApps } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { BASE_URL } from "@/lib/constants";
 import { DashboardClient } from "./dashboard-client";
 import { getUsageSummary } from "@/mcp/middleware/usage-limit";
 
@@ -37,7 +38,7 @@ export default async function DashboardPage() {
 
   // MCP URL 固定使用正式域名，不從 request header 取
   // 確保用戶複製的 URL 永遠是 octo-dock.com，不會是 replit.app
-  const origin = process.env.NEXTAUTH_URL ?? "https://octo-dock.com";
+  const origin = BASE_URL;
 
   // 取得用量摘要（用量條用）
   let usage: { plan: string; used: number; limit: number | null; month: string } = {

@@ -1,10 +1,11 @@
 /* 服務條款頁面 */
 import Link from "next/link";
+import { BASE_URL } from "@/lib/constants";
 
 export const metadata = {
   title: "Terms of Service - OctoDock",
   description: "OctoDock terms of service — usage rules for the unified MCP endpoint.",
-  alternates: { canonical: "https://octo-dock.com/terms" },
+  alternates: { canonical: `${BASE_URL}/terms` },
 };
 
 export default function TermsPage() {

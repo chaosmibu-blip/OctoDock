@@ -11,6 +11,7 @@ import {
   exportMemory,
 } from "@/services/memory-engine";
 import type { DoResult } from "@/adapters/types";
+import { BATCH_MAX_CHARS } from "@/lib/constants";
 
 // ============================================================
 // 系統操作處理器（System Actions）
@@ -679,8 +680,9 @@ export async function executeSystemAction(
         }
 
         // 截斷過長的回傳
-        if (data.length > 5000) {
-          data = data.substring(0, 5000) + "\n\n... (truncated, total " + data.length + " chars)";
+        // 截斷超過上限的回傳（使用集中管理的常數）
+        if (data.length > BATCH_MAX_CHARS) {
+          data = data.substring(0, BATCH_MAX_CHARS) + "\n\n... (truncated, total " + data.length + " chars)";
         }
 
         return {

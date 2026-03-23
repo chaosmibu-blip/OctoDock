@@ -632,32 +632,10 @@ async function execute(
   }
 }
 
-// ── Token 刷新：使用 refresh_token 取得新的 access_token ─
-async function refreshGTasksToken(refreshToken: string): Promise<TokenSet> {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-    }).toString(),
-  });
-
-  if (!res.ok) {
-    throw new Error(
-      "Google Tasks token 刷新失敗，請重新連結帳號。(GTASKS_REFRESH_FAILED)",
-    );
-  }
-
-  const data = await res.json();
-  return {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token ?? refreshToken, // Google 不一定回傳新的 refresh_token
-    expires_in: data.expires_in,
-  };
-}
+// ── Token 刷新：使用共用的 Google OAuth token 刷新函式 ─
+import { refreshGoogleToken } from "../lib/google-refresh";
+const refreshGTasksToken = (token: string) =>
+  refreshGoogleToken(token, "Google Tasks", "GTASKS_REFRESH_FAILED");
 
 // ── Adapter 匯出 ─────────────────────────────────────────
 export const googleTasksAdapter: AppAdapter = {

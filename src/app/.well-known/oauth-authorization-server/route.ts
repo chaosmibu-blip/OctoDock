@@ -7,9 +7,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { BASE_URL } from "@/lib/constants";
 
-/** OAuth 伺服器的公開域名 */
-const ISSUER = "https://octo-dock.com";
+/** OAuth 伺服器的公開域名（從環境變數讀取，支援 staging/dev） */
+const ISSUER = BASE_URL;
 
 export async function GET() {
   return NextResponse.json({

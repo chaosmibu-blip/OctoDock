@@ -342,25 +342,25 @@ octodock_do(app:"gmail", action:"delete_draft", params:{draft_id:"r-123456789"})
 function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
-  return `gmail actions:
-  search(query, max_results?) — search emails (Gmail search syntax)
-  read(message_id) — read full email content
-  send(to, subject, body) — send new email
-  reply(message_id, body) — reply to email thread
-  list_threads(query?, max_results?) — list email threads (conversations)
-  get_thread(thread_id) — get all messages in a thread
-  draft(to, subject, body) — create draft email
-  list_drafts(max_results?) — list all drafts
-  get_draft(draft_id) — get draft content
-  send_draft(draft_id) — send existing draft
-  delete_draft(draft_id) — delete draft permanently
-  label_list() — list all labels
-  trash(message_id) — move email to trash
-  untrash(message_id) — restore email from trash
-  archive(message_id) — archive email (remove from Inbox)
-  mark_read(message_id) — mark email as read
-  mark_unread(message_id) — mark email as unread
-  get_attachment(message_id, attachment_id) — download attachment
+  return `## Gmail — 郵件管理
+搜尋、閱讀、發送、回覆郵件。支援對話串、草稿、標籤、附件。
+
+### 常見用法
+- 「找最近的信」→ search(query:"is:unread newer_than:1d")
+- 「讀某封信」→ read(message_id)
+- 「發信」→ send(to, subject, body)
+- 「回信」→ reply(message_id, body)
+- 「先存草稿」→ draft(to, subject, body) → send_draft(draft_id)
+
+### 注意事項
+- search 用 Gmail 搜尋語法（from:, to:, subject:, is:unread, newer_than:1d 等）
+- reply 會自動接在同一個對話串
+- trash 只是移到垃圾桶（30 天後自動刪除），不是永久刪除
+
+### 全部 actions
+  search, read, send, reply, list_threads, get_thread, draft, list_drafts,
+  get_draft, send_draft, delete_draft, label_list, trash, untrash, archive,
+  mark_read, mark_unread, get_attachment
 Use octodock_help(app:"gmail", action:"ACTION") for detailed params + example.`;
 }
 
@@ -1077,30 +1077,10 @@ async function execute(
   }
 }
 
-// ── Token 刷新：使用 refresh_token 取得新的 access_token ─
-async function refreshGmailToken(refreshToken: string): Promise<TokenSet> {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-    }).toString(),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Gmail token refresh failed (GMAIL_REFRESH_FAILED)`);
-  }
-
-  const data = await res.json();
-  return {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token ?? refreshToken, // Google may not return new refresh_token
-    expires_in: data.expires_in,
-  };
-}
+// ── Token 刷新：使用共用的 Google OAuth token 刷新函式 ─
+import { refreshGoogleToken } from "../lib/google-refresh";
+const refreshGmailToken = (token: string) =>
+  refreshGoogleToken(token, "Gmail", "GMAIL_REFRESH_FAILED");
 
 // ── 錯誤格式化：攔截常見 API 錯誤，回傳雙語提示 ────────
 function formatError(action: string, errorMessage: string): string | null {

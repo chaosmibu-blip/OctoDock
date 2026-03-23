@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { BASE_URL } from "@/lib/constants";
 
 /**
  * 自動產生 robots.txt
@@ -31,6 +32,7 @@ export default function robots(): MetadataRoute.Robots {
       { userAgent: "PerplexityBot", allow: "/" },
       { userAgent: "YouBot", allow: "/" },
     ],
-    sitemap: "https://octo-dock.com/sitemap.xml",
+    // 使用環境變數決定 sitemap URL，支援 staging/dev 環境
+    sitemap: `${BASE_URL}/sitemap.xml`,
   };
 }

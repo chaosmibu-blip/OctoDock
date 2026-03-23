@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { fetchPublishedPosts } from "@/lib/notion-blog";
+import { BASE_URL } from "@/lib/constants";
 
 /**
  * 自動產生 sitemap.xml
@@ -7,7 +8,8 @@ import { fetchPublishedPosts } from "@/lib/notion-blog";
  * 動態包含所有已發佈的 Blog 文章
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = "https://octo-dock.com";
+  // 使用環境變數決定基底 URL，支援 staging/dev 環境
+  const base = BASE_URL;
 
   // 靜態頁面
   const staticPages: MetadataRoute.Sitemap = [

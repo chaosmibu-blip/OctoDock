@@ -1,10 +1,11 @@
 /* 退款政策頁面 — Paddle KYB 驗證用 */
 import Link from "next/link";
+import { BASE_URL } from "@/lib/constants";
 
 export const metadata = {
   title: "Refund Policy - OctoDock",
   description: "OctoDock refund policy — 14-day full refund, cancel anytime.",
-  alternates: { canonical: "https://octo-dock.com/refund" },
+  alternates: { canonical: `${BASE_URL}/refund` },
 };
 
 export default function RefundPage() {

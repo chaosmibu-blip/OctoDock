@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { fetchPublishedPosts } from "@/lib/notion-blog";
+import { BASE_URL } from "@/lib/constants";
 
 // ISR: 1 小時重新驗證
 export const revalidate = 3600;
@@ -13,7 +14,7 @@ export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "Blog",
   description: "MCP 教學、AI 工具串接指南、跨 App 工作流程自動化 — OctoDock Blog",
-  alternates: { canonical: "https://octo-dock.com/blog" },
+  alternates: { canonical: `${BASE_URL}/blog` },
 };
 
 /** 分類標籤的顏色對應 */

@@ -5,6 +5,7 @@ import type {
   ToolDefinition,
   ToolResult,
 } from "./types";
+import { NOTION_MAX_BLOCKS, NOTION_API_BLOCK_LIMIT } from "@/lib/constants";
 
 // ============================================================
 // Notion OAuth 設定
@@ -64,9 +65,9 @@ async function notionFetch(
 /**
  * F1: 分頁拉取所有 block children
  * loop next_cursor 直到 has_more === false
- * 上限 MAX_BLOCKS 避免無限迴圈，超過時標註 truncated
+ * 上限 NOTION_MAX_BLOCKS 避免無限迴圈，超過時標註 truncated
  */
-const MAX_BLOCKS = 1000;
+// MAX_BLOCKS 從 @/lib/constants 匯入（NOTION_MAX_BLOCKS）
 
 async function fetchAllBlocks(
   blockId: string,
@@ -76,8 +77,8 @@ async function fetchAllBlocks(
   let cursor: string | undefined;
   let hasMore = true;
 
-  while (hasMore && allResults.length < MAX_BLOCKS) {
-    const url = `/blocks/${blockId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`;
+  while (hasMore && allResults.length < NOTION_MAX_BLOCKS) {
+    const url = `/blocks/${blockId}/children?page_size=${NOTION_API_BLOCK_LIMIT}${cursor ? `&start_cursor=${cursor}` : ""}`;
     const data = (await notionFetch(url, token)) as {
       results: unknown[];
       has_more: boolean;
@@ -89,8 +90,8 @@ async function fetchAllBlocks(
   }
 
   return {
-    results: allResults.slice(0, MAX_BLOCKS),
-    truncated: allResults.length > MAX_BLOCKS || hasMore,
+    results: allResults.slice(0, NOTION_MAX_BLOCKS),
+    truncated: allResults.length > NOTION_MAX_BLOCKS || hasMore,
     totalCount: allResults.length,
   };
 }
@@ -305,21 +306,36 @@ function getSkill(action?: string): string | null {
   }
   // 有 action 但找不到：提示可用的 action
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
-  // app 級別：全部 action
-  return `notion actions (${Object.keys(actionMap).length}):
+  // app 級別：概覽 + action 列表
+  return `## Notion — 知識庫與任務管理
+管理頁面、資料庫、筆記。輸入輸出都用 Markdown，名稱會自動轉 ID（不用先查 ID）。
+
+### 常見用法
+- 「幫我建一頁筆記」→ create_page(title, content?, folder?)
+- 「找上週的會議記錄」→ search(query)
+- 「把這段加到頁面底部」→ append_content(page_id, content)
+- 「把這頁搬到別的位置」→ move_page(page_id, new_parent_id)
+- 「查資料庫裡的資料」→ query_database(database, filter?, sorts?)
+
+### 注意事項
+- 用完整 36 字元 UUID，不要用短 ID
+- replace_content 會覆蓋整頁正文但保留子頁面，大部分情況用 append_content 更安全
+- 建議先 search 或 get_page 確認目標再操作
+
+### 全部 actions (${Object.keys(actionMap).length})
   search(query, filter?) — search pages/databases
   create_page(title, content?, folder?) — create page (markdown)
   get_page(page) — get page content (returns markdown)
-  replace_content(page_id, content) — replace page body (markdown, preserves child pages)
-  append_content(page_id, content) — append to end of page (markdown, no overwrite)
+  replace_content(page_id, content) — replace page body (preserves child pages)
+  append_content(page_id, content) — append to end of page
   move_page(page_id, new_parent_id) — move page to different parent
   update_page(page_id, properties?, icon?, cover?) — update properties
-  archive_page(page_id) — archive page (recoverable)
+  archive_page(page_id) — archive page (recoverable 30 days)
   unarchive_page(page_id) — restore archived page
-  delete_page(page_id) — archive page (alias for archive_page)
+  delete_page(page_id) — archive page (alias)
   get_page_property(page_id, property_id) — get specific property value
   get_block(block_id) — get single block
-  get_block_children(block_id, page_size?) — get child blocks of page/block
+  get_block_children(block_id, page_size?) — get child blocks
   append_blocks(block_id, children) — append blocks to page
   update_block(block_id, block_data) — update block content
   delete_block(block_id) — delete block
@@ -330,7 +346,7 @@ function getSkill(action?: string): string | null {
   add_comment(page_id, text) — comment on page
   get_comments(page_id) — list comments on page
   get_users() — list workspace members
-Input/output use markdown. Names auto-resolve to IDs. Use octodock_help(app:"notion", action:"ACTION") for details.`;
+Use octodock_help(app:"notion", action:"ACTION") for detailed params + example.`;
 }
 
 // ============================================================
@@ -1241,9 +1257,8 @@ async function execute(
         allBlocks = markdownToBlocks(params.content as string);
       }
 
-      // Notion API 限制每次最多 100 個 blocks
-      const BLOCK_LIMIT = 100;
-      body.children = allBlocks.slice(0, BLOCK_LIMIT);
+      // Notion API 限制每次最多 NOTION_API_BLOCK_LIMIT 個 blocks
+      body.children = allBlocks.slice(0, NOTION_API_BLOCK_LIMIT);
 
       const result = await notionFetch("/pages", token, {
         method: "POST",
@@ -1251,12 +1266,12 @@ async function execute(
       }) as Record<string, unknown>;
 
       // 超過 100 blocks：用 append_blocks 補剩下的（對呼叫者透明）
-      if (allBlocks.length > BLOCK_LIMIT) {
+      if (allBlocks.length > NOTION_API_BLOCK_LIMIT) {
         const pageId = result.id as string;
-        const remaining = allBlocks.slice(BLOCK_LIMIT);
+        const remaining = allBlocks.slice(NOTION_API_BLOCK_LIMIT);
         // 每次 append 100 個，直到全部寫完
-        for (let i = 0; i < remaining.length; i += BLOCK_LIMIT) {
-          const batch = remaining.slice(i, i + BLOCK_LIMIT);
+        for (let i = 0; i < remaining.length; i += NOTION_API_BLOCK_LIMIT) {
+          const batch = remaining.slice(i, i + NOTION_API_BLOCK_LIMIT);
           await notionFetch(`/blocks/${pageId}/children`, token, {
             method: "PATCH",
             body: JSON.stringify({ children: batch }),
@@ -1319,7 +1334,7 @@ async function execute(
 
       // Step 1: 取得現有的所有 child blocks
       const existing = (await notionFetch(
-        `/blocks/${pageId}/children?page_size=100`,
+        `/blocks/${pageId}/children?page_size=${NOTION_API_BLOCK_LIMIT}`,
         token,
       )) as { results: Array<{ id: string; type: string; child_page?: { title: string }; child_database?: { title: string } }> };
 
@@ -1336,10 +1351,10 @@ async function execute(
       );
       await Promise.all(deletePromises);
 
-      // Step 3: 用新的 Markdown 內容建立新 blocks（自動分批 100 個）
+      // Step 3: 用新的 Markdown 內容建立新 blocks（自動分批）
       const newBlocks = markdownToBlocks(newContent);
-      for (let i = 0; i < newBlocks.length; i += 100) {
-        const batch = newBlocks.slice(i, i + 100);
+      for (let i = 0; i < newBlocks.length; i += NOTION_API_BLOCK_LIMIT) {
+        const batch = newBlocks.slice(i, i + NOTION_API_BLOCK_LIMIT);
         await notionFetch(`/blocks/${pageId}/children`, token, {
           method: "PATCH",
           body: JSON.stringify({ children: batch }),
@@ -1368,10 +1383,10 @@ async function execute(
       const pageId = params.page_id as string;
       const content = params.content as string;
 
-      // 將 Markdown 轉成 Notion blocks，分批追加（每次最多 100 個）
+      // 將 Markdown 轉成 Notion blocks，分批追加（每次最多 NOTION_API_BLOCK_LIMIT 個）
       const blocks = markdownToBlocks(content);
-      for (let i = 0; i < blocks.length; i += 100) {
-        const batch = blocks.slice(i, i + 100);
+      for (let i = 0; i < blocks.length; i += NOTION_API_BLOCK_LIMIT) {
+        const batch = blocks.slice(i, i + NOTION_API_BLOCK_LIMIT);
         await notionFetch(`/blocks/${pageId}/children`, token, {
           method: "PATCH",
           body: JSON.stringify({ children: batch }),

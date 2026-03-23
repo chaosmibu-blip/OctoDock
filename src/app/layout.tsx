@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { I18nProvider } from "@/lib/i18n";
+import { BASE_URL } from "@/lib/constants";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -22,13 +23,14 @@ export const metadata: Metadata = {
   keywords: ["MCP", "Model Context Protocol", "AI agent", "Notion", "Gmail", "GitHub", "Google Calendar", "OctoDock", "AI tools", "automation"],
   authors: [{ name: "OctoDock" }],
   creator: "OctoDock",
-  metadataBase: new URL("https://octo-dock.com"),
+  // 基底 URL（影響所有相對路徑的 metadata，支援 staging/dev 環境）
+  metadataBase: new URL(BASE_URL),
   // Open Graph（社群分享預覽）
   openGraph: {
     type: "website",
     locale: "zh_TW",
     alternateLocale: "en_US",
-    url: "https://octo-dock.com",
+    url: BASE_URL,
     siteName: "OctoDock",
     title: "OctoDock — One MCP URL. All Apps.",
     description: "Let any AI agent control all your apps through a single MCP URL. Cross-agent memory included.",
@@ -53,7 +55,7 @@ export const metadata: Metadata = {
   },
   // 其他 SEO
   robots: { index: true, follow: true },
-  alternates: { canonical: "https://octo-dock.com" },
+  alternates: { canonical: BASE_URL },
 };
 
 export default function RootLayout({
@@ -75,8 +77,8 @@ export default function RootLayout({
               "applicationCategory": "DeveloperApplication",
               "operatingSystem": "Web",
               "description": "One MCP URL to let any AI agent use all your apps. Cross-agent memory included.",
-              "url": "https://octo-dock.com",
-              "image": "https://octo-dock.com/icon-512.png",
+              "url": BASE_URL,
+              "image": `${BASE_URL}/icon-512.png`,
               "author": { "@type": "Organization", "name": "OctoDock" },
               "offers": {
                 "@type": "Offer",

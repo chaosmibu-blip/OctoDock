@@ -103,50 +103,8 @@ export async function inferPreferences(userId: string): Promise<number> {
     memoriesStored++;
   }
 
-  // 4. Cross-app patterns — detect when apps are used together
-  const coOccurrences = await db
-    .select({
-      appName: operations.appName,
-      taskId: operations.taskId,
-    })
-    .from(operations)
-    .where(
-      and(
-        eq(operations.userId, userId),
-        sql`${operations.taskId} IS NOT NULL`,
-      ),
-    );
-
-  const taskApps = new Map<string, Set<string>>();
-  for (const op of coOccurrences) {
-    if (!op.taskId) continue;
-    if (!taskApps.has(op.taskId)) taskApps.set(op.taskId, new Set());
-    taskApps.get(op.taskId)!.add(op.appName);
-  }
-
-  const pairCounts = new Map<string, number>();
-  for (const apps of taskApps.values()) {
-    if (apps.size < 2) continue;
-    const sorted = [...apps].sort();
-    for (let i = 0; i < sorted.length; i++) {
-      for (let j = i + 1; j < sorted.length; j++) {
-        const pair = `${sorted[i]}+${sorted[j]}`;
-        pairCounts.set(pair, (pairCounts.get(pair) ?? 0) + 1);
-      }
-    }
-  }
-
-  for (const [pair, count] of pairCounts) {
-    if (count >= 2) {
-      await storeMemory(
-        userId,
-        `cross_app_pattern_${pair}`,
-        `User often uses ${pair.replace("+", " and ")} together in the same task (${count} times)`,
-        "pattern",
-      );
-      memoriesStored++;
-    }
-  }
+  // 4. Cross-app patterns — 已移除（原本依賴 task_id 欄位，但該欄位從未寫入過資料）
+  // 未來若需要跨 App 關聯分析，可改用時間視窗分組（同一 session 內的操作）
 
   return memoriesStored;
 }

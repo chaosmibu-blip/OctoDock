@@ -1,10 +1,11 @@
 /* 隱私權政策頁面 */
 import Link from "next/link";
+import { BASE_URL } from "@/lib/constants";
 
 export const metadata = {
   title: "Privacy Policy - OctoDock",
   description: "OctoDock privacy policy — how we handle your data and connected app tokens.",
-  alternates: { canonical: "https://octo-dock.com/privacy" },
+  alternates: { canonical: `${BASE_URL}/privacy` },
 };
 
 export default function PrivacyPage() {

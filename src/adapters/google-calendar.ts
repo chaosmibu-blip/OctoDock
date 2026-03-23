@@ -280,21 +280,24 @@ octodock_do(app:"google_calendar", action:"remove_sharing", params:{email:"someo
 function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
-  return `google_calendar actions (${Object.keys(actionMap).length}):
-  list_calendars() — list all user's calendars
-  get_events(calendar_id?, time_min?, time_max?, max_results?) — list events in a time range
-  get_event(event_id, calendar_id?) — get single event details
-  create_event(summary, start, end, description?, location?, attendees?) — create event
-  update_event(event_id, summary?, start?, end?, description?, location?) — update event
-  delete_event(event_id, calendar_id?) — delete event
-  quick_add(text, calendar_id?) — create event from natural language
-  freebusy(time_min, time_max, calendar_ids?) — check availability
-  list_recurring(event_id, calendar_id?) — list instances of a recurring event
-  create_calendar(summary, description?, timezone?) — create a new calendar
-  delete_calendar(calendar_id) — delete a calendar
-  share_calendar(email, role, calendar_id?) — ⚠️ share calendar with someone
-  list_sharing(calendar_id?) — list who calendar is shared with
-  remove_sharing(email, calendar_id?) — ⚠️ remove someone's calendar access
+  return `## Google Calendar — 行事曆管理
+查看、建立、修改行程。支援多個日曆、空閒查詢、自然語言建立事件。
+
+### 常見用法
+- 「今天有什麼行程」→ get_events(time_min:"today", time_max:"tomorrow")
+- 「明天下午 2 點開會」→ quick_add(text:"Meeting tomorrow 2pm")
+- 「我這週哪些時段有空」→ freebusy(time_min, time_max)
+- 「取消某個會議」→ delete_event(event_id)
+
+### 注意事項
+- 日期格式用 ISO 8601（2026-03-23T14:00:00+08:00），param-guard 會自動補時區
+- calendar_id 預設是 "primary"，不用特別指定
+- share_calendar 和 remove_sharing 是破壞性操作，需確認
+
+### 全部 actions (${Object.keys(actionMap).length})
+  list_calendars, get_events, get_event, create_event, update_event, delete_event,
+  quick_add, freebusy, list_recurring, create_calendar, delete_calendar,
+  share_calendar, list_sharing, remove_sharing
 Use octodock_help(app:"google_calendar", action:"ACTION") for detailed params + example.`;
 }
 
@@ -888,30 +891,10 @@ async function execute(
   }
 }
 
-// ── Token 刷新：使用 refresh_token 取得新的 access_token ─
-async function refreshGcalToken(refreshToken: string): Promise<TokenSet> {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-    }).toString(),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Google Calendar token refresh failed (GCAL_REFRESH_FAILED)`);
-  }
-
-  const data = await res.json();
-  return {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token ?? refreshToken, // Google 可能不回傳新的 refresh_token
-    expires_in: data.expires_in,
-  };
-}
+// ── Token 刷新：使用共用的 Google OAuth token 刷新函式 ─
+import { refreshGoogleToken } from "../lib/google-refresh";
+const refreshGcalToken = (token: string) =>
+  refreshGoogleToken(token, "Google Calendar", "GCAL_REFRESH_FAILED");
 
 // ── Adapter 匯出 ─────────────────────────────────────────
 export const googleCalendarAdapter: AppAdapter = {

@@ -12,6 +12,7 @@ import { runPostCheck } from "./middleware/post-check";
 import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
 import { getErrorHint } from "./error-hints";
 import { cleanHiddenChars, convertTimestamps } from "./response-formatter";
+import { MAX_RESPONSE_CHARS, TRUNCATED_HEAD_CHARS, TRUNCATED_TAIL_CHARS } from "@/lib/constants";
 import { checkParams } from "./middleware/param-guard";
 import { learnFromError } from "./middleware/error-learner";
 import { checkUsageLimit, incrementUsage } from "./middleware/usage-limit";
@@ -27,6 +28,7 @@ import {
   shouldSolicitMemory,
   getUserSummary,
 } from "@/services/memory-maintenance";
+import { cleanExpiredData } from "@/services/db-cleanup";
 import type { DoResult } from "@/adapters/types";
 
 // ============================================================
@@ -128,7 +130,7 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
 // AI 需要完整內容時用 system.get_stored 按需取用
 // ============================================================
 
-const MAX_RESPONSE_CHARS = 3000; // 約 750 tokens
+// MAX_RESPONSE_CHARS 從 @/lib/constants 匯入（約 750 tokens）
 const SUMMARY_HEAD_LINES = 30; // 摘要保留前 30 行
 const SUMMARY_TAIL_LINES = 10; // 摘要保留後 10 行
 const EXPIRY_HOURS = 24; // 暫存 24 小時後過期
@@ -165,6 +167,7 @@ async function compressIfNeeded(
 
   // 非同步清理過期資料（不阻塞主流程）
   cleanExpiredResults().catch(() => {});
+  cleanExpiredData().catch(() => {});
 
   // 回傳摘要 + 取用指令
   return (
@@ -185,11 +188,12 @@ function buildSummary(text: string, headLines: number, tailLines: number): strin
   // 行數少但字元數超標（minified JSON / base64）→ 強制按字元數截斷
   if (lines.length <= headLines + tailLines) {
     if (text.length <= MAX_RESPONSE_CHARS) return text;
-    // 字元數超標但行數少：取前 2000 字元 + 後 500 字元
-    const headChars = text.substring(0, 2000);
-    const tailChars = text.substring(text.length - 500);
+    // 字元數超標但行數少：取前段 + 後段字元
+    const headChars = text.substring(0, TRUNCATED_HEAD_CHARS);
+    const tailChars = text.substring(text.length - TRUNCATED_TAIL_CHARS);
+    const omittedChars = text.length - TRUNCATED_HEAD_CHARS - TRUNCATED_TAIL_CHARS;
     return `[Metadata] Total: ${text.length} chars, ${lines.length} lines (dense/minified content)\n\n` +
-      headChars + `\n\n... (${text.length - 2500} chars omitted) ...\n\n` + tailChars;
+      headChars + `\n\n... (${omittedChars} chars omitted) ...\n\n` + tailChars;
   }
 
   const head = lines.slice(0, headLines).join("\n");

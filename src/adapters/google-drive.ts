@@ -306,24 +306,27 @@ octodock_do(app:"google_drive", action:"read_pdf", params:{file_id:"1a6nCHFdxzjM
 function getSkill(action?: string): string | null {
   if (action && ACTION_SKILLS[action]) return ACTION_SKILLS[action];
   if (action) return null; // ACTION_SKILLS 沒有的 action → 回傳 null 讓 server.ts fallback 用 actionMap 自動查
-  return `google_drive actions (${Object.keys(actionMap).length}):
-  search(query, max_results?) — search files by name/type (Drive query syntax)
-  get_file(file_id) — get file metadata
-  download(file_id) — download text file content
-  create(name, content?, mime_type?, parent_id?) — create file or folder
-  update(file_id, name?, description?) — update file metadata
-  delete(file_id, permanent?) — delete file (default: trash, permanent=true: permanent delete)
-  empty_trash() — permanently delete all trashed files
-  share(file_id, role, type, email?) — share file with user or anyone
-  copy(file_id, name?) — copy a file
-  move(file_id, new_parent_id) — move file to another folder
-  create_folder(name, parent_id?) — create a new folder
-  export(file_id, format) — export Google Workspace file to pdf/docx/txt/csv
-  list_permissions(file_id) — list file permissions
-  add_comment(file_id, content) — add a comment to a file
-  list_comments(file_id) — list all comments on a file
-  delete_permission(file_id, permission_id) — remove a sharing permission
-  read_pdf(file_id) — download PDF and extract text content
+  return `## Google Drive — 雲端檔案管理
+搜尋、上傳、下載、分享檔案。支援 Google Docs/Sheets/Slides 匯出和 PDF 文字擷取。
+
+### 常見用法
+- 「找某個檔案」→ search(query:"name contains '報告'")
+- 「下載文字檔」→ download(file_id)
+- 「讀 PDF 內容」→ read_pdf(file_id)
+- 「匯出 Google Doc 為 PDF」→ export(file_id, format:"pdf")
+- 「分享檔案給某人」→ share(file_id, role:"writer", type:"user", email:"...")
+- 「建資料夾」→ create_folder(name, parent_id?)
+
+### 注意事項
+- search 用 Drive 查詢語法（name contains '...', mimeType='...'）
+- delete 預設移到垃圾桶，permanent=true 才永久刪除
+- download 只能下載純文字，Google Workspace 檔案要用 export
+- read_pdf 會下載 PDF 並擷取文字（適合掃描文件）
+
+### 全部 actions (${Object.keys(actionMap).length})
+  search, get_file, download, create, update, delete, empty_trash, share,
+  copy, move, create_folder, export, list_permissions, add_comment,
+  list_comments, delete_permission, read_pdf
 Use octodock_help(app:"google_drive", action:"ACTION") for detailed params + example.`;
 }
 
@@ -1029,30 +1032,10 @@ async function execute(
   }
 }
 
-// ── Token 刷新：使用 refresh_token 取得新的 access_token ─
-async function refreshGDriveToken(refreshToken: string): Promise<TokenSet> {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-    }).toString(),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Google Drive token refresh failed (GDRIVE_REFRESH_FAILED)`);
-  }
-
-  const data = await res.json();
-  return {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token ?? refreshToken, // Google 不一定回傳新的 refresh_token
-    expires_in: data.expires_in,
-  };
-}
+// ── Token 刷新：使用共用的 Google OAuth token 刷新函式 ─
+import { refreshGoogleToken } from "../lib/google-refresh";
+const refreshGDriveToken = (token: string) =>
+  refreshGoogleToken(token, "Google Drive", "GDRIVE_REFRESH_FAILED");
 
 // ── Adapter 匯出 ─────────────────────────────────────────
 export const googleDriveAdapter: AppAdapter = {
