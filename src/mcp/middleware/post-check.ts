@@ -14,7 +14,8 @@ import { and, eq, gte, sql } from "drizzle-orm";
 // ============================================================
 
 /** 基線異常倍數閾值（超過日均 N 倍才發 warning） */
-const ANOMALY_MULTIPLIER = parseFloat(process.env.POST_CHECK_ANOMALY_MULTIPLIER ?? "2");
+/** 基線異常倍數閾值提高到 3 倍，搭配 >10 次門檻，減少低頻操作的雜訊 warning */
+const ANOMALY_MULTIPLIER = parseFloat(process.env.POST_CHECK_ANOMALY_MULTIPLIER ?? "3");
 
 /** 修正 pattern 偵測的時間窗口（毫秒） */
 const CONSOLIDATION_WINDOW_MS = 30 * 60 * 1000; // 30 分鐘
@@ -86,7 +87,8 @@ export async function runPostCheck(
     const totalN = Number(thirtyDayCount[0]?.count ?? 0);
     const dailyAvg = totalN / 30;
 
-    if (dailyAvg > 0 && todayN > dailyAvg * ANOMALY_MULTIPLIER) {
+    // 只在今日次數超過日均 3 倍且超過 10 次時才發 warning，避免低頻操作產生雜訊
+    if (dailyAvg > 0 && todayN > dailyAvg * ANOMALY_MULTIPLIER && todayN > 10) {
       warnings.push(
         `Today: ${todayN} times for ${toolName} (avg ${dailyAvg.toFixed(1)}/day over 30 days)`,
       );

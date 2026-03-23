@@ -532,11 +532,11 @@ function registerDoTool(
         if (preContext.currentContent) {
           contextParts.push(`Current: "${preContext.currentContent.title}" (last edited ${preContext.currentContent.lastEdited})`);
         }
-        // U9: 跨 App 上下文 — AI 會用這個來串連跨 App 工作流
-        if (preContext.crossAppContext && preContext.crossAppContext.length > 0) {
-          const crossText = preContext.crossAppContext.map((c) => `- [${c.app}] ${c.title}${c.date ? ` (${c.date})` : ""}`).join("\n");
-          contextParts.push(`Related across apps:\n${crossText}`);
-        }
+        // U9: 跨 App 上下文 — 停用，實測 AI 幾乎不使用，屬於 token 浪費
+        // if (preContext.crossAppContext && preContext.crossAppContext.length > 0) {
+        //   const crossText = preContext.crossAppContext.map((c) => `- [${c.app}] ${c.title}${c.date ? ` (${c.date})` : ""}`).join("\n");
+        //   contextParts.push(`Related across apps:\n${crossText}`);
+        // }
         if (contextParts.length > 0) {
           const existing = result.context ? result.context + "\n\n" : "";
           result.context = existing + contextParts.join("\n");
@@ -613,26 +613,27 @@ function registerDoTool(
       }
 
       // ── P4: 成功回傳帶決策 context ──
-      // 操作成功後附帶 related memory（不超過 200 chars，避免膨脹回傳大小）
-      if (result.ok) {
-        try {
-          const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string) ?? action;
-          const relatedMemory = await queryMemory(userId, `${app} ${keyword}`, undefined, undefined, 2);
-          const relevantMemories = relatedMemory.filter(
-            (m) => m.category !== "context" || !m.key.startsWith("id:"),
-          );
-          if (relevantMemories.length > 0) {
-            const memText = relevantMemories
-              .map((m) => `${m.key}: ${m.value}`)
-              .join("; ")
-              .substring(0, 200);
-            const existing = result.context ? result.context + "\n\n" : "";
-            result.context = existing + `Related memory: ${memText}`;
-          }
-        } catch {
-          // 記憶查詢失敗不影響主流程
-        }
-      }
+      // 停用 related memory context — AI 幾乎不使用，屬於 token 浪費
+      // "About This User" 在 octodock_help() 中仍保留，那是有用的
+      // if (result.ok) {
+      //   try {
+      //     const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string) ?? action;
+      //     const relatedMemory = await queryMemory(userId, `${app} ${keyword}`, undefined, undefined, 2);
+      //     const relevantMemories = relatedMemory.filter(
+      //       (m) => m.category !== "context" || !m.key.startsWith("id:"),
+      //     );
+      //     if (relevantMemories.length > 0) {
+      //       const memText = relevantMemories
+      //         .map((m) => `${m.key}: ${m.value}`)
+      //         .join("; ")
+      //         .substring(0, 200);
+      //       const existing = result.context ? result.context + "\n\n" : "";
+      //       result.context = existing + `Related memory: ${memText}`;
+      //     }
+      //   } catch {
+      //     // 記憶查詢失敗不影響主流程
+      //   }
+      // }
 
       // ── 智慧錯誤引導（B3 + 記憶層缺口 5）──
       // 如果操作失敗且 adapter 有 formatError，嘗試提供更有用的提示
@@ -755,16 +756,17 @@ function registerDoTool(
         }
         // SOP 自動辨識 — I8/J4 最終修正：靜默自動存 SOP，不產生 suggestion
         // detectSopCandidate 現在直接自動存 SOP 並回傳 null，不再需要處理回傳值
-        // E1: 操作鏈建議（G5: suppress_suggestions 時跳過）
-        if (!suppressSuggestions && nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
-          result.nextSuggestion = nextSuggestionResult.value;
-        }
-        // E4: 跨 App 關聯
-        if (crossAppResult.status === "fulfilled" && crossAppResult.value.length > 0) {
-          const existing = result.context ? result.context + "\n\n" : "";
-          const crossAppText = crossAppResult.value.map((c) => `- [${c.app}] ${c.action}: ${c.title} (${c.date})`).join("\n");
-          result.context = existing + "Related across apps:\n" + crossAppText;
-        }
+        // E1: 操作鏈建議 — 停止附加到回傳結果，減少 token 浪費
+        // nextSuggestion 偶爾誤導 AI，且佔用回傳 token，先停用
+        // if (!suppressSuggestions && nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
+        //   result.nextSuggestion = nextSuggestionResult.value;
+        // }
+        // E4: 跨 App 關聯 — 停用，AI 幾乎不使用此 context，屬於 token 浪費
+        // if (crossAppResult.status === "fulfilled" && crossAppResult.value.length > 0) {
+        //   const existing = result.context ? result.context + "\n\n" : "";
+        //   const crossAppText = crossAppResult.value.map((c) => `- [${c.app}] ${c.action}: ${c.title} (${c.date})`).join("\n");
+        //   result.context = existing + "Related across apps:\n" + crossAppText;
+        // }
 
         // ── 回傳壓縮（Level 3）──
         // F2: 對 string 和非 string 的 data 都做壓縮檢查

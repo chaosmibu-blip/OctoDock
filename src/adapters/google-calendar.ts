@@ -107,7 +107,14 @@ function formatSingleEvent(event: Record<string, unknown>): string {
   const summary = (event.summary as string) || "(No title)";
   const time = formatEventTime(event);
   const location = event.location ? `\n  Location: ${event.location}` : "";
-  const description = event.description ? `\n  Description: ${event.description}` : "";
+  // HTML 標籤清理：Google Calendar 事件描述常含 HTML
+  const rawDesc = event.description ? String(event.description) : "";
+  const cleanDesc = rawDesc
+    .replace(/<br\s*\/?>/gi, "\n")           // <br> → 換行
+    .replace(/<a[^>]*href="([^"]*)"[^>]*>[^<]*<\/a>/gi, "$1") // <a> → 只保留 URL
+    .replace(/<[^>]+>/g, "")                 // 其他 HTML 標籤全部移除
+    .trim();
+  const description = cleanDesc ? `\n  Description: ${cleanDesc}` : "";
   const status = event.status ? ` [${event.status}]` : "";
   const id = event.id ? `\n  ID: ${event.id}` : "";
   return `- **${summary}**${status}\n  Time: ${time}${location}${description}${id}`;
