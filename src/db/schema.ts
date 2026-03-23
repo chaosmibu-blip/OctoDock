@@ -301,6 +301,27 @@ export const feedback = pgTable("feedback", {
 ]);
 
 // ============================================================
+// 4.12 usage_tracking（MCP tool call 用量追蹤）
+// Free 用戶每月 1,000 次 MCP tool call 上限
+// Pro 用戶無限次
+// ============================================================
+export const usageTracking = pgTable(
+  "usage_tracking",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    month: text("month").notNull(), // yyyy-mm 格式，例如 "2026-03"
+    toolCallCount: integer("tool_call_count").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("usage_tracking_user_month_idx").on(table.userId, table.month),
+  ],
+);
+
+// ============================================================
 // 4.8 app_submissions（開發者入口：App 請求 + Adapter 提交）
 // 不需要登入，匿名提交，用 email 聯絡
 // ============================================================

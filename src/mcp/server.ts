@@ -14,6 +14,7 @@ import { getErrorHint } from "./error-hints";
 import { cleanHiddenChars, convertTimestamps } from "./response-formatter";
 import { checkParams } from "./middleware/param-guard";
 import { learnFromError } from "./middleware/error-learner";
+import { checkUsageLimit, incrementUsage } from "./middleware/usage-limit";
 // suggestion-engine 已廢棄（N 組實測：AI 完全不看 suggestions/ai_hints/user_notices）
 import { learnIdentifier, resolveIdentifier, listMemory, queryMemory } from "@/services/memory-engine";
 import { detectSopCandidate } from "@/services/sop-detector";
@@ -282,6 +283,14 @@ function registerDoTool(
       }
 
       // ── App 操作 ──
+
+      // 用量限制檢查（Free 用戶每月 1,000 次）
+      const usageLimitError = await checkUsageLimit(userId);
+      if (usageLimitError) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ ok: false, error: usageLimitError }) }],
+        };
+      }
 
       // 檢查 App 是否已連結
       if (!connectedAppNames.includes(app)) {
@@ -721,6 +730,8 @@ function registerDoTool(
       // 如果操作成功，嘗試從結果中學習 ID 對應（越用越懂你）
       if (result.ok) {
         learnFromResult(userId, app, action, params, result).catch(() => {});
+        // 用量計數（非同步，不阻塞回應）
+        incrementUsage(userId).catch(() => {});
 
         // 並行執行 post-success 的 DB 查詢（C2、SOP、E1、E4），避免串行拖慢回應
         const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string);

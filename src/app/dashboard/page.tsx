@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { users, connectedApps } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { DashboardClient } from "./dashboard-client";
+import { getUsageSummary } from "@/mcp/middleware/usage-limit";
 
 /* #7: 頁面專屬 metadata */
 export const metadata: Metadata = {
@@ -38,6 +39,16 @@ export default async function DashboardPage() {
   // 確保用戶複製的 URL 永遠是 octo-dock.com，不會是 replit.app
   const origin = process.env.NEXTAUTH_URL ?? "https://octo-dock.com";
 
+  // 取得用量摘要（用量條用）
+  let usage: { plan: string; used: number; limit: number | null; month: string } = {
+    plan: "free", used: 0, limit: 1000, month: "",
+  };
+  try {
+    usage = await getUsageSummary(session.user.id);
+  } catch {
+    // 用量查詢失敗不影響 Dashboard 載入
+  }
+
   return (
     <DashboardClient
       user={{
@@ -51,6 +62,7 @@ export default async function DashboardPage() {
         connectedAt: a.connectedAt?.toISOString() ?? "",
       }))}
       origin={origin}
+      usage={usage}
     />
   );
 }

@@ -11,6 +11,13 @@ interface ToolInfo {
   description: string;
 }
 
+interface UsageSummary {
+  plan: string;
+  used: number;
+  limit: number | null; // null = 無限制（Pro）
+  month: string;
+}
+
 interface DashboardProps {
   user: { name: string; email: string; mcpApiKey: string };
   connectedApps: Array<{
@@ -19,6 +26,7 @@ interface DashboardProps {
     connectedAt: string;
   }>;
   origin: string;
+  usage: UsageSummary;
 }
 
 /* App 定義清單 — 已上線的 */
@@ -60,7 +68,7 @@ const APP_KEYS: Array<{ name: string; displayName: string; descKey: string; auth
   { name: "gamma", displayName: "Gamma", descKey: "app.gamma.desc" },
 ];
 
-export function DashboardClient({ user, connectedApps, origin }: DashboardProps) {
+export function DashboardClient({ user, connectedApps, origin, usage }: DashboardProps) {
   const [copied, setCopied] = useState(false);
   /* 引導區塊：選擇的 AI 工具平台 */
   const [selectedPlatform, setSelectedPlatform] = useState<"claude" | "cursor" | null>(null);
@@ -434,6 +442,77 @@ export function DashboardClient({ user, connectedApps, origin }: DashboardProps)
           >
             {copied ? t("common.copied") : t("common.copy")}
           </button>
+        </div>
+
+        {/* ── 用量條 + 訂閱管理 ── */}
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-500">
+              {t("usage.title")} — {usage.plan === "pro" ? "Pro" : "Free"}
+            </span>
+            <div className="flex gap-2">
+              {usage.plan !== "pro" && (
+                <Link
+                  href="/pricing"
+                  className="text-xs text-emerald-600 hover:text-emerald-700 font-medium no-underline"
+                >
+                  {t("usage.upgrade")}
+                </Link>
+              )}
+              {usage.plan === "pro" && (
+                <a
+                  href="https://customer-portal.paddle.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-gray-500 hover:text-gray-700 no-underline"
+                >
+                  {t("usage.manage_subscription")}
+                </a>
+              )}
+            </div>
+          </div>
+          {/* 用量進度條（Free 用戶才顯示） */}
+          {usage.limit !== null && (
+            <>
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    usage.used >= usage.limit
+                      ? "bg-red-500"
+                      : usage.used >= usage.limit * 0.8
+                        ? "bg-yellow-500"
+                        : "bg-emerald-500"
+                  }`}
+                  style={{ width: `${Math.min((usage.used / usage.limit) * 100, 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs ${
+                  usage.used >= usage.limit
+                    ? "text-red-600 font-medium"
+                    : usage.used >= usage.limit * 0.8
+                      ? "text-yellow-600"
+                      : "text-gray-400"
+                }`}>
+                  {t("usage.count_prefix")}{usage.used} / {usage.limit}{t("usage.count_suffix")}
+                </span>
+                {usage.used >= usage.limit && (
+                  <Link
+                    href="/pricing"
+                    className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded no-underline hover:bg-emerald-700 transition-colors"
+                  >
+                    {t("usage.upgrade_now")}
+                  </Link>
+                )}
+              </div>
+            </>
+          )}
+          {/* Pro 用戶顯示無限制 */}
+          {usage.limit === null && (
+            <span className="text-xs text-gray-400">
+              {t("usage.unlimited")}
+            </span>
+          )}
         </div>
 
         {/* ── 引導區塊（已連接 >= 1 個 App 時顯示）── 分步引導用戶把 MCP URL 設進 AI 工具 */}

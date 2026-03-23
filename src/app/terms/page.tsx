@@ -24,7 +24,8 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold text-gray-900">1. Acceptance of Terms</h2>
             <p className="mt-3">
               By accessing or using OctoDock (&quot;the Service&quot;), operated by Chaos Co., Ltd.
-              (查爾斯有限公司) (&quot;the Company&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) at octo-dock.com, you agree
+              (查爾斯有限公司), a company registered in Taiwan (&quot;the Company&quot;, &quot;we&quot;, &quot;us&quot;,
+              or &quot;our&quot;) at octo-dock.com, you agree
               to be bound by these Terms of Service. If you do not agree to these terms, please do
               not use the Service.
             </p>
