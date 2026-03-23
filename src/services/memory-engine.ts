@@ -156,7 +156,7 @@ function updateLastUsed(userId: string, results: MemoryEntry[]): void {
   if (results.length === 0) return;
   const keys = results.map((r) => r.key);
   db.update(memory)
-    .set({ lastUsedAt: new Date() })
+    .set({ lastUsedAt: new Date(), updatedAt: new Date() })
     .where(
       and(
         eq(memory.userId, userId),
