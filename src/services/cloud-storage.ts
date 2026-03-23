@@ -8,7 +8,6 @@
 import { db } from "@/db";
 import { connectedApps } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { decrypt } from "@/lib/crypto";
 
 /** 上傳結果 */
 export interface CloudSaveResult {

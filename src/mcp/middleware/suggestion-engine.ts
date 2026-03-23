@@ -75,8 +75,8 @@ function cleanupSessions(): void {
   }
 }
 
-/** 檢查 hint 是否應該推送（門檻 + 翻倍邏輯） */
-function shouldPushHint(userId: string, hintHash: string, triggerCount?: number): boolean {
+/** 檢查 hint 是否應該推送（門檻 + 翻倍邏輯）— 目前未使用，保留供未來啟用 */
+function _shouldPushHint(userId: string, hintHash: string, triggerCount?: number): boolean {
   if (!hintPushedAt.has(userId)) hintPushedAt.set(userId, new Map());
   const pushed = hintPushedAt.get(userId)!;
 
@@ -119,7 +119,7 @@ export function buildSmartHints(
   userId: string,
   app: string,
   action: string,
-  existingSuggestions?: string[],
+  _existingSuggestions?: string[],
 ): SmartHints {
   // 定期清理過期 session
   if (Math.random() < 0.1) cleanupSessions();

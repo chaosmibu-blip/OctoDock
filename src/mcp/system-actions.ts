@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { conversations, storedResults, operations } from "@/db/schema";
-import { eq, and, desc, lt, gt, or, isNull, sql } from "drizzle-orm";
+import { conversations, storedResults } from "@/db/schema";
+import { eq, and, desc, gt, or, isNull, sql } from "drizzle-orm";
 import {
   queryMemory,
   storeMemory,
@@ -459,7 +459,7 @@ export async function executeSystemAction(
           if (score > 0) {
             // 找到 simplified action name
             const actionName = adapter.actionMap
-              ? Object.entries(adapter.actionMap).find(([_, v]) => v === tool.name)?.[0] || tool.name
+              ? Object.entries(adapter.actionMap).find(([, v]) => v === tool.name)?.[0] || tool.name
               : tool.name;
             matches.push({ app: adapter.name, action: actionName, description: tool.description, score });
           }
@@ -967,7 +967,7 @@ export async function executeSystemAction(
       if (!query) return { ok: false, error: "query parameter is required." };
 
       const targetApps = params.apps as string[] | undefined;
-      const { getAdapter, getAllAdapters } = await import("@/mcp/registry");
+      const { getAdapter } = await import("@/mcp/registry");
       const { getValidToken } = await import("@/services/token-manager");
 
       // 決定要搜哪些 App

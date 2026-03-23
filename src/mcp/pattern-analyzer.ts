@@ -32,7 +32,7 @@ const ANALYSIS_WINDOW_DAYS = 30;
 export async function analyzePatterns(
   userId: string,
   appName: string,
-  toolName: string,
+  _toolName: string,
 ): Promise<void> {
   try {
     // 並行執行多種分析

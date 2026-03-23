@@ -187,6 +187,7 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
       setTimeout(() => fetchTools(appName), 0);
       return prev;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchTools 故意不放依賴，用 setTimeout 延遲呼叫避免循環依賴
   }, []);
 
   /* 獨立的 fetch 函式，避免 useCallback 依賴膨脹 */

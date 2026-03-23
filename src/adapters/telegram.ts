@@ -403,7 +403,7 @@ function formatResponse(action: string, rawData: unknown): string {
 
     // 未列舉的 action 回傳簡潔的 key-value 格式，避免 raw JSON
     default: {
-      const entries = Object.entries(data).filter(([_, v]) => v !== null && v !== undefined);
+      const entries = Object.entries(data).filter(([, v]) => v !== null && v !== undefined);
       if (entries.length === 0) return "Done.";
       return entries.slice(0, 10).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n");
     }

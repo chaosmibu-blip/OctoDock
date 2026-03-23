@@ -4,7 +4,7 @@ import { getValidToken } from "@/services/token-manager";
 import { analyzePatterns } from "@/mcp/pattern-analyzer";
 import { runMaintenanceIfNeeded } from "@/services/memory-maintenance";
 import { type ToolResult, extractNotionTitle } from "@/adapters/types";
-import { classifyError, type OctoDockError } from "@/mcp/error-types";
+import { classifyError } from "@/mcp/error-types";
 import {
   checkCircuitBreaker,
   recordSuccess,
