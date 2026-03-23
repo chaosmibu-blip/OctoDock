@@ -1067,8 +1067,25 @@ function formatResponse(action: string, rawData: unknown): string {
       return `Found ${results.length} items:\n\n${summarizeDatabaseItems(results)}`;
     }
 
-    // ── 建立/更新/刪除操作：精簡為 ok + url ──
-    case "create_page":
+    // ── 建立頁面：回傳含 parent 資訊 ──
+    case "create_page": {
+      const url = data.url as string | undefined;
+      const id = data.id as string | undefined;
+      // 從回傳中提取 parent 資訊
+      const parent = data.parent as Record<string, unknown> | undefined;
+      let parentInfo = "";
+      if (parent) {
+        const parentPageId = parent.page_id as string | undefined;
+        const parentDbId = parent.database_id as string | undefined;
+        const parentWorkspace = parent.workspace as boolean | undefined;
+        if (parentPageId) parentInfo = ` | Parent page: ${parentPageId}`;
+        else if (parentDbId) parentInfo = ` | Parent database: ${parentDbId}`;
+        else if (parentWorkspace) parentInfo = ` | Parent: workspace`;
+      }
+      return url ? `Done. ${url}${parentInfo}` : `Done. ID: ${id}${parentInfo}`;
+    }
+
+    // ── 其他建立/更新/刪除操作：精簡為 ok + url ──
     case "create_database_item":
     case "create_database":
     case "update_page":

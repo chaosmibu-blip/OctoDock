@@ -108,6 +108,142 @@ const APP_HINTS: Record<string, Record<string, ErrorHint>> = {
       suggestion: "YouTube API has a strict daily quota (10,000 units). Search costs 100 units. Wait until tomorrow or reduce usage.",
     },
   },
+  // ── Microsoft 系（共用 Microsoft Graph API）──
+  "microsoft-excel": {
+    "403": {
+      explanation: "No permission to access this Excel file, or Microsoft Graph API scope insufficient.",
+      suggestion: "Check if the file is shared with the user. User may need to reconnect Microsoft account with Files.ReadWrite scope.",
+    },
+    "404": {
+      explanation: "Excel file, worksheet, or range not found.",
+      suggestion: "Verify file_id is correct. Use octodock_do(app:'microsoft_excel', action:'list_files') to find available files.",
+    },
+  },
+  "microsoft-word": {
+    "403": {
+      explanation: "No permission to access this Word document.",
+      suggestion: "Check if the file is shared with the user. User may need to reconnect Microsoft account.",
+    },
+    "404": {
+      explanation: "Word document not found.",
+      suggestion: "Verify file_id is correct. Use octodock_do(app:'microsoft_word', action:'list_files') to find available files.",
+    },
+  },
+  "microsoft-powerpoint": {
+    "403": {
+      explanation: "No permission to access this PowerPoint file.",
+      suggestion: "Check if the file is shared with the user. User may need to reconnect Microsoft account.",
+    },
+    "404": {
+      explanation: "PowerPoint file not found.",
+      suggestion: "Verify file_id is correct. Use octodock_do(app:'microsoft_powerpoint', action:'list_files') to find available files.",
+    },
+  },
+  // ── 通訊平台 ──
+  slack: {
+    "401": {
+      explanation: "Slack token is invalid or expired.",
+      suggestion: "User needs to reconnect Slack in OctoDock Dashboard.",
+    },
+    "403": {
+      explanation: "Bot lacks required Slack permissions for this action.",
+      suggestion: "Check bot scopes in Slack App settings. Common missing scopes: channels:write, chat:write, users:read.",
+    },
+    "404": {
+      explanation: "Slack channel, user, or message not found.",
+      suggestion: "Verify the channel/user ID. Use octodock_do(app:'slack', action:'list_channels') to find channels.",
+    },
+  },
+  discord: {
+    "403": {
+      explanation: "Discord bot lacks permissions for this action.",
+      suggestion: "Check bot role permissions in Discord server settings. Bot may need Administrator or specific channel permissions.",
+    },
+    "404": {
+      explanation: "Discord channel, message, or guild not found.",
+      suggestion: "Verify the ID is correct. The bot must be a member of the server to access its resources.",
+    },
+    "429": {
+      explanation: "Discord API rate limit hit.",
+      suggestion: "Wait a few seconds and retry. Discord has strict per-route rate limits.",
+    },
+  },
+  telegram: {
+    "400": {
+      explanation: "Invalid request to Telegram Bot API. Common causes: wrong chat_id, empty text, or invalid file_id.",
+      suggestion: "Check parameters. chat_id must be a number or @username. text cannot be empty.",
+    },
+    "403": {
+      explanation: "Bot was blocked by the user or lacks group permissions.",
+      suggestion: "The user may have blocked the bot. For groups, bot needs to be added as member with send message permission.",
+    },
+  },
+  "telegram-user": {
+    "400": {
+      explanation: "Invalid Telegram User API request.",
+      suggestion: "Check chat ID format. Use octodock_do(app:'telegram_user', action:'resolve_username', params:{username:'...'}) to find chat IDs.",
+    },
+    "403": {
+      explanation: "No permission for this action. Account may be restricted.",
+      suggestion: "Check if the user account has been restricted by Telegram. Some actions require mutual contacts.",
+    },
+  },
+  line: {
+    "400": {
+      explanation: "Invalid LINE API request. Common causes: wrong user_id format or invalid message structure.",
+      suggestion: "LINE user_id starts with 'U'. Use octodock_do(app:'line', action:'get_bot_info') to verify bot setup.",
+    },
+    "403": {
+      explanation: "LINE API permission denied. Bot may not have required channel permissions.",
+      suggestion: "Check LINE Developers Console for channel permissions. Messaging API requires proper channel access token.",
+    },
+    "429": {
+      explanation: "LINE API rate limit exceeded.",
+      suggestion: "LINE limits: 100k messages/month (free), more on paid plans. Wait and retry.",
+    },
+  },
+  // ── 社群媒體 ──
+  instagram: {
+    "400": {
+      explanation: "Invalid Instagram API request. Common causes: invalid media format or missing caption.",
+      suggestion: "Instagram requires JPEG images for publishing. Check image_url is accessible and image format is correct.",
+    },
+    "403": {
+      explanation: "Instagram API permission denied or business account required.",
+      suggestion: "Instagram API requires a Business or Creator account connected via Facebook Page.",
+    },
+  },
+  threads: {
+    "400": {
+      explanation: "Invalid Threads API request.",
+      suggestion: "Check text content. Threads has a character limit similar to Twitter/X.",
+    },
+    "403": {
+      explanation: "Threads API access denied.",
+      suggestion: "Threads API requires an Instagram Professional account. Check account type and permissions.",
+    },
+  },
+  // ── 生產力工具 ──
+  todoist: {
+    "403": {
+      explanation: "Todoist API token is invalid or lacks permissions.",
+      suggestion: "User needs to reconnect Todoist in OctoDock Dashboard to refresh the token.",
+    },
+    "404": {
+      explanation: "Todoist project, task, or resource not found.",
+      suggestion: "The item may have been deleted. Use octodock_do(app:'todoist', action:'list_tasks') to find available tasks.",
+    },
+  },
+  gamma: {
+    "400": {
+      explanation: "Invalid Gamma API request. Check format parameter (must be 'presentation', 'document', or 'webpage').",
+      suggestion: "Valid formats: presentation, document, webpage. input_text should describe what you want to generate.",
+    },
+    "403": {
+      explanation: "Gamma API access denied or quota exceeded.",
+      suggestion: "Check Gamma account plan and API quota. User may need to upgrade or wait for quota reset.",
+    },
+  },
 };
 
 import { extractHttpStatus } from "./error-types";
