@@ -349,7 +349,8 @@ function formatResponse(action: string, rawData: unknown): string {
             `- ${f.name} (${mimeToLabel(f.mimeType)}) id:${f.id} url:${f.webViewLink ?? "N/A"}`,
         )
         .join("\n");
-      if (data.nextPageToken) result += `\n\n_More results available. Use page_token: "${data.nextPageToken}" to see next page._`;
+      // 分頁 token 獨立一行，AI 需要完整 token 值來呼叫下一頁
+      if (data.nextPageToken) result += `\n\n_More results available. To see next page:_\npage_token: ${data.nextPageToken}`;
       return result;
     }
     // 取得檔案：詳細資訊

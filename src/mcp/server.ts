@@ -9,7 +9,7 @@ import { executeWithMiddleware } from "./middleware/logger";
 import { checkMcpRateLimit } from "@/lib/rate-limit";
 import { getPreContext } from "./middleware/pre-context";
 import { runPostCheck } from "./middleware/post-check";
-import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
+import { getLikelyNextActions } from "./middleware/action-chain";
 import { getErrorHint } from "./error-hints";
 import { cleanHiddenChars, convertTimestamps } from "./response-formatter";
 import { MAX_RESPONSE_CHARS, TRUNCATED_HEAD_CHARS, TRUNCATED_TAIL_CHARS } from "@/lib/constants";
@@ -376,11 +376,7 @@ function registerDoTool(
       // J3: 非攔截的警告，暫存到 guardWarnings，等 result 初始化後再合併
       const guardWarnings = guardResult?.warnings;
 
-      // G5: suppress_suggestions — 讓 AI 或用戶控制是否回傳 nextSuggestion
-      const suppressSuggestions = translatedParams.suppress_suggestions === true;
-      if (suppressSuggestions) {
-        delete translatedParams.suppress_suggestions;
-      }
+
 
       // C6: Dry-run 模式 — 破壞性操作預覽，不實際執行
       const isDryRun = translatedParams.dryRun === true;
@@ -515,33 +511,10 @@ function registerDoTool(
         result.warnings.push(...guardWarnings);
       }
 
-      // C1: 把 pre-context 附在 DoResult 上
-      // 只保留 AI 會實際用來決策的資訊（target info、重複寄信警告、跨 App 關聯）
-      // 移除 AI 不會主動解讀的：namingConvention、patterns（實測無行為改變）
+      // C1: pre-context — 停用 context 欄位，實測 AI 不使用這些資訊
+      // context 欄位增加回傳 token 但不改變 AI 行為，完全移除
+      // 保留破壞性操作的 warnings（G2、G3），這些 AI 會看
       if (preContext && result.ok) {
-        const contextParts: string[] = [];
-        if (preContext.existingSiblings) {
-          contextParts.push(`Existing siblings: ${preContext.existingSiblings.map((s) => s.title).join(", ")}`);
-        }
-        if (preContext.todaySentToRecipient != null) {
-          contextParts.push(`Sent to this recipient today: ${preContext.todaySentToRecipient} times`);
-        }
-        if (preContext.targetInfo) {
-          contextParts.push(`Target: "${preContext.targetInfo.title}" (created ${preContext.targetInfo.createdAt})`);
-        }
-        if (preContext.currentContent) {
-          contextParts.push(`Current: "${preContext.currentContent.title}" (last edited ${preContext.currentContent.lastEdited})`);
-        }
-        // U9: 跨 App 上下文 — 停用，實測 AI 幾乎不使用，屬於 token 浪費
-        // if (preContext.crossAppContext && preContext.crossAppContext.length > 0) {
-        //   const crossText = preContext.crossAppContext.map((c) => `- [${c.app}] ${c.title}${c.date ? ` (${c.date})` : ""}`).join("\n");
-        //   contextParts.push(`Related across apps:\n${crossText}`);
-        // }
-        if (contextParts.length > 0) {
-          const existing = result.context ? result.context + "\n\n" : "";
-          result.context = existing + contextParts.join("\n");
-        }
-
         // G2: 破壞性操作預檢 — 子資源警告寫入 warnings
         if (preContext.childResources && preContext.childResources.length > 0) {
           if (!result.warnings) result.warnings = [];
@@ -568,19 +541,19 @@ function registerDoTool(
         }
       }
 
-      // P3: 標註自動套用的偏好參數（讓 AI 告知用戶可以覆蓋）
+      // P3: 自動套用的偏好參數 — 改放 warnings 而非 context，確保 AI 看到可覆蓋提示
       if (result.ok && appliedPrefs.length > 0) {
-        const prefText = appliedPrefs.map((p) => {
-          // 將 ID 格式化成可讀的提示
+        if (!result.warnings) result.warnings = [];
+        for (const p of appliedPrefs) {
           const displayKey = p.key.replace(/_id$/, "").replace(/_/g, " ");
-          return `Auto-filled ${displayKey}: ${p.value}. Override by specifying ${p.key} explicitly.`;
-        }).join("\n");
-        const existing = result.context ? result.context + "\n\n" : "";
-        result.context = existing + prefText;
+          result.warnings.push(`Auto-filled ${displayKey}: ${p.value}. Override by specifying ${p.key} explicitly.`);
+        }
       }
 
-      // C5: 操作結果帶結構化摘要
-      if (result.ok && result.data) {
+      // C5: 操作結果帶結構化摘要 — 只在寫入/破壞性操作時附加
+      // 讀取操作（get、search、list）的 data 已包含完整資訊，summary 是多餘的
+      const isWriteAction = /create|update|delete|archive|trash|send|reply|draft|append|replace|move|rename|share|copy|publish/.test(action);
+      if (result.ok && result.data && isWriteAction) {
         try {
           const summary = adapter.extractSummary
             ? adapter.extractSummary(action, result.data)
@@ -613,27 +586,7 @@ function registerDoTool(
       }
 
       // ── P4: 成功回傳帶決策 context ──
-      // 停用 related memory context — AI 幾乎不使用，屬於 token 浪費
-      // "About This User" 在 octodock_help() 中仍保留，那是有用的
-      // if (result.ok) {
-      //   try {
-      //     const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string) ?? action;
-      //     const relatedMemory = await queryMemory(userId, `${app} ${keyword}`, undefined, undefined, 2);
-      //     const relevantMemories = relatedMemory.filter(
-      //       (m) => m.category !== "context" || !m.key.startsWith("id:"),
-      //     );
-      //     if (relevantMemories.length > 0) {
-      //       const memText = relevantMemories
-      //         .map((m) => `${m.key}: ${m.value}`)
-      //         .join("; ")
-      //         .substring(0, 200);
-      //       const existing = result.context ? result.context + "\n\n" : "";
-      //       result.context = existing + `Related memory: ${memText}`;
-      //     }
-      //   } catch {
-      //     // 記憶查詢失敗不影響主流程
-      //   }
-      // }
+      // P4: related memory context 已移除 — AI 不使用，改在 help() 回傳用戶記憶
 
       // ── 智慧錯誤引導（B3 + 記憶層缺口 5）──
       // 如果操作失敗且 adapter 有 formatError，嘗試提供更有用的提示
@@ -653,15 +606,7 @@ function registerDoTool(
           // hint 查詢失敗不影響錯誤回傳
         }
 
-        // E2: 失敗自動修復建議（結構化，從 operations 表查）
-        try {
-          const hint = await getRecoveryHint(userId, app, toolName);
-          if (hint) {
-            result.recoveryHint = hint;
-          }
-        } catch {
-          // 修復建議查詢失敗不影響錯誤回傳
-        }
+        // E2（recoveryHint）已移除 — 「上次成功的參數」對當前失敗無幫助
 
         // 記憶層輔助：查最近成功的同類操作，提供參數參考
         try {
@@ -741,32 +686,21 @@ function registerDoTool(
         // 用量計數（非同步，不阻塞回應）
         incrementUsage(userId).catch(() => {});
 
-        // 並行執行 post-success 的 DB 查詢（C2、SOP、E1、E4），避免串行拖慢回應
-        const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string);
-        const [postCheckResult, , nextSuggestionResult, crossAppResult] = await Promise.allSettled([
+        // 並行執行 post-success 的 DB 查詢（C2、SOP）
+        // E1（suggestNextAction）和 E4（findCrossAppContext）已停用，不再浪費 DB 查詢
+        const [postCheckResult] = await Promise.allSettled([
           runPostCheck(userId, app, toolName, translatedParams),
           detectSopCandidate(userId),
-          suggestNextAction(userId, app, toolName),
-          keyword ? findCrossAppContext(userId, app, keyword) : Promise.resolve([]),
         ]);
 
-        // C2+C3: 操作後基線比對結果
+        // C2+C3: 操作後基線比對結果 — 高頻/重複 warning 已停用，只保留未來的破壞性操作 warning
         if (postCheckResult.status === "fulfilled" && postCheckResult.value?.warnings?.length) {
-          result.warnings = postCheckResult.value.warnings;
+          if (!result.warnings) result.warnings = [];
+          result.warnings.push(...postCheckResult.value.warnings);
         }
         // SOP 自動辨識 — I8/J4 最終修正：靜默自動存 SOP，不產生 suggestion
         // detectSopCandidate 現在直接自動存 SOP 並回傳 null，不再需要處理回傳值
-        // E1: 操作鏈建議 — 停止附加到回傳結果，減少 token 浪費
-        // nextSuggestion 偶爾誤導 AI，且佔用回傳 token，先停用
-        // if (!suppressSuggestions && nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
-        //   result.nextSuggestion = nextSuggestionResult.value;
-        // }
-        // E4: 跨 App 關聯 — 停用，AI 幾乎不使用此 context，屬於 token 浪費
-        // if (crossAppResult.status === "fulfilled" && crossAppResult.value.length > 0) {
-        //   const existing = result.context ? result.context + "\n\n" : "";
-        //   const crossAppText = crossAppResult.value.map((c) => `- [${c.app}] ${c.action}: ${c.title} (${c.date})`).join("\n");
-        //   result.context = existing + "Related across apps:\n" + crossAppText;
-        // }
+        // E1（nextSuggestion）和 E4（跨 App 關聯）已移除 — AI 不使用這些欄位
 
         // ── 回傳壓縮（Level 3）──
         // F2: 對 string 和非 string 的 data 都做壓縮檢查
@@ -780,29 +714,18 @@ function registerDoTool(
         }
       }
 
-      // ── 記憶層：Session 偵測 + 記憶不足提醒（缺口 1、2、7）──
+      // ── 記憶層：Session 偵測（缺口 1、2、7）──
+      // context 欄位已移除，user summary 改在 octodock_help() 中回傳
+      // suggestions 已證實 AI 不看，整個區塊簡化
+      // 保留 session 偵測以觸發記憶維護，但不再附加到 result
       try {
-        const sessionState = await detectSessionState(userId, connectedAppNames);
-        if (sessionState) {
-          // 缺口 2：新 session 的第一次 do() 附帶用戶上下文（append，不覆蓋既有 context）
-          const summary = await getUserSummary(userId);
-          if (summary) {
-            const existing = result.context ? result.context + "\n\n" : "";
-            result.context = existing + summary;
-          }
-          // 缺口 1 + 7：記憶不足時請 AI 分享用戶記憶
-          const solicitation = shouldSolicitMemory(sessionState);
-          if (solicitation) {
-            if (!result.suggestions) result.suggestions = [];
-            result.suggestions.push(solicitation);
-          }
-        }
+        await detectSessionState(userId, connectedAppNames);
       } catch {
         // Session 偵測失敗不影響主流程
       }
 
-      // N 組實測結論：AI 完全不看 suggestions/ai_hints/user_notices
-      // 所有「提示」機制已轉為靜默執行（SOP 自動存）或廢棄
+      // 清除 context 和 suggestions — 這兩個欄位不再使用
+      delete result.context;
       delete result.suggestions;
 
       return {

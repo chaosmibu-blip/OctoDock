@@ -1701,6 +1701,11 @@ function notionFormatError(action: string, errorMessage: string): string | null 
     return "Notion API 速率限制（3 次/秒）。請稍後再試。";
   }
 
+  // Workspace 頂層頁面無法封存
+  if (msg.includes("archiving workspace level") || msg.includes("workspace level pages")) {
+    return "Workspace 頂層頁面無法直接封存。請先用 move_page 移到某個父頁面底下，再執行 archive_page。";
+  }
+
   // 不攔截的錯誤回傳 null，使用原始錯誤訊息
   return null;
 }

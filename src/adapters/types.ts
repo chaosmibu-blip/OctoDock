@@ -78,12 +78,12 @@ export interface DoResult {
   errorCode?: string; // B1: 結構化錯誤碼（TOKEN_EXPIRED、RATE_LIMITED 等）
   retryable?: boolean; // B1: Agent 可據此決定是否重試
   retryAfterMs?: number; // B1: 建議重試間隔（毫秒）
-  suggestions?: string[]; // 已廢棄（N 組實測結論：AI 完全不看此欄位，僅保留向下相容）
-  context?: string; // 用戶上下文摘要（僅 session 首次 do() 附帶）
-  summary?: Record<string, unknown>; // C5: 操作結果可驗證摘要
-  warnings?: string[]; // C2: 異常偵測警告
-  nextSuggestion?: { app: string; action: string; reason: string; probability: number }; // E1: 操作鏈建議
-  recoveryHint?: { lastSuccessfulParams: Record<string, unknown>; note: string }; // E2: 失敗修復建議
+  suggestions?: string[]; // 已廢棄（AI 完全不看此欄位）
+  context?: string; // 已廢棄（do() 不再附帶 context，改由 help() 回傳）
+  summary?: Record<string, unknown>; // C5: 操作結果摘要（僅寫入/破壞性操作附帶）
+  warnings?: string[]; // C2: 異常偵測警告（僅保留 param-guard 和破壞性操作警告）
+  nextSuggestion?: { app: string; action: string; reason: string; probability: number }; // E1: 已停用
+  recoveryHint?: { lastSuccessfulParams: Record<string, unknown>; note: string }; // E2: 已停用
   candidates?: Array<{ title: string; id: string }>; // NOT_FOUND 時自動搜尋的候選結果
   frequentFailure?: { count: number; since: string; suggestion: string }; // 高頻失敗偵測
   affectedResources?: Array<{ id: string; title: string; status?: string }>; // G6: 錯誤時列出被影響的資源

@@ -94,10 +94,11 @@ export function checkParams(
       }
 
       // 不完整的 UUID（含 dash 但不足 36 字元，或不含 dash 但不足 32 字元）→ 攔截
+      // 錯誤訊息告訴 AI「該做什麼」，而非「哪裡錯了」
       if (val.length > 0 && val.length < 36) {
         return {
           blocked: true,
-          error: `Invalid ${key} format: "${val}" (${val.length} chars). Notion requires full 36-char UUID (e.g., 320a9617-875f-81cd-ba5b-c6ceeb441de2). Use octodock_do(app:"notion", action:"search", params:{query:"..."}) to find the correct ID.`,
+          error: `找不到名為 "${val}" 的頁面。Try: octodock_do(app:"notion", action:"search", params:{query:"${val}"})`,
         };
       }
     }
