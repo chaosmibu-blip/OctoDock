@@ -9,7 +9,7 @@ import { executeWithMiddleware } from "./middleware/logger";
 import { checkMcpRateLimit } from "@/lib/rate-limit";
 import { getPreContext } from "./middleware/pre-context";
 import { runPostCheck } from "./middleware/post-check";
-import { getLikelyNextActions } from "./middleware/action-chain";
+import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
 import { getErrorHint } from "./error-hints";
 import { cleanHiddenChars, convertTimestamps } from "./response-formatter";
 import { MAX_RESPONSE_CHARS, TRUNCATED_HEAD_CHARS, TRUNCATED_TAIL_CHARS } from "@/lib/constants";
@@ -376,6 +376,12 @@ function registerDoTool(
       // J3: 非攔截的警告，暫存到 guardWarnings，等 result 初始化後再合併
       const guardWarnings = guardResult?.warnings;
 
+      // G5: suppress_suggestions — 讓 AI 或用戶控制是否回傳 nextSuggestion
+      const suppressSuggestions = translatedParams.suppress_suggestions === true;
+      if (suppressSuggestions) {
+        delete translatedParams.suppress_suggestions;
+      }
+
 
 
       // C6: Dry-run 模式 — 破壞性操作預覽，不實際執行
@@ -586,7 +592,26 @@ function registerDoTool(
       }
 
       // ── P4: 成功回傳帶決策 context ──
-      // P4: related memory context 已移除 — AI 不使用，改在 help() 回傳用戶記憶
+      // ── P4: 成功回傳帶決策 context ──
+      if (result.ok) {
+        try {
+          const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string) ?? action;
+          const relatedMemory = await queryMemory(userId, `${app} ${keyword}`, undefined, undefined, 2);
+          const relevantMemories = relatedMemory.filter(
+            (m) => m.category !== "context" || !m.key.startsWith("id:"),
+          );
+          if (relevantMemories.length > 0) {
+            const memText = relevantMemories
+              .map((m) => `${m.key}: ${m.value}`)
+              .join("; ")
+              .substring(0, 200);
+            const existing = result.context ? result.context + "\n\n" : "";
+            result.context = existing + `Related memory: ${memText}`;
+          }
+        } catch {
+          // 記憶查詢失敗不影響主流程
+        }
+      }
 
       // ── 智慧錯誤引導（B3 + 記憶層缺口 5）──
       // 如果操作失敗且 adapter 有 formatError，嘗試提供更有用的提示
@@ -606,7 +631,11 @@ function registerDoTool(
           // hint 查詢失敗不影響錯誤回傳
         }
 
-        // E2（recoveryHint）已移除 — 「上次成功的參數」對當前失敗無幫助
+        // E2: recoveryHint — 查上次成功的同類操作參數，輔助 AI 修正
+        try {
+          const hint = await getRecoveryHint(userId, app, toolName);
+          if (hint) result.recoveryHint = hint;
+        } catch {}
 
         // 記憶層輔助：查最近成功的同類操作，提供參數參考
         try {
@@ -686,11 +715,13 @@ function registerDoTool(
         // 用量計數（非同步，不阻塞回應）
         incrementUsage(userId).catch(() => {});
 
-        // 並行執行 post-success 的 DB 查詢（C2、SOP）
-        // E1（suggestNextAction）和 E4（findCrossAppContext）已停用，不再浪費 DB 查詢
-        const [postCheckResult] = await Promise.allSettled([
+        // 並行執行 post-success 的 DB 查詢（C2、SOP、E1、E4），避免串行拖慢回應
+        const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string);
+        const [postCheckResult, , nextSuggestionResult, crossAppResult] = await Promise.allSettled([
           runPostCheck(userId, app, toolName, translatedParams),
           detectSopCandidate(userId),
+          suggestNextAction(userId, app, toolName),
+          keyword ? findCrossAppContext(userId, app, keyword) : Promise.resolve([]),
         ]);
 
         // C2+C3: 操作後基線比對結果 — 高頻/重複 warning 已停用，只保留未來的破壞性操作 warning
@@ -700,7 +731,16 @@ function registerDoTool(
         }
         // SOP 自動辨識 — I8/J4 最終修正：靜默自動存 SOP，不產生 suggestion
         // detectSopCandidate 現在直接自動存 SOP 並回傳 null，不再需要處理回傳值
-        // E1（nextSuggestion）和 E4（跨 App 關聯）已移除 — AI 不使用這些欄位
+        // E1: 操作鏈建議（G5: suppress_suggestions 時跳過）
+        if (!suppressSuggestions && nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
+          result.nextSuggestion = nextSuggestionResult.value;
+        }
+        // E4: 跨 App 關聯 context
+        if (crossAppResult.status === "fulfilled" && Array.isArray(crossAppResult.value) && crossAppResult.value.length > 0) {
+          const existing = result.context ? result.context + "\n\n" : "";
+          const crossAppText = (crossAppResult.value as Array<{ app: string; action: string; title: string; date: string }>).map((c) => `- [${c.app}] ${c.action}: ${c.title} (${c.date})`).join("\n");
+          result.context = existing + "Related across apps:\n" + crossAppText;
+        }
 
         // ── 回傳壓縮（Level 3）──
         // F2: 對 string 和非 string 的 data 都做壓縮檢查
@@ -724,8 +764,7 @@ function registerDoTool(
         // Session 偵測失敗不影響主流程
       }
 
-      // 清除 context 和 suggestions — 這兩個欄位不再使用
-      delete result.context;
+      // 清除已廢棄的 suggestions 欄位
       delete result.suggestions;
 
       return {

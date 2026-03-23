@@ -87,36 +87,36 @@ export async function runPostCheck(
     const totalN = Number(thirtyDayCount[0]?.count ?? 0);
     const dailyAvg = totalN / 30;
 
-    // 高頻 warning — 停用：實測 AI 從不根據此 warning 改變行為，純屬 token 浪費
-    // if (dailyAvg > 0 && todayN > dailyAvg * ANOMALY_MULTIPLIER && todayN > 10) {
-    //   warnings.push(
-    //     `Today: ${todayN} times for ${toolName} (avg ${dailyAvg.toFixed(1)}/day over 30 days)`,
-    //   );
-    // }
+    // C2: 高頻操作 warning — 超過日均 N 倍且超過 10 次才發
+    if (dailyAvg > 0 && todayN > dailyAvg * ANOMALY_MULTIPLIER && todayN > 10) {
+      warnings.push(
+        `Today: ${todayN} times for ${toolName} (avg ${dailyAvg.toFixed(1)}/day over 30 days)`,
+      );
+    }
 
-    // 重複操作 warning — 停用：連續對同一目標寫入是正常工作流程，AI 不需要被提醒
-    // const targetId = extractTargetId(params);
-    // if (targetId) {
-    //   const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
-    //   const recentSameTarget = await db
-    //     .select({ count: sql<number>`count(*)` })
-    //     .from(operations)
-    //     .where(
-    //       and(
-    //         eq(operations.userId, userId),
-    //         eq(operations.toolName, toolName),
-    //         gte(operations.createdAt, fiveMinAgo),
-    //         sql`params->>'page_id' = ${targetId} OR params->>'database_id' = ${targetId} OR params->>'block_id' = ${targetId}`,
-    //       ),
-    //     );
-    //
-    //   const recentCount = Number(recentSameTarget[0]?.count ?? 0);
-    //   if (recentCount >= 2) {
-    //     warnings.push(
-    //       `Repeated operation: ${toolName} on the same target ${recentCount} times in 5 min`,
-    //     );
-    //   }
-    // }
+    // C2: 重複操作 warning — 短時間內對同一目標重複操作
+    const targetId = extractTargetId(params);
+    if (targetId) {
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const recentSameTarget = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(operations)
+        .where(
+          and(
+            eq(operations.userId, userId),
+            eq(operations.toolName, toolName),
+            gte(operations.createdAt, fiveMinAgo),
+            sql`params->>'page_id' = ${targetId} OR params->>'database_id' = ${targetId} OR params->>'block_id' = ${targetId}`,
+          ),
+        );
+
+      const recentCount = Number(recentSameTarget[0]?.count ?? 0);
+      if (recentCount >= 2) {
+        warnings.push(
+          `Repeated operation: ${toolName} on the same target ${recentCount} times in 5 min`,
+        );
+      }
+    }
 
     // ── C3: 修正 pattern 偵測（非同步寫入 memory）──
     detectCorrectionPatterns(userId, appName, toolName, params).catch((err) =>
