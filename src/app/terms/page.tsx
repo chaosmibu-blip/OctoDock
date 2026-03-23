@@ -17,13 +17,14 @@ export default function TermsPage() {
         </Link>
 
         <h1 className="mt-8 text-4xl font-bold text-gray-900">Terms of Service</h1>
-        <p className="mt-2 text-sm text-gray-500">Last updated: March 16, 2026</p>
+        <p className="mt-2 text-sm text-gray-500">Last updated: March 23, 2026</p>
 
         <div className="mt-10 space-y-8 text-gray-600 leading-relaxed">
           <section>
             <h2 className="text-xl font-semibold text-gray-900">1. Acceptance of Terms</h2>
             <p className="mt-3">
-              By accessing or using OctoDock (&quot;the Service&quot;), operated at octo-dock.com, you agree
+              By accessing or using OctoDock (&quot;the Service&quot;), operated by Chaos Co., Ltd.
+              (查爾斯有限公司) (&quot;the Company&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) at octo-dock.com, you agree
               to be bound by these Terms of Service. If you do not agree to these terms, please do
               not use the Service.
             </p>
