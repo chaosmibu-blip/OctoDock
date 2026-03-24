@@ -115,6 +115,7 @@ AI 使用 → param-guard 修正格式 → pre-context 補現狀 → 執行 → 
 11. **所有失敗路徑都要記錄**：`server.ts` 中每個提前返回的失敗（app not connected、unknown action、名稱驗證攔截等）都必須呼叫 `logOperation`。不記錄 = 無法觀測 = 無法改善
 12. **param-guard 做轉換不只驗證**：AI 傳的參數格式和 API 要的不同是常態，`param-guard.ts` 負責統一正規化（字串→物件、日期補全、陣列包裝、型別轉換）。新增 App 時，先在 param-guard 加轉換規則，不要在 adapter 裡各做各的
 13. **能自動修正就修正，不要只警告**：如果系統能判斷「AI 傳的 Title 其實就是 DB 裡的 標題」，直接修正，不要只回傳 warning 讓 AI 重試
+14. **AI 輸入的每個欄位都要存進 DB**：MCP 工具定義裡的所有參數（`intent`、`difficulty`、`app`、`action`、`params`）都必須記錄到 operations 表。處理完就丟 = 資料流斷裂 = 無法驗證、回溯、分析。新增 MCP 參數時，同步更新 `operations` schema + `logOperation` 呼叫
 
 ## 品質標準
 
