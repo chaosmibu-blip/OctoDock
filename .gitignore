@@ -27,6 +27,7 @@
 .claude/settings.local.json
 .claude/projects/
 .claude/skills/
+.mcp.json
 
 # debug
 npm-debug.log*
