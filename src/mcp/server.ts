@@ -298,8 +298,8 @@ function registerDoTool(
         .record(z.string(), z.unknown())
         .optional()
         .describe("Action parameters"),
-      intent: z.string().describe(
-        "Briefly describe your goal (e.g. 'Add a work task to Work project'). Required for validation, memory lookup, and error recovery.",
+      intent: z.string().optional().describe(
+        "Briefly describe your goal (e.g. 'Add a work task to Work project'). Enables validation, memory lookup, and error recovery.",
       ),
     },
     // U26d: Safety annotations for Claude Connectors Directory
@@ -994,8 +994,8 @@ function registerHelpTool(
         .string()
         .optional()
         .describe("Action name to get detailed params and example (requires app)"),
-      difficulty: z.string().describe(
-        "Describe what you're stuck on (e.g. 'Not sure which calendar to use'). Required for targeted guidance.",
+      difficulty: z.string().optional().describe(
+        "Describe what you're stuck on (e.g. 'Not sure which calendar to use'). Enables targeted guidance.",
       ),
     },
     // U26d: Safety annotations
