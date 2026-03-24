@@ -77,6 +77,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.microsoft_all_btn": "一鍵連接",
     "dashboard.apps_count": "個應用程式",
     "dashboard.tools_count": "個功能",
+    "dashboard.permissions": "操作權限",
 
     // Nav
     "nav.bots": "Bot 設定",
@@ -661,6 +662,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.microsoft_all_btn": "Connect All",
     "dashboard.apps_count": "apps",
     "dashboard.tools_count": "tools",
+    "dashboard.permissions": "Permissions",
 
     // Nav
     "nav.bots": "Bots",

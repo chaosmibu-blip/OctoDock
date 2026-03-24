@@ -159,18 +159,22 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
     .from(connectedApps)
     .where(eq(connectedApps.userId, user.id));
 
-  const connectedAppNames = apps
-    .filter((a) => a.status === "active")
-    .map((a) => a.appName);
+  // 建立 App config map（帶 disabledActions 設定）
+  type AppPermConfig = { disabledActions?: string[] };
+  const connectedAppConfigs: Record<string, AppPermConfig> = {};
+  for (const a of apps.filter((a) => a.status === "active")) {
+    connectedAppConfigs[a.appName] = (a.config as AppPermConfig) ?? {};
+  }
+  const connectedAppNames = Object.keys(connectedAppConfigs);
 
   // A1: 從 request headers 提取 agent 實例 ID
   const agentInstanceId = extractAgentInstanceId(requestHeaders);
 
   // ── 註冊 octodock_do ──
-  registerDoTool(server, user.id, connectedAppNames, agentInstanceId);
+  registerDoTool(server, user.id, connectedAppNames, connectedAppConfigs, agentInstanceId);
 
   // ── 註冊 octodock_help ──
-  registerHelpTool(server, user.id, connectedAppNames);
+  registerHelpTool(server, user.id, connectedAppNames, connectedAppConfigs);
 
   // octodock_sop 已移除 — SOP 功能由 do(app:"system") + intent 自動匹配覆蓋
 
@@ -342,6 +346,7 @@ function registerDoTool(
   server: McpServer,
   userId: string,
   connectedAppNames: string[],
+  connectedAppConfigs: Record<string, { disabledActions?: string[] }>,
   agentInstanceId: string | null,
 ): void {
   server.tool(
@@ -469,6 +474,18 @@ function registerDoTool(
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
+      }
+
+      // ── 權限檢查：用戶是否停用了此 action ──
+      const appConfig = connectedAppConfigs[app];
+      if (appConfig?.disabledActions?.includes(resolvedAction)) {
+        result = {
+          ok: false,
+          error: `Action "${resolvedAction}" is disabled for ${app}. The user turned it off in Dashboard settings. (ACTION_DISABLED)`,
+          errorCode: "ACTION_DISABLED",
+        };
+        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "ACTION_DISABLED" }, success: false, durationMs: Date.now() - startTime });
+        return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
       }
 
       // B3: MCP 層 rate limit 檢查（per-user + per-action 高風險限制）
@@ -1086,6 +1103,7 @@ function registerHelpTool(
   server: McpServer,
   userId: string,
   connectedAppNames: string[],
+  connectedAppConfigs: Record<string, { disabledActions?: string[] }>,
 ): void {
   server.tool(
     "octodock_help",
@@ -1325,6 +1343,13 @@ function registerHelpTool(
           };
         }
 
+        // 權限檢查：如果 action 被停用，提示用戶
+        if (connectedAppConfigs[app]?.disabledActions?.includes(action)) {
+          return {
+            content: [{ type: "text" as const, text: `⛔ Action "${action}" for ${app} is disabled by the user in Dashboard settings. It cannot be executed.` }],
+          };
+        }
+
         // 優先用 adapter.getSkill(action) — 包含完整範例
         if (adapterForAction.getSkill) {
           let skillText = adapterForAction.getSkill(action);
@@ -1540,6 +1565,13 @@ function registerHelpTool(
         } catch {
           // 記憶查詢失敗不影響
         }
+
+        // 權限標記：列出被用戶停用的 action
+        const disabled = connectedAppConfigs[app]?.disabledActions ?? [];
+        if (disabled.length > 0) {
+          skillText += `\n\n⛔ **Disabled by user**: ${disabled.map(a => `~~${a}~~`).join(", ")}`;
+        }
+
         return {
           content: [{ type: "text" as const, text: skillText }],
         };

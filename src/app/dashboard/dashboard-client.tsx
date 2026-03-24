@@ -24,6 +24,7 @@ interface DashboardProps {
     appName: string;
     status: string;
     connectedAt: string;
+    disabledActions: string[];
   }>;
   origin: string;
   usage: UsageSummary;
@@ -90,6 +91,13 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
   const [deleteInput, setDeleteInput] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  /* 操作權限設定狀態 */
+  const [permApp, setPermApp] = useState<string | null>(null); // 正在設定哪個 App
+  const [permActions, setPermActions] = useState<Array<{ name: string; toolName: string; description: string }>>([]);
+  const [permDisabled, setPermDisabled] = useState<string[]>([]);
+  const [permLoading, setPermLoading] = useState(false);
+  const [permSaving, setPermSaving] = useState(false);
+  const [permSaved, setPermSaved] = useState(false);
   /* #5: 中斷連結確認狀態 */
   const [disconnectConfirm, setDisconnectConfirm] = useState<string | null>(null);
   /* #6: 中斷連結錯誤狀態 */
@@ -309,6 +317,55 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
       [appName]: { step: "phone", phone: "", code: "", password: "", loading: false, error: "" },
     }));
   }, []);
+
+  /* 操作權限：打開設定面板 */
+  const openPermissions = useCallback(async (appName: string) => {
+    if (permApp === appName) { setPermApp(null); return; } // toggle 關閉
+    setPermApp(appName);
+    setPermLoading(true);
+    setPermSaved(false);
+    try {
+      const res = await fetch(`/api/connect/${appName}/config`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setPermActions(data.actions);
+      setPermDisabled(data.disabledActions);
+    } catch {
+      setPermActions([]);
+      setPermDisabled([]);
+    } finally {
+      setPermLoading(false);
+    }
+  }, [permApp]);
+
+  /* 操作權限：toggle 單一 action */
+  const toggleAction = useCallback((actionName: string) => {
+    setPermSaved(false);
+    setPermDisabled(prev =>
+      prev.includes(actionName)
+        ? prev.filter(a => a !== actionName)
+        : [...prev, actionName]
+    );
+  }, []);
+
+  /* 操作權限：儲存 */
+  const savePermissions = useCallback(async () => {
+    if (!permApp) return;
+    setPermSaving(true);
+    try {
+      const res = await fetch(`/api/connect/${permApp}/config`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disabledActions: permDisabled }),
+      });
+      if (res.ok) {
+        setPermSaved(true);
+        setTimeout(() => setPermSaved(false), 2000);
+      }
+    } catch { /* 靜默 */ } finally {
+      setPermSaving(false);
+    }
+  }, [permApp, permDisabled]);
 
   /* #5 #6: 中斷連結（帶確認 + 錯誤處理 + timer cleanup） */
   const disconnectApp = useCallback(async (appName: string) => {
@@ -628,6 +685,12 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
                       >
                         {isExpanded ? t("dashboard.hide_tools") : t("dashboard.view_tools")}
                       </button>
+                      <button
+                        onClick={() => openPermissions(app.name)}
+                        className="text-[11px] text-gray-500 hover:text-gray-700 transition-colors px-1.5 py-1"
+                      >
+                        {t("dashboard.permissions")}
+                      </button>
                       {/* #5: 中斷連結兩步確認 */}
                       {isConfirmingDisconnect ? (
                         <div className="flex items-center gap-1.5">
@@ -681,6 +744,58 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
                           </div>
                         ) : (
                           <p className="text-[11px] text-gray-300">{t("dashboard.no_tools")}</p>
+                        )}
+                      </div>
+                    )}
+                    {/* 操作權限設定面板 */}
+                    {permApp === app.name && (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[11px] font-medium text-gray-700">{t("dashboard.permissions")}</span>
+                          <button
+                            onClick={savePermissions}
+                            disabled={permSaving}
+                            className="text-[10px] bg-[#1D9E75] text-white px-2.5 py-1 rounded-lg hover:bg-[#178A65] transition-colors disabled:opacity-50"
+                          >
+                            {permSaving ? t("common.saving") : permSaved ? t("common.saved") : t("common.save")}
+                          </button>
+                        </div>
+                        {permLoading ? (
+                          <p className="text-[11px] text-gray-400">{t("common.loading")}</p>
+                        ) : (
+                          <div className="space-y-1 max-h-64 overflow-y-auto">
+                            {permActions.map((action) => {
+                              const isDisabled = permDisabled.includes(action.name);
+                              const desc = t(`tool.${action.toolName}`) !== `tool.${action.toolName}`
+                                ? t(`tool.${action.toolName}`)
+                                : action.description;
+                              return (
+                                <div
+                                  key={action.name}
+                                  className={`flex items-center justify-between py-1.5 px-2 rounded-lg ${isDisabled ? "bg-red-50/50" : "bg-gray-50/50"}`}
+                                >
+                                  <div className="flex-1 min-w-0 mr-2">
+                                    <code className={`text-[10px] ${isDisabled ? "text-gray-400 line-through" : "text-gray-700"}`}>
+                                      {action.name}
+                                    </code>
+                                    <p className="text-[10px] text-gray-400 truncate">{desc}</p>
+                                  </div>
+                                  <button
+                                    onClick={() => toggleAction(action.name)}
+                                    className={`shrink-0 w-8 h-[18px] rounded-full transition-colors relative ${
+                                      isDisabled ? "bg-gray-300" : "bg-[#1D9E75]"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-transform ${
+                                        isDisabled ? "left-[2px]" : "left-[14px]"
+                                      }`}
+                                    />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
                     )}

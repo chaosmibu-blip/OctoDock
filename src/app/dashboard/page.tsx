@@ -61,6 +61,7 @@ export default async function DashboardPage() {
         appName: a.appName,
         status: a.status ?? "active",
         connectedAt: a.connectedAt?.toISOString() ?? "",
+        disabledActions: ((a.config as Record<string, unknown>)?.disabledActions as string[]) ?? [],
       }))}
       origin={origin}
       usage={usage}
