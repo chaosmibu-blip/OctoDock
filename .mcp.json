@@ -2,7 +2,7 @@
   "mcpServers": {
     "octodock": {
       "type": "url",
-      "url": "https://octo-dock.com/mcp/${OCTODOCK_API_KEY}"
+      "url": "https://octo-dock.com/mcp/ak_YOUR_API_KEY"
     }
   }
 }
