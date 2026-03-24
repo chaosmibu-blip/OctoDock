@@ -68,6 +68,18 @@ async function handleMcpRequest(
 
   await server.connect(transport);
 
+  // 5.1 推送 tools/list_changed notification
+  // stateless 架構下無法維持長連線，改在每次 POST response 的 SSE stream 裡夾帶
+  // 目的：通知 client（特別是 Claude App 版）重新拉 tools/list 取得最新 schema
+  // 最壞情況：client 忽略（跟現在一樣）；最好情況：client 更新快取
+  if (req.method === "POST") {
+    try {
+      server.sendToolListChanged();
+    } catch {
+      // notification 失敗不影響主請求
+    }
+  }
+
   // 6. 處理 MCP 請求
   const response = await transport.handleRequest(req);
 
