@@ -27,6 +27,13 @@ const INLINE_MIGRATIONS: Array<{ name: string; sql: string }> = [
       ALTER TABLE operations ADD COLUMN IF NOT EXISTS agent_instance_id VARCHAR;
     `,
   },
+  {
+    name: "004_operations_intent.sql",
+    sql: `
+      ALTER TABLE operations ADD COLUMN IF NOT EXISTS intent TEXT;
+      ALTER TABLE operations ADD COLUMN IF NOT EXISTS difficulty TEXT;
+    `,
+  },
 ];
 
 /**

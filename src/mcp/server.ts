@@ -369,17 +369,16 @@ function registerDoTool(
       readOnlyHint: false,
     },
     async (args) => {
-      const { app, action, params = {}, intent: rawIntent = "" } = args as {
+      const { app, action, params = {}, intent = "" } = args as {
         app: string;
         action: string;
         params: Record<string, unknown>;
         intent: string;
       };
 
-      // intent fallback：client 沒傳 intent 時，用 app.action 自動補
-      // 確保 SOP 匹配、記憶查詢、intent 偏差偵測至少有基礎 context
-      const intent = rawIntent || `${app}.${action}`;
-      const schemaMaybeStale = !rawIntent;
+      // ── Schema 快取過期偵測 ──
+      // intent 是必填欄位，如果 client 沒傳代表用的是舊版快取 schema
+      const schemaMaybeStale = !intent;
 
       let result: DoResult;
       const startTime = Date.now();
@@ -402,6 +401,7 @@ function registerDoTool(
           toolName: `system_${action}`,
           action,
           params,
+          intent,
           result: { ok: result.ok, summary: result.summary ?? result.error },
           success: result.ok,
           durationMs: Date.now() - startTime,
@@ -416,7 +416,7 @@ function registerDoTool(
       // 用量限制檢查（Free 用戶每月 1,000 次）
       const usageLimitError = await checkUsageLimit(userId);
       if (usageLimitError) {
-        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: usageLimitError }, success: false, durationMs: Date.now() - startTime });
+        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: usageLimitError }, success: false, intent, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: JSON.stringify({ ok: false, error: usageLimitError }) }],
         };
@@ -429,7 +429,7 @@ function registerDoTool(
           error: `App "${app}" is not connected (APP_NOT_CONNECTED)`,
           suggestions: connectedAppNames,
         };
-        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, durationMs: Date.now() - startTime });
+        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, intent, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -442,7 +442,7 @@ function registerDoTool(
           ok: false,
           error: `Adapter for "${app}" not found (ADAPTER_NOT_FOUND)`,
         };
-        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, durationMs: Date.now() - startTime });
+        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, intent, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -470,7 +470,7 @@ function registerDoTool(
           error: errorMsg,
           suggestions: fuzzyMatch ? [fuzzyMatch, ...availableActions.filter(a => a !== fuzzyMatch)] : availableActions,
         };
-        logOperation({ userId, appName: app, toolName: `unknown_${action}`, action, params, result: { ok: false, error: result.error }, success: false, durationMs: Date.now() - startTime });
+        logOperation({ userId, appName: app, toolName: `unknown_${action}`, action, params, result: { ok: false, error: result.error }, success: false, intent, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -484,7 +484,7 @@ function registerDoTool(
           error: `Action "${resolvedAction}" is disabled for ${app}. The user turned it off in Dashboard settings. (ACTION_DISABLED)`,
           errorCode: "ACTION_DISABLED",
         };
-        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "ACTION_DISABLED" }, success: false, durationMs: Date.now() - startTime });
+        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "ACTION_DISABLED" }, success: false, intent, durationMs: Date.now() - startTime });
         return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
       }
 
@@ -498,7 +498,7 @@ function registerDoTool(
           retryable: true,
           retryAfterMs: rateCheck.retryAfterMs,
         };
-        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "RATE_LIMITED" }, success: false, durationMs: Date.now() - startTime });
+        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "RATE_LIMITED" }, success: false, intent, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -535,7 +535,7 @@ function registerDoTool(
       );
       if (nameValidation.blocked && nameValidation.blockResult) {
         result = nameValidation.blockResult;
-        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "NAME_VALIDATION_BLOCKED" }, success: false, durationMs: Date.now() - startTime });
+        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "NAME_VALIDATION_BLOCKED" }, success: false, intent, durationMs: Date.now() - startTime });
         return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
       }
       // 把驗證過的參數寫回（名稱已替換成 ID）
@@ -550,7 +550,7 @@ function registerDoTool(
           const preValResult = await adapter.preValidate(action, translatedParams, earlyToken);
           if (preValResult) {
             result = preValResult;
-            logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "PRE_VALIDATE_BLOCKED" }, success: false, durationMs: Date.now() - startTime });
+            logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "PRE_VALIDATE_BLOCKED" }, success: false, intent, durationMs: Date.now() - startTime });
             return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
           }
         } catch {
@@ -562,7 +562,7 @@ function registerDoTool(
       const guardResult = checkParams(app, toolName, translatedParams);
       if (guardResult?.blocked) {
         result = { ok: false, error: guardResult.error };
-        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "PARAM_GUARD_BLOCKED" }, success: false, durationMs: Date.now() - startTime });
+        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "PARAM_GUARD_BLOCKED" }, success: false, intent, durationMs: Date.now() - startTime });
         return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
       }
       // J3: 非攔截的警告，暫存到 guardWarnings，等 result 初始化後再合併
@@ -714,7 +714,7 @@ function registerDoTool(
         toolName,
         translatedParams,
         (p, t) => adapter.execute(toolName, p, t),
-        { agentInstanceId, prefetchedToken: token },
+        { agentInstanceId, prefetchedToken: token, intent },
       );
 
       // 轉換成標準化的 DoResult
@@ -1128,6 +1128,19 @@ function registerHelpTool(
     },
     async (args) => {
       const { app, action, difficulty = "" } = args as { app?: string; action?: string; difficulty: string };
+
+      // 記錄 help 呼叫（含 difficulty）到 operations 表
+      logOperation({
+        userId,
+        appName: app ?? "system",
+        toolName: "octodock_help",
+        action: action ?? "list",
+        params: { app, action },
+        difficulty,
+        result: { ok: true },
+        success: true,
+        durationMs: 0, // help 不計耗時，結果在回傳後才知道
+      });
 
       // ── P2: 不帶 app：用戶 context 載入 + App 列表 ──
       // 這是 AI 在每個對話開頭 MUST call 的入口，回傳完整用戶上下文

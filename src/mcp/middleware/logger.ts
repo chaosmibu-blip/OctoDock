@@ -24,6 +24,7 @@ import {
 export interface MiddlewareOptions {
   agentInstanceId?: string | null; // 從 HTTP header 提取的 Agent 實例 ID
   prefetchedToken?: string | null; // 預取的 token，避免重複呼叫 getValidToken
+  intent?: string | null; // AI 描述的操作目的（追蹤填寫率）
 }
 
 /**
@@ -81,6 +82,7 @@ export async function executeWithMiddleware(
       toolName,
       action: toolName,
       params,
+      intent: options?.intent ?? null,
       result: resultSummary,
       agentInstanceId: options?.agentInstanceId ?? null,
       success: true,
@@ -115,6 +117,7 @@ export async function executeWithMiddleware(
       toolName,
       action: toolName,
       params,
+      intent: options?.intent ?? null,
       result: {
         ok: false,
         error: classified.message,

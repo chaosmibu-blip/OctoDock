@@ -97,6 +97,8 @@ export const operations = pgTable(
     toolName: text("tool_name").notNull(),
     action: text("action").notNull(),
     params: jsonb("params"),
+    intent: text("intent"), // octodock_do 的 intent 參數
+    difficulty: text("difficulty"), // octodock_help 的 difficulty 參數
     result: jsonb("result"),
     success: boolean("success").default(true),
     durationMs: integer("duration_ms"),
