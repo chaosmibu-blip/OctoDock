@@ -552,18 +552,22 @@ function formatResponse(action: string, data: unknown): string {
         return `**${p.name}**\nID: ${p.id}\nColor: ${p.color}\nComments: ${p.comment_count}\nFavorite: ${p.is_favorite}\nURL: ${p.url}`;
       }
 
-      /* ── 任務列表 ── */
+      /* ── 任務列表（Markdown 表格） ── */
       case "list_tasks": {
-        const tasks = data as Array<{ id: string; content: string; description: string; priority: number; due: { string: string; date: string } | null; labels: string[]; section_id: string | null; is_completed: boolean }>;
+        const tasks = data as Array<{ id: string; content: string; description: string; priority: number; due: { string: string; date: string } | null; labels: string[]; section_id: string | null; is_completed: boolean; project_name?: string; project_id?: string }>;
         if (tasks.length === 0) return "No tasks found.";
-        return tasks.map((t) => {
-          const pri = t.priority > 1 ? ` [${priorityLabel(t.priority)}]` : "";
-          const due = t.due ? ` — due: ${t.due.string || t.due.date}` : "";
-          const labels = t.labels.length > 0 ? ` @${t.labels.join(" @")}` : "";
-          const check = t.is_completed ? "✅" : "☐";
-          const desc = t.description ? `\n  ${t.description.substring(0, 80)}` : "";
-          return `${check} **${t.content}**${pri}${due}${labels}  (ID: ${t.id})${desc}`;
-        }).join("\n");
+        // 標題列
+        const header = "| Status | Title | Priority | Due | Project | ID |";
+        const sep    = "|--------|-------|----------|-----|---------|-----|";
+        const rows = tasks.map((t) => {
+          const status = t.is_completed ? "Done" : "Active";
+          const title = t.content || "(untitled)";
+          const pri = priorityLabel(t.priority);
+          const due = t.due ? (t.due.string || t.due.date) : "-";
+          const project = t.project_name || (t.project_id ? `#${t.project_id}` : "-");
+          return `| ${status} | ${title} | ${pri} | ${due} | ${project} | ${t.id} |`;
+        });
+        return [header, sep, ...rows].join("\n");
       }
 
       /* ── 單一任務 ── */

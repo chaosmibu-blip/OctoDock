@@ -254,7 +254,8 @@ function formatResponse(action: string, rawData: unknown): string {
         const from = m.fromName || "?";
         const time = m.date ? new Date(m.date * 1000).toLocaleString() : "";
         const text = m.text || m.caption || "(media)";
-        return `[${time}] **${from}**: ${text}`;
+        const msgId = m.id !== undefined ? ` (msg_id: ${m.id})` : "";
+        return `[${time}] **${from}**: ${text}${msgId}`;
       }).join("\n");
     }
 
@@ -264,12 +265,16 @@ function formatResponse(action: string, rawData: unknown): string {
       return results.map((m: any, i: number) => {
         const chat = m.chatTitle || "?";
         const text = m.text || "(media)";
-        return `${i + 1}. [${chat}] ${text}`;
+        const msgId = m.id !== undefined ? ` (msg_id: ${m.id})` : "";
+        return `${i + 1}. [${chat}] ${text}${msgId}`;
       }).join("\n");
     }
 
-    case "send_message":
-      return `Done. Message sent.`;
+    case "send_message": {
+      const d = rawData as any;
+      const msgId = d?.id !== undefined ? ` (msg_id: ${d.id})` : "";
+      return `Done. Message sent.${msgId}`;
+    }
 
     case "read_history":
       return "Done. Marked as read.";

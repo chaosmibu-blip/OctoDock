@@ -59,6 +59,62 @@ const ACTION_ALIASES: Record<string, string> = {
   write_sheet: "write",
 };
 
+/** A2: 同義詞表 — 用於模糊匹配未知 action（雙向對應） */
+const ACTION_SYNONYMS: [string, string][] = [
+  ["complete", "close"],
+  ["remove", "delete"],
+  ["list", "get"],
+  ["create", "add"],
+  ["find", "search"],
+  ["read", "get"],
+  ["send", "post"],
+  ["edit", "update"],
+];
+
+/**
+ * A2: 模糊匹配未知 action — substring + 同義詞替換
+ * 找到最可能的正確 action，找不到回傳 null
+ */
+function findFuzzyActionMatch(unknown: string, available: string[]): string | null {
+  const u = unknown.toLowerCase();
+
+  // 1. Substring 匹配：未知 action 包含某個可用 action，或反過來
+  for (const avail of available) {
+    const a = avail.toLowerCase();
+    if (u.includes(a) || a.includes(u)) {
+      return avail;
+    }
+  }
+
+  // 2. 同義詞替換：把 unknown 裡的動詞換成同義詞，再查 actionMap
+  // 拆出動詞部分（假設是底線分隔的第一段，例如 "complete_task" → "complete"）
+  const parts = u.split("_");
+  const verb = parts[0];
+  const rest = parts.slice(1).join("_"); // 例如 "task"
+
+  for (const [syn1, syn2] of ACTION_SYNONYMS) {
+    let replacedVerb: string | null = null;
+    if (verb === syn1) replacedVerb = syn2;
+    else if (verb === syn2) replacedVerb = syn1;
+    if (!replacedVerb) continue;
+
+    // 組出替換後的 action 名（例如 "close_task"）
+    const candidate = rest ? `${replacedVerb}_${rest}` : replacedVerb;
+    const match = available.find(a => a.toLowerCase() === candidate);
+    if (match) return match;
+
+    // 也做 substring 匹配（替換後的動詞出現在某個可用 action 裡）
+    for (const avail of available) {
+      const a = avail.toLowerCase();
+      if (a.includes(candidate) || candidate.includes(a)) {
+        return avail;
+      }
+    }
+  }
+
+  return null;
+}
+
 /** A1: 從 HTTP request headers 提取 Agent 實例識別資訊 */
 function extractAgentInstanceId(headers?: Headers): string | null {
   if (!headers) return null;
@@ -393,14 +449,21 @@ function registerDoTool(
       // 透過 actionMap 找到內部工具名稱
       const toolName = adapter.actionMap?.[resolvedAction];
       if (!toolName) {
-        // actionMap 裡找不到 → 回傳可用的 action 列表
+        // actionMap 裡找不到 → 嘗試模糊匹配，再回傳可用的 action 列表
         const availableActions = adapter.actionMap
           ? Object.keys(adapter.actionMap)
           : adapter.tools.map((t) => t.name);
+
+        // 模糊匹配：找最可能的正確 action
+        const fuzzyMatch = findFuzzyActionMatch(resolvedAction, availableActions);
+
+        const errorMsg = fuzzyMatch
+          ? `Unknown action "${action}" for ${app}. Did you mean "${fuzzyMatch}"?`
+          : `Unknown action "${action}" for ${app}`;
         result = {
           ok: false,
-          error: `Unknown action "${action}" for ${app}`,
-          suggestions: availableActions,
+          error: errorMsg,
+          suggestions: fuzzyMatch ? [fuzzyMatch, ...availableActions.filter(a => a !== fuzzyMatch)] : availableActions,
         };
         logOperation({ userId, appName: app, toolName: `unknown_${action}`, action, params, result: { ok: false, error: result.error }, success: false, durationMs: Date.now() - startTime });
         return {
@@ -974,8 +1037,15 @@ function registerDoTool(
           { pattern: /folder|資料夾/, params: ["folder", "parent_id", "folder_id"] },
           { pattern: /database|資料庫/, params: ["database_id", "database"] },
         ];
+        const actionLower = action.toLowerCase();
         for (const { pattern, params: relatedParams } of intentKeywords) {
           if (pattern.test(intentLower)) {
+            // 如果 action 名稱本身就包含該關鍵字概念，不需要警告
+            // 例如 create_folder 的 intent 提到「資料夾」是正常的，不算遺漏參數
+            const conceptWords = pattern.source.split("|").filter(w => /^[a-z]+$/.test(w));
+            const actionMatchesConcept = conceptWords.some(w => actionLower.includes(w));
+            if (actionMatchesConcept) continue;
+
             const hasParam = relatedParams.some(p => translatedParams[p] !== undefined);
             if (!hasParam) {
               if (!result.warnings) result.warnings = [];

@@ -194,6 +194,14 @@ export function checkParams(
     }
   }
 
+  // ── J3i: Google Tasks "task" → "task_id" 別名 ──
+  // AI 可能用 "task" 而非 "task_id"，自動重命名以匹配 inputSchema
+  if (app === "google_tasks" && params.task && !params.task_id) {
+    params.task_id = params.task;
+    delete params.task;
+    warnings.push(`Auto-renamed param: task → task_id`);
+  }
+
   // ── J3f: Google Tasks due 日期格式正規化 ──
   // Google Tasks API 要求 due 為 RFC 3339 格式（含完整時間）
   // AI 可能傳 "2026-03-25"（純日期）或帶毫秒的格式
@@ -293,6 +301,14 @@ export function checkParams(
         warnings.push(`Auto-converted page range "${pages}" to 0-based array`);
       }
     }
+  }
+
+  // ── J3h: Google Calendar title → summary 別名轉換 ──
+  // Google Calendar API 用 summary 而非 title，AI 常傳 title
+  if (app === "google_calendar" && params.title && !params.summary) {
+    params.summary = params.title;
+    delete params.title;
+    warnings.push(`Auto-renamed "title" to "summary" (Google Calendar API uses "summary")`);
   }
 
   // ── U7/J3d: 必填參數攔截 — 在打上游 API 前就攔截缺少必填參數的情況 ──

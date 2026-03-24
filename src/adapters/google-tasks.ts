@@ -92,9 +92,9 @@ octodock_do(app:"google_tasks", action:"list_tasks", params:{tasklist:"MTYzMTY..
 Get a single task's details.
 ### Parameters
   tasklist: Task list ID
-  task: Task ID
+  task_id: Task ID
 ### Example
-octodock_do(app:"google_tasks", action:"get_task", params:{tasklist:"MTYzMTY...", task:"dGFzay0x..."})`,
+octodock_do(app:"google_tasks", action:"get_task", params:{tasklist:"MTYzMTY...", task_id:"dGFzay0x..."})`,
 
   create_task: `## google_tasks.create_task
 Create a new task in a task list.
@@ -115,7 +115,7 @@ octodock_do(app:"google_tasks", action:"create_task", params:{
 Update an existing task's title, notes, due date, or status.
 ### Parameters
   tasklist: Task list ID
-  task: Task ID
+  task_id: Task ID
   title (optional): New title
   notes (optional): New notes
   due (optional): New due date in RFC 3339 format
@@ -123,7 +123,7 @@ Update an existing task's title, notes, due date, or status.
 ### Example
 octodock_do(app:"google_tasks", action:"update_task", params:{
   tasklist:"MTYzMTY...",
-  task:"dGFzay0x...",
+  task_id:"dGFzay0x...",
   title:"完成報告（已更新）",
   due:"2026-03-25T00:00:00.000Z"
 })`,
@@ -132,28 +132,28 @@ octodock_do(app:"google_tasks", action:"update_task", params:{
 Delete a task permanently.
 ### Parameters
   tasklist: Task list ID
-  task: Task ID
+  task_id: Task ID
 ### Example
-octodock_do(app:"google_tasks", action:"delete_task", params:{tasklist:"MTYzMTY...", task:"dGFzay0x..."})`,
+octodock_do(app:"google_tasks", action:"delete_task", params:{tasklist:"MTYzMTY...", task_id:"dGFzay0x..."})`,
 
   complete_task: `## google_tasks.complete_task
 Mark a task as completed.
 ### Parameters
   tasklist: Task list ID
-  task: Task ID
+  task_id: Task ID
 ### Example
-octodock_do(app:"google_tasks", action:"complete_task", params:{tasklist:"MTYzMTY...", task:"dGFzay0x..."})`,
+octodock_do(app:"google_tasks", action:"complete_task", params:{tasklist:"MTYzMTY...", task_id:"dGFzay0x..."})`,
 
   move_task: `## google_tasks.move_task
 Move a task to a different position, make it a subtask, or reorder within a list.
 ### Parameters
   tasklist: Task list ID
-  task: Task ID
+  task_id: Task ID
   parent (optional): Parent task ID (makes this task a subtask)
   previous (optional): Previous sibling task ID (positions after this task)
 ### Example
-octodock_do(app:"google_tasks", action:"move_task", params:{tasklist:"MTYzMTY...", task:"dGFzay0x...", parent:"cGFyZW50..."})
-octodock_do(app:"google_tasks", action:"move_task", params:{tasklist:"MTYzMTY...", task:"dGFzay0x...", previous:"c2libGluZw..."})`,
+octodock_do(app:"google_tasks", action:"move_task", params:{tasklist:"MTYzMTY...", task_id:"dGFzay0x...", parent:"cGFyZW50..."})
+octodock_do(app:"google_tasks", action:"move_task", params:{tasklist:"MTYzMTY...", task_id:"dGFzay0x...", previous:"c2libGluZw..."})`,
 
   clear_completed: `## google_tasks.clear_completed
 Clear all completed tasks from a task list. This permanently removes them.
@@ -179,12 +179,12 @@ function getSkill(action?: string): string | null {
   return `google_tasks actions (${Object.keys(actionMap).length}):
   list_tasklists() — list all task lists
   list_tasks(tasklist, show_completed?, max_results?) — list tasks in a list
-  get_task(tasklist, task) — get single task details
+  get_task(tasklist, task_id) — get single task details
   create_task(tasklist, title, notes?, due?) — create new task
-  update_task(tasklist, task, title?, notes?, due?, status?) — update task
-  delete_task(tasklist, task) — delete task permanently
-  complete_task(tasklist, task) — mark task as completed
-  move_task(tasklist, task, parent?, previous?) — move/reorder task
+  update_task(tasklist, task_id, title?, notes?, due?, status?) — update task
+  delete_task(tasklist, task_id) — delete task permanently
+  complete_task(tasklist, task_id) — mark task as completed
+  move_task(tasklist, task_id, parent?, previous?) — move/reorder task
   clear_completed(tasklist) — clear all completed tasks
   create_tasklist(title) — create new task list
   delete_tasklist(tasklist) — delete task list permanently
@@ -344,7 +344,7 @@ const tools: ToolDefinition[] = [
       "Get the full details of a single task by its ID, including title, notes, status, and due date.",
     inputSchema: {
       tasklist: z.string().describe("Task list ID"),
-      task: z.string().describe("Task ID"),
+      task_id: z.string().describe("Task ID"),
     },
   },
   {
@@ -369,7 +369,7 @@ const tools: ToolDefinition[] = [
       "Update an existing task's title, notes, due date, or status. Only provided fields are updated.",
     inputSchema: {
       tasklist: z.string().describe("Task list ID"),
-      task: z.string().describe("Task ID"),
+      task_id: z.string().describe("Task ID"),
       title: z.string().optional().describe("New task title"),
       notes: z.string().optional().describe("New task notes"),
       due: z
@@ -390,7 +390,7 @@ const tools: ToolDefinition[] = [
       "Permanently delete a task from a Google Tasks list. This action cannot be undone.",
     inputSchema: {
       tasklist: z.string().describe("Task list ID"),
-      task: z.string().describe("Task ID"),
+      task_id: z.string().describe("Task ID"),
     },
   },
   {
@@ -399,7 +399,7 @@ const tools: ToolDefinition[] = [
       'Mark a task as completed by setting its status to "completed".',
     inputSchema: {
       tasklist: z.string().describe("Task list ID"),
-      task: z.string().describe("Task ID"),
+      task_id: z.string().describe("Task ID"),
     },
   },
   // 移動/排序任務
@@ -409,7 +409,7 @@ const tools: ToolDefinition[] = [
       "Move a task to a different position, make it a subtask of another task, or reorder within a list.",
     inputSchema: {
       tasklist: z.string().describe("Task list ID"),
-      task: z.string().describe("Task ID to move"),
+      task_id: z.string().describe("Task ID to move"),
       parent: z.string().optional().describe("Parent task ID (makes this task a subtask)"),
       previous: z.string().optional().describe("Previous sibling task ID (positions after this task)"),
     },
@@ -499,7 +499,7 @@ async function execute(
     // 取得單一任務詳情
     case "gtasks_get_task": {
       const result = await gtasksFetch(
-        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task as string)}`,
+        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task_id as string)}`,
         token,
       );
       return {
@@ -539,7 +539,7 @@ async function execute(
       if (params.status !== undefined) body.status = params.status;
 
       const result = await gtasksFetch(
-        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task as string)}`,
+        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task_id as string)}`,
         token,
         {
           method: "PATCH",
@@ -556,7 +556,7 @@ async function execute(
       let taskTitle = "(unknown)";
       try {
         const taskInfo = await gtasksFetch(
-          `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task as string)}`,
+          `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task_id as string)}`,
           token,
         ) as { title?: string };
         taskTitle = taskInfo.title ?? "(unknown)";
@@ -564,19 +564,19 @@ async function execute(
         // 取不到不阻塞刪除
       }
       await gtasksFetch(
-        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task as string)}`,
+        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task_id as string)}`,
         token,
         { method: "DELETE" },
       );
       return {
-        content: [{ type: "text", text: JSON.stringify({ deleted: true, id: params.task, title: taskTitle }, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify({ deleted: true, id: params.task_id, title: taskTitle }, null, 2) }],
       };
     }
 
     // 完成任務：設定 status 為 "completed"
     case "gtasks_complete_task": {
       const result = await gtasksFetch(
-        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task as string)}`,
+        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task_id as string)}`,
         token,
         {
           method: "PATCH",
@@ -595,7 +595,7 @@ async function execute(
       if (params.previous) queryParams.set("previous", params.previous as string);
       const qs = queryParams.toString();
       const result = await gtasksFetch(
-        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task as string)}/move${qs ? `?${qs}` : ""}`,
+        `/lists/${encodeURIComponent(params.tasklist as string)}/tasks/${encodeURIComponent(params.task_id as string)}/move${qs ? `?${qs}` : ""}`,
         token,
         { method: "POST" },
       );
