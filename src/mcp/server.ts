@@ -5,7 +5,7 @@ import { connectedApps, storedResults } from "@/db/schema";
 import { eq, lt, or, isNull, and, gte, desc, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getAdapter, getAllAdapters } from "./registry";
-import { executeWithMiddleware } from "./middleware/logger";
+import { executeWithMiddleware, logOperation } from "./middleware/logger";
 import { checkMcpRateLimit } from "@/lib/rate-limit";
 import { getPreContext } from "./middleware/pre-context";
 import { runPostCheck } from "./middleware/post-check";
@@ -319,6 +319,7 @@ function registerDoTool(
 
       // ── 系統操作（記憶、Bot 對話等）──
       if (app === "system") {
+        const startTime = Date.now();
         if (!systemActionMap[action]) {
           result = {
             ok: false,
@@ -328,6 +329,17 @@ function registerDoTool(
         } else {
           result = await executeSystemAction(userId, action, params);
         }
+        // 非同步記錄到 operations 表（不阻塞回應）
+        logOperation({
+          userId,
+          appName: "system",
+          toolName: `system_${action}`,
+          action,
+          params,
+          result: { ok: result.ok, summary: result.summary ?? result.error },
+          success: result.ok,
+          durationMs: Date.now() - startTime,
+        });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };

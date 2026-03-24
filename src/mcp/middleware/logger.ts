@@ -137,8 +137,9 @@ export async function executeWithMiddleware(
 
 /**
  * 非同步寫入 operations 記錄（不阻塞主請求）
+ * server.ts 的 system action 也會呼叫這個函式
  */
-function logOperation(values: typeof operations.$inferInsert) {
+export function logOperation(values: typeof operations.$inferInsert) {
   db.insert(operations)
     .values(values)
     .catch((err) => {
