@@ -107,7 +107,13 @@ export function checkParams(
   // ── J3b: Google Drive 查詢語法偵測（C: 智慧判斷已是 API 語法則不轉） ──
   if (toolName.includes("gdrive_search") || (app === "google_drive" && toolName.includes("search"))) {
     const query = params.query as string | undefined;
-    if (query) {
+    const folderId = params.folder_id as string | undefined;
+
+    // AI 傳了 folder_id 但沒傳 query → 自動組裝「列出資料夾內容」的查詢語法
+    if (!query && folderId) {
+      params.query = `'${folderId}' in parents and trashed = false`;
+      warnings.push(`Auto-generated folder listing query for folder_id: ${folderId}`);
+    } else if (query) {
       // C: 檢查是否已經是 Drive API 語法（包含 = > < 或 API 關鍵字）
       const isDriveApiSyntax = DRIVE_QUERY_OPERATORS.test(query) ||
         /\b(mimeType|modifiedTime|createdTime|trashed|viewedByMeTime|sharedWithMe|owners|writers|readers)\b/.test(query);
@@ -116,6 +122,11 @@ export function checkParams(
         const escapedQuery = query.replace(/'/g, "\\'");
         params.query = `name contains '${escapedQuery}'`;
         warnings.push(`Auto-converted natural language query to Drive syntax: name contains '${escapedQuery}'`);
+      }
+      // 有 query 也有 folder_id → 把 folder_id 加進查詢條件
+      if (folderId && !(params.query as string).includes("in parents")) {
+        params.query = `${params.query} and '${folderId}' in parents`;
+        warnings.push(`Auto-appended folder_id filter to query`);
       }
     }
   }
