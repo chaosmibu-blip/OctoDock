@@ -369,20 +369,20 @@ function registerDoTool(
       readOnlyHint: false,
     },
     async (args) => {
-      const { app, action, params = {}, intent = "" } = args as {
+      const { app, action, params = {}, intent: rawIntent = "" } = args as {
         app: string;
         action: string;
         params: Record<string, unknown>;
         intent: string;
       };
 
+      // intent fallback：client 沒傳 intent 時，用 app.action 自動補
+      // 確保 SOP 匹配、記憶查詢、intent 偏差偵測至少有基礎 context
+      const intent = rawIntent || `${app}.${action}`;
+      const schemaMaybeStale = !rawIntent;
+
       let result: DoResult;
       const startTime = Date.now();
-
-      // ── Schema 快取過期偵測 ──
-      // 如果 client 沒傳 intent（可能用的是舊版快取 schema），在回傳中附帶提示
-      // 不阻擋操作，只是在結果中加 warning，讓 AI 告知用戶
-      const schemaMaybeStale = !intent;
 
       // ── 系統操作（記憶、Bot 對話等）──
       if (app === "system") {
