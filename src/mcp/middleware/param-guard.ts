@@ -138,6 +138,8 @@ export function checkParams(
     /** 預設時區偏移（台灣 UTC+8） */
     const DEFAULT_TZ = "+08:00";
 
+    // J3d + J3e 合併處理：日期格式補全 + 字串→物件轉換
+    // 流程：先判斷是全天事件還是定時事件，再分別處理
     for (const key of ["start", "end", "timeMin", "timeMax", "time_min", "time_max"]) {
       const val = params[key];
       if (!val || typeof val !== "string") continue;
@@ -150,32 +152,33 @@ export function checkParams(
         };
       }
 
-      // 有時間但沒帶時區 → 自動補上預設時區
-      if (val.includes("T") && !HAS_TZ.test(val)) {
-        params[key] = `${val}${DEFAULT_TZ}`;
-        warnings.push(`Auto-appended timezone ${DEFAULT_TZ} to ${key}: ${params[key]}`);
+      // 純日期（2026-03-18）→ start/end 用 {date} 包裝（全天事件）
+      if (!val.includes("T") && (key === "start" || key === "end")) {
+        params[key] = { date: val };
+        warnings.push(`Auto-wrapped all-day ${key} to object: ${JSON.stringify(params[key])}`);
+        continue;
       }
 
-      // 純日期（2026-03-18）→ 補成完整的 ISO 時間戳
+      // 純日期用在 timeMin/timeMax → 補成完整時間戳（查詢用，不包物件）
       if (!val.includes("T")) {
         const isEnd = key === "end" || key === "timeMax" || key === "time_max";
         params[key] = isEnd
           ? `${val}T23:59:00${DEFAULT_TZ}`
           : `${val}T00:00:00${DEFAULT_TZ}`;
         warnings.push(`Auto-expanded date-only ${key} to full timestamp: ${params[key]}`);
+        continue;
       }
-    }
 
-    // ── J3e: Google Calendar start/end 字串 → 物件自動轉換 ──
-    // Google Calendar API 要求 start/end 為 {dateTime:"..."} 或 {date:"..."}
-    // AI 常傳字串（"2026-03-25T15:00:00+08:00"），自動包裝成物件
-    for (const key of ["start", "end"]) {
-      const val = params[key];
-      if (typeof val === "string") {
-        params[key] = /^\d{4}-\d{2}-\d{2}$/.test(val)
-          ? { date: val }
-          : { dateTime: val };
-        warnings.push(`Auto-wrapped ${key} string to object: ${JSON.stringify(params[key])}`);
+      // 有時間但沒帶時區 → 自動補上預設時區
+      if (!HAS_TZ.test(val)) {
+        params[key] = `${val}${DEFAULT_TZ}`;
+        warnings.push(`Auto-appended timezone ${DEFAULT_TZ} to ${key}: ${params[key]}`);
+      }
+
+      // start/end 帶時間的字串 → 包成 {dateTime} 物件
+      if (key === "start" || key === "end") {
+        params[key] = { dateTime: params[key] as string };
+        warnings.push(`Auto-wrapped ${key} to object: ${JSON.stringify(params[key])}`);
       }
     }
   }

@@ -355,7 +355,7 @@ function registerDoTool(
       // 用量限制檢查（Free 用戶每月 1,000 次）
       const usageLimitError = await checkUsageLimit(userId);
       if (usageLimitError) {
-        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: usageLimitError }, success: false, durationMs: 0 });
+        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: usageLimitError }, success: false, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: JSON.stringify({ ok: false, error: usageLimitError }) }],
         };
@@ -368,7 +368,7 @@ function registerDoTool(
           error: `App "${app}" is not connected (APP_NOT_CONNECTED)`,
           suggestions: connectedAppNames,
         };
-        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, durationMs: 0 });
+        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -381,7 +381,7 @@ function registerDoTool(
           ok: false,
           error: `Adapter for "${app}" not found (ADAPTER_NOT_FOUND)`,
         };
-        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, durationMs: 0 });
+        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -402,7 +402,7 @@ function registerDoTool(
           error: `Unknown action "${action}" for ${app}`,
           suggestions: availableActions,
         };
-        logOperation({ userId, appName: app, toolName: `unknown_${action}`, action, params, result: { ok: false, error: result.error }, success: false, durationMs: 0 });
+        logOperation({ userId, appName: app, toolName: `unknown_${action}`, action, params, result: { ok: false, error: result.error }, success: false, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -418,7 +418,7 @@ function registerDoTool(
           retryable: true,
           retryAfterMs: rateCheck.retryAfterMs,
         };
-        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "RATE_LIMITED" }, success: false, durationMs: 0 });
+        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "RATE_LIMITED" }, success: false, durationMs: Date.now() - startTime });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
