@@ -26,11 +26,10 @@ Transport: Streamable HTTP (SSE)
 
 ## Tools exposed
 
-OctoDock exposes only 3 tools (minimal token cost):
+OctoDock exposes only 2 tools (minimal token cost):
 
-- `octodock_do(app, action, params)` — Execute any action on any connected app
-- `octodock_help(app?, action?)` — Get available apps, actions, and parameter schemas
-- `octodock_sop(category?, name?)` — List and execute saved workflows
+- `octodock_do(app, action, params, intent)` — Execute actions across all connected apps with automatic validation, name resolution, and error recovery
+- `octodock_help(app?, action?, difficulty)` — Get guidance when unsure about which app, action, or parameters to use
 
 ## Supported apps
 

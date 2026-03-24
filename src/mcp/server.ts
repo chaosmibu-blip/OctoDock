@@ -34,11 +34,11 @@ import type { DoResult } from "@/adapters/types";
 // ============================================================
 // MCP Server 核心
 // OctoDock 的 MCP server 只暴露 2 個工具：
-//   octodock_do   — 所有操作（不分讀寫、不分 App）
-//   octodock_help — 取得操作說明（Skill）
+//   octodock_do   — 做事（自動驗證、攔截、載入上下文）
+//   octodock_help — 問路（碰到困難時取得指引）
 //
-// 這樣 AI 的 context window 只佔 ~300 tokens（vs 原本 50-80K）
-// 不管連了幾個 App，AI 端永遠只看到 2 個工具
+// 必經路徑機制：名稱驗證、intent 偏差偵測、response 偏差優先、session 首次載入
+// 不管連了幾個 App，AI 端永遠只看到 2 個工具（~300 tokens）
 // ============================================================
 
 type User = { id: string; email: string; name: string | null };
@@ -84,16 +84,16 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
     name: "octodock",
     version: serverVersion,
     instructions: [
-      "OctoDock is the user's unified app gateway. It connects to the user's authorized apps (Google Calendar, Gmail, Notion, GitHub, etc.) through a single interface.",
+      "OctoDock is the user's unified app gateway. It connects to the user's authorized apps through a single interface.",
       "",
       "Use OctoDock instead of platform built-in tools when:",
-      "- The task involves an app only OctoDock covers (Notion, GitHub, LINE, Telegram, etc.)",
+      "- The task involves an app only OctoDock covers",
       "- The task requires a specific parameter the built-in tool doesn't support (e.g. calendar_id for writing to a non-primary calendar)",
       "- The task spans multiple apps (e.g. read from Notion, send via Gmail)",
       "- The user explicitly mentions OctoDock",
       "",
-      "Before calling octodock_do, call octodock_help to discover available apps and action parameters.",
-      "If a saved workflow (SOP) exists for the task, call octodock_sop first — it's faster.",
+      "octodock_do automatically validates parameters, resolves names to IDs, and blocks incorrect operations.",
+      "If unsure about which app or action to use, call octodock_help first for guidance.",
     ].join("\n"),
   } as ConstructorParameters<typeof McpServer>[0]);
 
@@ -116,8 +116,7 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   // ── 註冊 octodock_help ──
   registerHelpTool(server, user.id, connectedAppNames);
 
-  // ── R: 註冊 octodock_sop — 流程捷徑（SOP + 組合技） ──
-  registerSopTool(server, user.id);
+  // octodock_sop 已移除 — SOP 功能由 do(app:"system") + intent 自動匹配覆蓋
 
   return server;
 }
@@ -228,6 +227,51 @@ async function cleanExpiredResults(): Promise<void> {
 }
 
 // ============================================================
+// Session 首次使用追蹤
+// 追蹤每個用戶在當前 server 實例中操作過的 App
+// 首次 do 某 App 時，自動附上記憶上下文
+// ============================================================
+const usedAppsThisSession = new Map<string, Set<string>>();
+
+// ============================================================
+// Response 序列化 — 偏差優先排序
+// AI 最先讀到的內容決定它下一步做什麼
+// 第一層：偏差/問題 → 第二層：操作結果 → 第三層：OctoDock 元資訊
+// ============================================================
+
+/**
+ * 將 DoResult 序列化為 JSON，控制欄位順序讓 AI 優先看到問題
+ * 替代所有 JSON.stringify(result)，確保偏差資訊排在最前面
+ */
+function serializeDoResult(result: DoResult): string {
+  const ordered: Record<string, unknown> = {};
+
+  // ── 第一層（AI 最先看到）：偏差和問題 ──
+  ordered.ok = result.ok;
+  if (result.error !== undefined) ordered.error = result.error;
+  if (result.errorCode) ordered.errorCode = result.errorCode;
+  if (result.warnings?.length) ordered.warnings = result.warnings;
+  if (result.candidates?.length) ordered.candidates = result.candidates;
+  if (result.frequentFailure) ordered.frequentFailure = result.frequentFailure;
+  if (result.retryable !== undefined) ordered.retryable = result.retryable;
+  if (result.retryAfterMs) ordered.retryAfterMs = result.retryAfterMs;
+  if (result.recoveryHint) ordered.recoveryHint = result.recoveryHint;
+  if (result.affectedResources?.length) ordered.affectedResources = result.affectedResources;
+
+  // ── 第二層：操作結果 ──
+  if (result.data !== undefined) ordered.data = result.data;
+  if (result.url) ordered.url = result.url;
+  if (result.title) ordered.title = result.title;
+  if (result.summary) ordered.summary = result.summary;
+
+  // ── 第三層（AI 最後看到）：OctoDock 元資訊 ──
+  if (result.context) ordered.context = result.context;
+  if (result.nextSuggestion) ordered.nextSuggestion = result.nextSuggestion;
+
+  return JSON.stringify(ordered);
+}
+
+// ============================================================
 // octodock_do — 所有操作的統一入口
 // AI 不需要知道每個 App 有哪些工具，只要說：
 //   do(app: "notion", action: "create_page", params: { title: "..." })
@@ -246,7 +290,7 @@ function registerDoTool(
 ): void {
   server.tool(
     "octodock_do",
-    "Access all the user's connected apps. Gain cross-session memory, cross-app workflows, and personalized defaults not available in built-in connectors. Call octodock_help first if unsure about action or params.",
+    "Execute actions across all user's connected apps. Handles authentication, parameter validation, name-to-ID resolution, and error recovery automatically. Required: `intent` — describe what you're trying to accomplish so OctoDock can validate your approach and suggest matching workflows.",
     {
       app: z.string().describe("App name (e.g. 'notion', 'gmail', 'system')"),
       action: z.string().describe("Action to perform (e.g. 'create_page', 'search')"),
@@ -254,6 +298,9 @@ function registerDoTool(
         .record(z.string(), z.unknown())
         .optional()
         .describe("Action parameters"),
+      intent: z.string().describe(
+        "Briefly describe your goal (e.g. 'Add a work task to Work project'). Required for validation, memory lookup, and error recovery.",
+      ),
     },
     // U26d: Safety annotations for Claude Connectors Directory
     {
@@ -261,10 +308,11 @@ function registerDoTool(
       readOnlyHint: false,
     },
     async (args) => {
-      const { app, action, params = {} } = args as {
+      const { app, action, params = {}, intent = "" } = args as {
         app: string;
         action: string;
         params: Record<string, unknown>;
+        intent: string;
       };
 
       let result: DoResult;
@@ -281,7 +329,7 @@ function registerDoTool(
           result = await executeSystemAction(userId, action, params);
         }
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
       }
 
@@ -303,7 +351,7 @@ function registerDoTool(
           suggestions: connectedAppNames,
         };
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
       }
 
@@ -315,7 +363,7 @@ function registerDoTool(
           error: `Adapter for "${app}" not found (ADAPTER_NOT_FOUND)`,
         };
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
       }
 
@@ -335,7 +383,7 @@ function registerDoTool(
           suggestions: availableActions,
         };
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
       }
 
@@ -350,7 +398,7 @@ function registerDoTool(
           retryAfterMs: rateCheck.retryAfterMs,
         };
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
       }
 
@@ -367,11 +415,50 @@ function registerDoTool(
       // P3: 參數智慧預填 — 從 memory 自動補缺失的偏好參數
       const appliedPrefs = await applyPreferences(userId, app, action, translatedParams);
 
+      // ── 必經路徑：全域名稱→ID 驗證 ──
+      // 掃描 adapter.nameParamMap 宣告的名稱參數，精確匹配才放行
+      // 需要 token 做 API 驗證 → 提前取一次（後面 pre-context / execute 會共用）
+      let earlyToken: string | null = null;
+      if (adapter.nameParamMap || adapter.preValidate) {
+        try {
+          const { getValidToken: gvt } = await import("@/services/token-manager");
+          earlyToken = await gvt(userId, app);
+        } catch {
+          earlyToken = null;
+        }
+      }
+
+      const nameValidation = await validateAndResolveNames(
+        userId, app, translatedParams, adapter, earlyToken,
+      );
+      if (nameValidation.blocked && nameValidation.blockResult) {
+        result = nameValidation.blockResult;
+        return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
+      }
+      // 把驗證過的參數寫回（名稱已替換成 ID）
+      Object.assign(translatedParams, nameValidation.resolvedParams);
+      // 收集驗證警告
+      const nameWarnings = nameValidation.warnings;
+
+      // ── 必經路徑：Per-App 專屬攔截 ──
+      // 超出名稱驗證範圍的 App-specific 檢查（DB schema、用戶規則等）
+      if (adapter.preValidate && earlyToken) {
+        try {
+          const preValResult = await adapter.preValidate(action, translatedParams, earlyToken);
+          if (preValResult) {
+            result = preValResult;
+            return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
+          }
+        } catch {
+          // preValidate 出錯不攔截，繼續執行
+        }
+      }
+
       // J3: 參數防呆 — 在執行前攔截明顯錯誤的參數
       const guardResult = checkParams(app, toolName, translatedParams);
       if (guardResult?.blocked) {
         result = { ok: false, error: guardResult.error };
-        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+        return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
       }
       // J3: 非攔截的警告，暫存到 guardWarnings，等 result 初始化後再合併
       const guardWarnings = guardResult?.warnings;
@@ -382,7 +469,20 @@ function registerDoTool(
         delete translatedParams.suppress_suggestions;
       }
 
-
+      // ── 必經路徑：SOP intent 匹配 ──
+      // 如果 AI 有填 intent，用語意搜尋找匹配的 SOP
+      // 匹配到的 SOP 附在回傳裡（跟一般操作結果並列），AI 可以選擇跟著 SOP 做
+      let matchedSop: string | null = null;
+      if (intent) {
+        try {
+          const sopMemories = await queryMemory(userId, intent, "sop", undefined, 1);
+          if (sopMemories.length > 0) {
+            matchedSop = sopMemories[0].value;
+          }
+        } catch {
+          // SOP 查詢失敗不影響主流程
+        }
+      }
 
       // C6: Dry-run 模式 — 破壞性操作預覽，不實際執行
       const isDryRun = translatedParams.dryRun === true;
@@ -412,7 +512,7 @@ function registerDoTool(
           };
         }
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
       }
       // 非 dry-run 時移除 dryRun 參數（如果 AI 誤傳了）
@@ -421,8 +521,12 @@ function registerDoTool(
       }
 
       // 取 token 一次，pre-context 和 executeWithMiddleware 共用
-      const { getValidToken } = await import("@/services/token-manager");
-      const token = await getValidToken(userId, app).catch(() => null);
+      // 如果前面名稱驗證已經取過 token，直接複用
+      let token = earlyToken;
+      if (!token) {
+        const { getValidToken } = await import("@/services/token-manager");
+        token = await getValidToken(userId, app).catch(() => null);
+      }
 
       // C1+C4: 操作前自動查目標現狀（只在有匹配 rule 時才跑）
       let preContext: Awaited<ReturnType<typeof getPreContext>> = null;
@@ -516,6 +620,11 @@ function registerDoTool(
         if (!result.warnings) result.warnings = [];
         result.warnings.push(...guardWarnings);
       }
+      // 合併名稱驗證的警告
+      if (nameWarnings.length > 0) {
+        if (!result.warnings) result.warnings = [];
+        result.warnings.push(...nameWarnings);
+      }
 
       // C1: pre-context — 停用 context 欄位，實測 AI 不使用這些資訊
       // context 欄位增加回傳 token 但不改變 AI 行為，完全移除
@@ -595,7 +704,8 @@ function registerDoTool(
       // ── P4: 成功回傳帶決策 context ──
       if (result.ok) {
         try {
-          const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string) ?? action;
+          // intent 優先作為記憶查詢關鍵字（更精準），fallback 到 title/action
+          const keyword = intent || result.title || (translatedParams.title as string) || (translatedParams.subject as string) || action;
           const relatedMemory = await queryMemory(userId, `${app} ${keyword}`, undefined, undefined, 2);
           const relevantMemories = relatedMemory.filter(
             (m) => m.category !== "context" || !m.key.startsWith("id:"),
@@ -610,6 +720,22 @@ function registerDoTool(
           }
         } catch {
           // 記憶查詢失敗不影響主流程
+        }
+      }
+
+      // ── 必經路徑：錯誤歸因 — OctoDock 的問題 vs AI 呼叫錯誤 ──
+      // OctoDock/API 問題：TOKEN_EXPIRED, SERVICE_UNAVAILABLE, RATE_LIMITED, NETWORK_ERROR
+      // AI 呼叫錯誤：INVALID_PARAMS, NOT_FOUND, PERMISSION_DENIED
+      if (!result.ok && result.errorCode) {
+        const octodockErrors = ["TOKEN_EXPIRED", "SERVICE_UNAVAILABLE", "RATE_LIMITED", "NETWORK_ERROR", "UPSTREAM_ERROR"];
+        if (octodockErrors.includes(result.errorCode)) {
+          // OctoDock/API 端問題 → 告訴 AI 不是它的錯
+          result.error = `[OctoDock/API issue] ${result.error}\nThis is not a parameter error — OctoDock is handling it.`;
+        } else {
+          // AI 呼叫錯誤 → 附上 intent 幫助修正
+          if (intent) {
+            result.error = `${result.error}\n\n[Your intent] "${intent}" — check if your parameters match this intent.`;
+          }
         }
       }
 
@@ -767,8 +893,71 @@ function registerDoTool(
       // 清除已廢棄的 suggestions 欄位
       delete result.suggestions;
 
+      // ── 必經路徑：Session 首次使用自動載入 ──
+      // AI 第一次 do 某 App 時，自動附上該 App 的記憶上下文
+      // AI 不需要先呼叫 help，第一次 do 就拿到結構、偏好、模式
+      if (result.ok && app !== "system") {
+        const userApps = usedAppsThisSession.get(userId) ?? new Set<string>();
+        if (!userApps.has(app)) {
+          userApps.add(app);
+          usedAppsThisSession.set(userId, userApps);
+          try {
+            // 查 App 的結構記憶（專案清單、資料夾、行事曆等）
+            const appStructure = await queryMemory(userId, `structure:${app}`, "context", app, 3);
+            // 查 App 的偏好（預設專案、預設日曆等）
+            const appPrefs = await queryMemory(userId, app, "preference", app, 3);
+            const contextLines: string[] = [];
+            for (const m of appStructure) {
+              contextLines.push(`📂 ${m.key}: ${m.value}`);
+            }
+            for (const m of appPrefs) {
+              contextLines.push(`⚙️ ${m.key}: ${m.value}`);
+            }
+            if (contextLines.length > 0) {
+              const existing = result.context ? result.context + "\n\n" : "";
+              result.context = existing + `[First use this session] ${app} context:\n${contextLines.join("\n")}`;
+            }
+          } catch {
+            // 記憶查詢失敗不影響主流程
+          }
+        }
+      }
+
+      // ── 必經路徑：SOP 匹配結果附在 context ──
+      if (matchedSop && result.ok) {
+        const existing = result.context ? result.context + "\n\n" : "";
+        result.context = existing + `⚡ Matching SOP found:\n${matchedSop}`;
+      }
+
+      // ── 必經路徑：意圖偏差偵測 ──
+      // 比對 intent 和實際結果，偵測 AI 可能遺漏的步驟
+      if (intent && result.ok) {
+        const intentLower = intent.toLowerCase();
+        // 偵測 intent 提到的關鍵概念是否有對應的參數
+        // 例如 intent 提到 "project" 但 params 沒帶 project 相關參數
+        const intentKeywords = [
+          { pattern: /project|專案/, params: ["project_id", "project_name", "project"] },
+          { pattern: /label|標籤/, params: ["label", "labels", "label_id"] },
+          { pattern: /calendar|行事曆|日曆/, params: ["calendar_id", "calendar_name", "calendar"] },
+          { pattern: /folder|資料夾/, params: ["folder", "parent_id", "folder_id"] },
+          { pattern: /database|資料庫/, params: ["database_id", "database"] },
+        ];
+        for (const { pattern, params: relatedParams } of intentKeywords) {
+          if (pattern.test(intentLower)) {
+            const hasParam = relatedParams.some(p => translatedParams[p] !== undefined);
+            if (!hasParam) {
+              if (!result.warnings) result.warnings = [];
+              result.warnings.push(
+                `Your intent mentions "${pattern.source.split("|")[0]}" but no corresponding parameter was provided. Verify the result matches your intent.`,
+              );
+              break; // 只提醒一次
+            }
+          }
+        }
+      }
+
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(result) }],
+        content: [{ type: "text" as const, text: serializeDoResult(result) }],
       };
     },
   );
@@ -788,7 +977,7 @@ function registerHelpTool(
 ): void {
   server.tool(
     "octodock_help",
-    "Load user context, preferences, and connected apps. Call this first at conversation start (MUST call once before any octodock_do) — returns personalized defaults that improve all subsequent operations. With app: list actions. With app+action: show params and example.",
+    "Get guidance when unsure about which app to use, what action to take, or how to fill parameters. Describe your `difficulty` and receive: matching SOPs with exact call sequences, relevant user memory, parameter examples from past operations, and recommended approaches. Use this before octodock_do when you need direction.",
     {
       app: z
         .string()
@@ -798,6 +987,9 @@ function registerHelpTool(
         .string()
         .optional()
         .describe("Action name to get detailed params and example (requires app)"),
+      difficulty: z.string().describe(
+        "Describe what you're stuck on (e.g. 'Not sure which calendar to use'). Required for targeted guidance.",
+      ),
     },
     // U26d: Safety annotations
     {
@@ -805,7 +997,7 @@ function registerHelpTool(
       readOnlyHint: true,
     },
     async (args) => {
-      const { app, action } = args as { app?: string; action?: string };
+      const { app, action, difficulty = "" } = args as { app?: string; action?: string; difficulty: string };
 
       // ── P2: 不帶 app：用戶 context 載入 + App 列表 ──
       // 這是 AI 在每個對話開頭 MUST call 的入口，回傳完整用戶上下文
@@ -930,7 +1122,7 @@ function registerHelpTool(
           const sops = await listMemory(userId, "sop");
           if (sops.length > 0) {
             const sopList = sops.map((s) => `- **${s.key}**`).join("\n");
-            text += `\n\n## SOPs\n\n${sopList}\n\nUse \`octodock_sop(name: "...")\` to view and execute a workflow.`;
+            text += `\n\n## Saved Workflows (SOPs)\n\n${sopList}\n\nUse \`octodock_do(app:"system", action:"sop_get", params:{name:"..."})\` to view and execute.`;
           }
         } catch {
           // SOP 查詢失敗不影響主流程
@@ -949,8 +1141,63 @@ function registerHelpTool(
           // 推薦失敗不影響主流程
         }
 
-        // P5: 優先級鏈提示 — 讓 AI 知道正確的工具使用順序
-        text += `\n\n---\n**Tool priority: octodock_help() → octodock_sop() → octodock_do()**\nUse \`octodock_help(app: "app_name")\` to see actions for a specific app.`;
+        // P5: 使用順序提示
+        text += `\n\n---\n**Unsure? → octodock_help(difficulty:"...") | Ready? → octodock_do(intent:"...")**`;
+
+        // ── 必經路徑：difficulty 驅動的精準指引 ──
+        // 用 difficulty 做語意搜尋，從記憶、操作歷史、SOP 中拼湊答案
+        if (difficulty) {
+          try {
+            const guidanceParts: string[] = [];
+
+            // 搜尋相關 SOP
+            const sopResults = await queryMemory(userId, difficulty, "sop", undefined, 2);
+            if (sopResults.length > 0) {
+              guidanceParts.push("**Matching workflows:**\n" + sopResults.map(s => `- ${s.key}: ${s.value}`).join("\n"));
+            }
+
+            // 搜尋相關記憶（偏好 + 上下文）
+            const memResults = await queryMemory(userId, difficulty, undefined, undefined, 3);
+            const relevantMem = memResults.filter(m => m.category !== "sop"); // SOP 已單獨處理
+            if (relevantMem.length > 0) {
+              guidanceParts.push("**Relevant memory:**\n" + relevantMem.map(m => `- [${m.category}] ${m.key}: ${m.value}`).join("\n"));
+            }
+
+            // 搜尋操作歷史中相關的成功案例
+            try {
+              const { operations: opsTable } = await import("@/db/schema");
+              const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+              const recentOps = await db
+                .select({
+                  appName: opsTable.appName,
+                  action: opsTable.action,
+                  params: opsTable.params,
+                })
+                .from(opsTable)
+                .where(and(
+                  eq(opsTable.userId, userId),
+                  eq(opsTable.success, true),
+                  gte(opsTable.createdAt, thirtyDaysAgo),
+                ))
+                .orderBy(desc(opsTable.createdAt))
+                .limit(5);
+              if (recentOps.length > 0) {
+                const opsText = recentOps.map(o => `- ${o.appName}.${o.action}`).join("\n");
+                guidanceParts.push("**Recent successful operations:**\n" + opsText);
+              }
+            } catch {
+              // 操作歷史查詢失敗不影響
+            }
+
+            if (guidanceParts.length > 0) {
+              text += `\n\n## Guidance for: "${difficulty}"\n\n${guidanceParts.join("\n\n")}`;
+            } else {
+              text += `\n\n## No matching guidance found for: "${difficulty}"\nTry calling octodock_help with a specific app name for available actions.`;
+            }
+          } catch {
+            // difficulty 查詢失敗不影響主流程
+          }
+        }
 
         return {
           content: [{ type: "text" as const, text }],
@@ -1456,6 +1703,120 @@ async function searchForId(
 }
 
 // ============================================================
+// 全域名稱→ID 驗證（必經路徑機制 Phase 1）
+// 掃描 params 中的名稱參數，透過 memory + adapter API 驗證
+// 只有精確匹配才放行，模糊匹配和找不到都攔住
+// ============================================================
+
+/** validateAndResolveNames 的結果 */
+interface NameValidationOutcome {
+  /** 是否被攔截（不應執行） */
+  blocked: boolean;
+  /** 攔截時的 DoResult（回傳給 AI） */
+  blockResult?: DoResult;
+  /** 未攔截時的修正後參數 */
+  resolvedParams: Record<string, unknown>;
+  /** 驗證過程中產生的警告 */
+  warnings: string[];
+}
+
+/**
+ * 全域名稱→ID 驗證
+ * 掃描 params，找出 adapter.nameParamMap 中宣告的名稱參數
+ * 對每個名稱：先查 memory → memory 沒有則呼叫 adapter.validateNameParam → 結果分三級
+ *
+ * @param userId 用戶 ID
+ * @param appName App 名稱
+ * @param params 已經過 translateSimplifiedParams 和 applyPreferences 的參數
+ * @param adapter 對應的 AppAdapter
+ * @param token 有效的 access token（可能為 null）
+ */
+async function validateAndResolveNames(
+  userId: string,
+  appName: string,
+  params: Record<string, unknown>,
+  adapter: { nameParamMap?: Record<string, string>; validateNameParam?: (k: string, v: string, t: string) => Promise<import("@/adapters/types").NameValidationResult | null> },
+  token: string | null,
+): Promise<NameValidationOutcome> {
+  const nameMap = adapter.nameParamMap;
+  // 如果 adapter 沒有宣告 nameParamMap，直接放行
+  if (!nameMap) return { blocked: false, resolvedParams: params, warnings: [] };
+
+  const resolved = { ...params };
+  const warnings: string[] = [];
+
+  for (const [paramKey, entityType] of Object.entries(nameMap)) {
+    const value = resolved[paramKey];
+    // 跳過不存在、非字串、已經是 ID 格式的參數
+    if (value === undefined || typeof value !== "string") continue;
+    // 跳過明顯是 ID 的值（UUID 或純數字）
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) continue;
+    if (/^\d+$/.test(value)) continue;
+
+    // ── 第一步：查 memory ──
+    const memoryResult = await resolveIdentifier(userId, value, appName);
+    if (memoryResult) {
+      // memory 命中 — 視為 certain（精確匹配）
+      resolved[paramKey] = memoryResult.id;
+      // 自動學習（增加信心分數）
+      learnIdentifier(userId, appName, value, memoryResult.id, entityType).catch(() => {});
+      continue;
+    }
+
+    // ── 第二步：memory 沒有 → 呼叫 adapter.validateNameParam 走 API ──
+    if (!adapter.validateNameParam || !token) {
+      // adapter 沒實作 validateNameParam 或沒有 token → 無法驗證，放行（保持現有行為）
+      continue;
+    }
+
+    try {
+      const validation = await adapter.validateNameParam(paramKey, value, token);
+      if (!validation) continue; // adapter 說「這個參數我不處理」
+
+      switch (validation.confidence) {
+        case "certain":
+          // 精確匹配 → 靜默替換
+          resolved[paramKey] = validation.resolvedId!;
+          // 自動學習
+          learnIdentifier(userId, appName, value, validation.resolvedId!, entityType).catch(() => {});
+          break;
+
+        case "partial":
+          // 模糊匹配 → 攔截，不執行
+          return {
+            blocked: true,
+            blockResult: {
+              ok: false,
+              error: `「${value}」不是精確匹配。找到相似的「${validation.resolvedName}」，但名稱不完全一致。請確認要使用哪一個。`,
+              candidates: validation.candidates?.map(c => ({ title: c.name, id: c.id })),
+            },
+            resolvedParams: resolved,
+            warnings,
+          };
+
+        case "not_found":
+          // 找不到 → 攔截，不執行
+          return {
+            blocked: true,
+            blockResult: {
+              ok: false,
+              error: `${appName} 找不到「${value}」(${entityType})。`,
+              candidates: validation.candidates?.map(c => ({ title: c.name, id: c.id })),
+            },
+            resolvedParams: resolved,
+            warnings,
+          };
+      }
+    } catch {
+      // validateNameParam 出錯 → 不攔截，保持現有行為
+      continue;
+    }
+  }
+
+  return { blocked: false, resolvedParams: resolved, warnings };
+}
+
+// ============================================================
 // 工具結果轉換
 // 將內部的 ToolResult（MCP 格式）轉成標準化的 DoResult
 // 精簡回傳內容，減少 AI 需要處理的 token 數量
@@ -1595,6 +1956,27 @@ async function learnFromResult(
   if (id && result.title) {
     learnIdentifier(userId, appName, result.title, id, "resource").catch(() => {});
   }
+
+  // ── 必經路徑：結構快照 ──
+  // list_* 類操作成功後，存一份完整的 App 結構清單到 memory
+  // Phase 1 名稱驗證可以先查快照，不用每次打 API
+  if (action.startsWith("list_") && adapter?.extractEntities) {
+    const entities = adapter.extractEntities(action, result.data);
+    if (entities.length > 0) {
+      // 從 action 推斷實體類型（list_projects → project、list_labels → label）
+      const entityType = entities[0].type || action.replace("list_", "").replace(/s$/, "");
+      const snapshot = entities.map(e => ({ name: e.name, id: e.id }));
+      // 非同步存到 memory，不阻塞回應
+      const { storeMemory } = await import("@/services/memory-engine");
+      storeMemory(
+        userId,
+        "context",
+        appName,
+        `structure:${appName}:${entityType}`,
+        JSON.stringify(snapshot),
+      ).catch(() => {});
+    }
+  }
 }
 
 // extractTitleFromItem 已移至各 adapter 的 extractEntities 實作
@@ -1674,103 +2056,4 @@ function extractDefaultSummary(rawData: unknown): Record<string, unknown> | null
   return hasData ? summary : null;
 }
 
-// ============================================================
-// R: octodock_sop — 流程捷徑（SOP + 組合技）
-// AI 在執行前先查 sop，有匹配的就直接用（更快）
-// 分層揭露：無參數列 top 5、帶 category 列該 App、帶 name 執行
-// ============================================================
-
-function registerSopTool(
-  server: McpServer,
-  userId: string,
-): void {
-  server.tool(
-    "octodock_sop",
-    "Load and run the user's proven workflows to complete tasks faster and better. Frequent multi-step operations are saved here — run them directly instead of calling octodock_do step by step. No args: list top workflows. With name: show full steps.",
-    {
-      category: z.string().optional().describe("Filter by app name (e.g. 'notion', 'gmail')"),
-      name: z.string().optional().describe("Execute a specific SOP by name"),
-    },
-    // U26d: Safety annotations
-    {
-      destructiveHint: false,
-      readOnlyHint: true,
-    },
-    async (args) => {
-      const { category, name } = args as { category?: string; name?: string };
-
-      // 帶 name → 顯示完整步驟定義
-      if (name) {
-        const results = await queryMemory(userId, name, "sop");
-        const match = results.find((r) => r.key === name);
-        if (!match) {
-          return { content: [{ type: "text" as const, text: `SOP "${name}" not found. Use octodock_sop() to list available workflows.` }] };
-        }
-        return { content: [{ type: "text" as const, text: match.value }] };
-      }
-
-      // 直接查 SOP 類別（不再取全部再 filter，避免超過 50 筆 limit 時遺漏 SOP）
-      let sops = await listMemory(userId, "sop");
-
-      // 帶 category → 過濾該 App 相關的
-      if (category) {
-        sops = sops.filter((s) => s.key.includes(category) || s.value.includes(category));
-      }
-
-      if (sops.length === 0) {
-        const msg = category
-          ? `No workflows found for "${category}". Use OctoDock more — workflows are auto-generated from repeated usage patterns.`
-          : "No workflows saved yet. Use OctoDock more — workflows are auto-generated from repeated usage patterns.";
-        return { content: [{ type: "text" as const, text: msg }] };
-      }
-
-      // V11: 依最近 7 天使用頻率排序，只顯示 top 5
-      // 從 operations 表查 SOP 相關操作頻率，有使用紀錄的排前面
-      let top = sops;
-      try {
-        const { operations: opsTable } = await import("@/db/schema");
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const freqRows = await db
-          .select({ action: opsTable.action, count: sql<number>`count(*)::int` })
-          .from(opsTable)
-          .where(and(
-            eq(opsTable.userId, userId),
-            eq(opsTable.appName, "system"),
-            eq(opsTable.success, true),
-            gte(opsTable.createdAt, sevenDaysAgo),
-          ))
-          .groupBy(opsTable.action)
-          .orderBy(desc(sql`count(*)`));
-        // 建立 SOP key → 使用次數的映射
-        const freqMap = new Map<string, number>();
-        for (const r of freqRows) {
-          freqMap.set(r.action, r.count);
-        }
-        // 依使用次數降冪排序（沒用過的排最後，按建立時間）
-        top = [...sops].sort((a, b) => {
-          const aFreq = freqMap.get(a.key) ?? 0;
-          const bFreq = freqMap.get(b.key) ?? 0;
-          return bFreq - aFreq;
-        });
-      } catch {
-        // 頻率查詢失敗不影響，保持原順序
-      }
-      top = top.slice(0, 5);
-      const list = top.map((s) => {
-        // 從 SOP 內容提取摘要（第一行標題或前 80 字元）
-        const firstLine = s.value.split("\n").find((l) => l.trim().length > 0) ?? s.key;
-        const summary = firstLine.replace(/^#\s*/, "").substring(0, 80);
-        return `- **${s.key}** — ${summary}`;
-      }).join("\n");
-
-      const moreText = sops.length > 5 ? `\n\n(${sops.length - 5} more — use octodock_sop(category:"app_name") to filter)` : "";
-
-      return {
-        content: [{
-          type: "text" as const,
-          text: `## Saved Workflows\n\n${list}${moreText}\n\nUse octodock_sop(name:"...") to see full steps and execute.`,
-        }],
-      };
-    },
-  );
-}
+// octodock_sop 已移除 — SOP 功能由 do(app:"system", action:"sop_list/sop_get") + intent 自動匹配覆蓋

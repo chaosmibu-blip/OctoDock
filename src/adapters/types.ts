@@ -65,6 +65,25 @@ export interface TokenSet {
 }
 
 // ============================================================
+// 名稱驗證結果
+// validateAndResolveNames 全域攔截用的三級信心結構
+// ============================================================
+
+/** 名稱→ID 驗證的三級結果 */
+export interface NameValidationResult {
+  /** certain = 精確匹配（自動執行）、partial = 模糊匹配（攔截）、not_found = 找不到（攔截） */
+  confidence: "certain" | "partial" | "not_found";
+  /** 解析到的 ID（certain / partial 時有值） */
+  resolvedId?: string;
+  /** 實際匹配到的名稱（fuzzy match 時跟輸入不同） */
+  resolvedName?: string;
+  /** 用戶現有的選項列表（partial / not_found 時回傳） */
+  candidates?: Array<{ name: string; id: string }>;
+  /** 附加提醒（partial 時說明為何是模糊匹配） */
+  warning?: string;
+}
+
+// ============================================================
 // octodock_do 標準回傳格式
 // 所有 App 操作統一回傳這個結構，讓 AI 容易理解
 // ============================================================
@@ -156,6 +175,38 @@ export interface AppAdapter {
 
   /** OAuth token 過期時的自動刷新（Notion 不需要，Google 等需要） */
   refreshToken?(refreshToken: string): Promise<TokenSet>;
+
+  // === 必經路徑機制：全域名稱驗證 + Per-App 攔截 ===
+
+  /**
+   * 宣告哪些參數是「名稱」（需要驗證是否存在）
+   * key = 參數名（AI 可能傳的欄位名），value = 實體類型
+   * 例如 { project_name: "project", label: "label" }
+   * server.ts 的 validateAndResolveNames 會根據這張表自動檢查
+   */
+  nameParamMap?: Record<string, string>;
+
+  /**
+   * 驗證名稱是否存在於用戶的 App 中
+   * 當 memory 查不到時，server.ts 會呼叫此方法走 API 驗證
+   * 回傳 null 表示「這個參數我不處理」
+   */
+  validateNameParam?(
+    paramKey: string,
+    paramValue: string,
+    token: string,
+  ): Promise<NameValidationResult | null>;
+
+  /**
+   * 執行前驗證 hook — 超出名稱驗證範圍的 Per-App 專屬檢查
+   * 例如：Notion 查 DB schema、Calendar 套用用戶規則
+   * 回傳 DoResult 表示攔截（不執行），回傳 null 表示放行
+   */
+  preValidate?(
+    action: string,
+    params: Record<string, unknown>,
+    token: string,
+  ): Promise<DoResult | null>;
 }
 
 /** 可學習的實體資訊（名稱→ID 映射） */

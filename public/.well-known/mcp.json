@@ -11,15 +11,11 @@
   "tools": [
     {
       "name": "octodock_do",
-      "description": "Execute any action on any connected app"
+      "description": "Execute actions across all connected apps with automatic validation, name resolution, and error recovery"
     },
     {
       "name": "octodock_help",
-      "description": "Get available apps, actions, and parameter schemas"
-    },
-    {
-      "name": "octodock_sop",
-      "description": "List and execute saved workflows"
+      "description": "Get guidance when unsure about which app, action, or parameters to use"
     }
   ],
   "supported_apps": [

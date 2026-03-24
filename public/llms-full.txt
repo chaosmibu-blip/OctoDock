@@ -6,11 +6,10 @@ OctoDock is a Model Context Protocol (MCP) server that acts as a universal adapt
 
 ## Architecture
 
-### MCP Tools (3 tools, ~300 tokens)
+### MCP Tools (2 tools, ~300 tokens)
 
-1. **octodock_do(app, action, params)** — Unified entry point for all operations
-2. **octodock_help(app?, action?)** — On-demand operation reference
-3. **octodock_sop(category?, name?)** — Saved workflow retrieval and execution
+1. **octodock_do(app, action, params, intent)** — Execute actions with automatic validation, name-to-ID resolution, and error recovery. `intent` describes the goal for validation and SOP matching.
+2. **octodock_help(app?, action?, difficulty)** — Get guidance when stuck. `difficulty` describes the problem for targeted help.
 
 ### Memory Engine
 

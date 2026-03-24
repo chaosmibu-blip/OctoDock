@@ -57,12 +57,11 @@ export default function DocsPage() {
         {/* MCP Tools */}
         <section className="mt-10">
           <h2 className="text-2xl font-semibold text-gray-900">MCP Tools</h2>
-          <p className="mt-3 text-gray-600">OctoDock exposes 3 tools to your AI agent (~300 tokens):</p>
+          <p className="mt-3 text-gray-600">OctoDock exposes 2 tools to your AI agent (~300 tokens):</p>
           <div className="mt-4 space-y-3">
             {[
-              { name: "octodock_do(app, action, params)", desc: "Access all the user's connected apps with cross-session memory and personalized defaults" },
-              { name: "octodock_help(app?, action?)", desc: "Load user context, preferences, and connected apps. Call this first at conversation start" },
-              { name: "octodock_sop(category?, name?)", desc: "Load and run the user's proven workflows to complete tasks faster" },
+              { name: "octodock_do(app, action, params, intent)", desc: "Execute actions across all connected apps with automatic validation, name resolution, and error recovery" },
+              { name: "octodock_help(app?, action?, difficulty)", desc: "Get guidance when unsure about which app, action, or parameters to use" },
             ].map(({ name, desc }) => (
               <div key={name} className="p-4 rounded-lg border border-gray-200 bg-white">
                 <code className="text-sm font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">{name}</code>

@@ -8,7 +8,9 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  DoResult,
   EntityInfo,
+  NameValidationResult,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
@@ -963,6 +965,129 @@ function extractEntities(action: string, rawData: unknown): EntityInfo[] {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+// ── 必經路徑：名稱參數宣告 ──────────────────────────────────
+// 告訴 server.ts 的 validateAndResolveNames 哪些參數是「名稱」
+const nameParamMap: Record<string, string> = {
+  project_name: "project",   // AI 可能傳 project_name: "工作"
+  project: "project",        // AI 也可能傳 project: "工作"（alias）
+  label: "label",            // 標籤名稱
+  section_name: "section",   // 區段名稱
+  section: "section",        // 區段名稱（alias）
+};
+
+// ── 必經路徑：名稱→ID 驗證 ──────────────────────────────────
+// memory 查不到時，透過 API 驗證名稱是否存在
+async function validateNameParam(
+  paramKey: string,
+  paramValue: string,
+  token: string,
+): Promise<NameValidationResult | null> {
+  // ── 專案名稱驗證 ──
+  if (["project_name", "project"].includes(paramKey)) {
+    try {
+      const projects = await todoistFetch("/projects", token) as Array<{ id: string; name: string }>;
+      // 精確匹配（大小寫不敏感）
+      const exact = projects.find(p => p.name.toLowerCase() === paramValue.toLowerCase());
+      if (exact) {
+        return { confidence: "certain", resolvedId: String(exact.id), resolvedName: exact.name };
+      }
+      // 模糊匹配（包含關係）
+      const fuzzy = projects.find(p =>
+        p.name.toLowerCase().includes(paramValue.toLowerCase()) ||
+        paramValue.toLowerCase().includes(p.name.toLowerCase()),
+      );
+      if (fuzzy) {
+        return {
+          confidence: "partial",
+          resolvedId: String(fuzzy.id),
+          resolvedName: fuzzy.name,
+          warning: `Found similar project: "${fuzzy.name}"`,
+          candidates: projects.map(p => ({ name: p.name, id: String(p.id) })),
+        };
+      }
+      // 完全找不到
+      return {
+        confidence: "not_found",
+        candidates: projects.map(p => ({ name: p.name, id: String(p.id) })),
+      };
+    } catch {
+      return null; // API 出錯 → 不攔截
+    }
+  }
+
+  // ── 標籤名稱驗證 ──
+  if (paramKey === "label") {
+    try {
+      const labels = await todoistFetch("/labels", token) as Array<{ id: string; name: string }>;
+      const exact = labels.find(l => l.name.toLowerCase() === paramValue.toLowerCase());
+      if (exact) {
+        return { confidence: "certain", resolvedId: String(exact.id), resolvedName: exact.name };
+      }
+      const fuzzy = labels.find(l =>
+        l.name.toLowerCase().includes(paramValue.toLowerCase()) ||
+        paramValue.toLowerCase().includes(l.name.toLowerCase()),
+      );
+      if (fuzzy) {
+        return {
+          confidence: "partial",
+          resolvedId: String(fuzzy.id),
+          resolvedName: fuzzy.name,
+          warning: `Found similar label: "${fuzzy.name}"`,
+          candidates: labels.map(l => ({ name: l.name, id: String(l.id) })),
+        };
+      }
+      return {
+        confidence: "not_found",
+        candidates: labels.map(l => ({ name: l.name, id: String(l.id) })),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // ── 區段名稱驗證 ──
+  if (["section_name", "section"].includes(paramKey)) {
+    try {
+      const sections = await todoistFetch("/sections", token) as Array<{ id: string; name: string }>;
+      const exact = sections.find(s => s.name.toLowerCase() === paramValue.toLowerCase());
+      if (exact) {
+        return { confidence: "certain", resolvedId: String(exact.id), resolvedName: exact.name };
+      }
+      return {
+        confidence: "not_found",
+        candidates: sections.map(s => ({ name: s.name, id: String(s.id) })),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  return null; // 不處理的參數
+}
+
+// ── 必經路徑：Per-App 專屬攔截 ──────────────────────────────
+// 超出名稱驗證範圍的 Todoist 特有檢查
+async function preValidate(
+  action: string,
+  params: Record<string, unknown>,
+  _token: string,
+): Promise<DoResult | null> {
+  // 日期格式自動修正：如果 due_date 不是自然語言且格式不對，提醒
+  if (action === "create_task" || action === "update_task") {
+    const dueDate = params.due_date ?? params.due_string;
+    if (typeof dueDate === "string" && dueDate.length > 0) {
+      // Todoist 的 due_string 支援自然語言（"tomorrow", "every monday"）
+      // 但 due_date 只接受 YYYY-MM-DD 格式
+      // 如果 AI 把自然語言放到 due_date 裡，自動轉到 due_string
+      if (params.due_date && !/^\d{4}-\d{2}-\d{2}/.test(dueDate)) {
+        params.due_string = dueDate;
+        delete params.due_date;
+      }
+    }
+  }
+  return null; // 不攔截，繼續執行
+}
+
 export const todoistAdapter: AppAdapter = {
   name: "todoist",
   displayName: { zh: "Todoist", en: "Todoist" },
@@ -976,4 +1101,7 @@ export const todoistAdapter: AppAdapter = {
   formatError,
   extractEntities,
   execute,
+  nameParamMap,
+  validateNameParam,
+  preValidate,
 };
