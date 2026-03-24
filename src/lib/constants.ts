@@ -45,3 +45,11 @@ export const OPERATIONS_RETENTION_DAYS = 90;
 // ── AI 設定 ──
 /** AI 呼叫的預設 max_tokens */
 export const DEFAULT_MAX_TOKENS = 1024;
+
+// ── MCP Schema 版本 ──
+/**
+ * MCP 工具定義的 schema 版本號
+ * 只有當 octodock_do / octodock_help 的參數定義（名稱、型別、必填/選填）發生變更時才遞增
+ * 用於偵測 client 快取過期：server 回傳中帶此版本，client 缺少必填參數時提示重連
+ */
+export const MCP_SCHEMA_VERSION = 1;

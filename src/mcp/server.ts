@@ -12,7 +12,7 @@ import { runPostCheck } from "./middleware/post-check";
 import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
 import { getErrorHint } from "./error-hints";
 import { cleanHiddenChars, convertTimestamps } from "./response-formatter";
-import { MAX_RESPONSE_CHARS, TRUNCATED_HEAD_CHARS, TRUNCATED_TAIL_CHARS } from "@/lib/constants";
+import { MAX_RESPONSE_CHARS, TRUNCATED_HEAD_CHARS, TRUNCATED_TAIL_CHARS, MCP_SCHEMA_VERSION } from "@/lib/constants";
 import { checkParams } from "./middleware/param-guard";
 import { learnFromError } from "./middleware/error-learner";
 import { checkUsageLimit, incrementUsage } from "./middleware/usage-limit";
@@ -290,7 +290,7 @@ function registerDoTool(
 ): void {
   server.tool(
     "octodock_do",
-    "Execute actions across all user's connected apps. Handles authentication, parameter validation, name-to-ID resolution, and error recovery automatically. Required: `intent` — describe what you're trying to accomplish so OctoDock can validate your approach and suggest matching workflows.",
+    `Execute actions across all user's connected apps. Handles authentication, parameter validation, name-to-ID resolution, and error recovery automatically. Required: \`intent\` — describe what you're trying to accomplish so OctoDock can validate your approach and suggest matching workflows. [schema:${MCP_SCHEMA_VERSION}]`,
     {
       app: z.string().describe("App name (e.g. 'notion', 'gmail', 'system')"),
       action: z.string().describe("Action to perform (e.g. 'create_page', 'search')"),
@@ -316,10 +316,15 @@ function registerDoTool(
       };
 
       let result: DoResult;
+      const startTime = Date.now();
+
+      // ── Schema 快取過期偵測 ──
+      // 如果 client 沒傳 intent（可能用的是舊版快取 schema），在回傳中附帶提示
+      // 不阻擋操作，只是在結果中加 warning，讓 AI 告知用戶
+      const schemaMaybeStale = !intent;
 
       // ── 系統操作（記憶、Bot 對話等）──
       if (app === "system") {
-        const startTime = Date.now();
         if (!systemActionMap[action]) {
           result = {
             ok: false,
@@ -350,6 +355,7 @@ function registerDoTool(
       // 用量限制檢查（Free 用戶每月 1,000 次）
       const usageLimitError = await checkUsageLimit(userId);
       if (usageLimitError) {
+        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: usageLimitError }, success: false, durationMs: 0 });
         return {
           content: [{ type: "text" as const, text: JSON.stringify({ ok: false, error: usageLimitError }) }],
         };
@@ -362,6 +368,7 @@ function registerDoTool(
           error: `App "${app}" is not connected (APP_NOT_CONNECTED)`,
           suggestions: connectedAppNames,
         };
+        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, durationMs: 0 });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -374,6 +381,7 @@ function registerDoTool(
           ok: false,
           error: `Adapter for "${app}" not found (ADAPTER_NOT_FOUND)`,
         };
+        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, durationMs: 0 });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -394,6 +402,7 @@ function registerDoTool(
           error: `Unknown action "${action}" for ${app}`,
           suggestions: availableActions,
         };
+        logOperation({ userId, appName: app, toolName: `unknown_${action}`, action, params, result: { ok: false, error: result.error }, success: false, durationMs: 0 });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -409,6 +418,7 @@ function registerDoTool(
           retryable: true,
           retryAfterMs: rateCheck.retryAfterMs,
         };
+        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "RATE_LIMITED" }, success: false, durationMs: 0 });
         return {
           content: [{ type: "text" as const, text: serializeDoResult(result) }],
         };
@@ -445,6 +455,7 @@ function registerDoTool(
       );
       if (nameValidation.blocked && nameValidation.blockResult) {
         result = nameValidation.blockResult;
+        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "NAME_VALIDATION_BLOCKED" }, success: false, durationMs: Date.now() - startTime });
         return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
       }
       // 把驗證過的參數寫回（名稱已替換成 ID）
@@ -459,6 +470,7 @@ function registerDoTool(
           const preValResult = await adapter.preValidate(action, translatedParams, earlyToken);
           if (preValResult) {
             result = preValResult;
+            logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "PRE_VALIDATE_BLOCKED" }, success: false, durationMs: Date.now() - startTime });
             return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
           }
         } catch {
@@ -470,6 +482,7 @@ function registerDoTool(
       const guardResult = checkParams(app, toolName, translatedParams);
       if (guardResult?.blocked) {
         result = { ok: false, error: guardResult.error };
+        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "PARAM_GUARD_BLOCKED" }, success: false, durationMs: Date.now() - startTime });
         return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
       }
       // J3: 非攔截的警告，暫存到 guardWarnings，等 result 初始化後再合併
@@ -975,6 +988,16 @@ function registerDoTool(
         }
       }
 
+      // ── Schema 快取過期提示 ──
+      // 如果偵測到 client 可能用舊版 schema（沒傳 intent），附帶提示讓 AI 告知用戶
+      if (schemaMaybeStale && !result.ok) {
+        if (!result.warnings) result.warnings = [];
+        result.warnings.push(
+          `⚠️ MCP tool cache may be outdated (expected schema:${MCP_SCHEMA_VERSION}). ` +
+          `Tell the user: "MCP 工具快取可能過期，請在 AI 工具設定中斷開 OctoDock 連線，等待約 30 秒後重新連線，即可取得最新版本。"`,
+        );
+      }
+
       return {
         content: [{ type: "text" as const, text: serializeDoResult(result) }],
       };
@@ -996,7 +1019,7 @@ function registerHelpTool(
 ): void {
   server.tool(
     "octodock_help",
-    "Get guidance when unsure about which app to use, what action to take, or how to fill parameters. Describe your `difficulty` and receive: matching SOPs with exact call sequences, relevant user memory, parameter examples from past operations, and recommended approaches. Use this before octodock_do when you need direction.",
+    `Get guidance when unsure about which app to use, what action to take, or how to fill parameters. Describe your \`difficulty\` and receive: matching SOPs with exact call sequences, relevant user memory, parameter examples from past operations, and recommended approaches. Use this before octodock_do when you need direction. [schema:${MCP_SCHEMA_VERSION}]`,
     {
       app: z
         .string()
@@ -1070,7 +1093,7 @@ function registerHelpTool(
         // 版本資訊（build time 注入的 git SHA + 日期）
         const version = process.env.NEXT_PUBLIC_GIT_SHA ?? "dev";
         const buildDate = process.env.NEXT_PUBLIC_BUILD_TIME ?? "unknown";
-        let text = `**OctoDock** v:${version} (${buildDate})\n\n## Connected Apps\n\n${appList.join("\n")}`;
+        let text = `**OctoDock** v:${version} (${buildDate}) schema:${MCP_SCHEMA_VERSION}\n\n## Connected Apps\n\n${appList.join("\n")}`;
         if (disconnected.length > 0) {
           text += `\n\n## Available (not connected)\n\n${disconnected.join(", ")}`;
         }

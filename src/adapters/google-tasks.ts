@@ -443,6 +443,23 @@ const tools: ToolDefinition[] = [
   },
 ];
 
+/**
+ * Google Tasks API 要求 due 為 RFC 3339 格式
+ * 接受各種 AI 可能傳入的格式，統一轉成 "YYYY-MM-DDT00:00:00.000Z"
+ */
+function normalizeDue(due: string): string {
+  // "2026-03-25" → "2026-03-25T00:00:00.000Z"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+    return `${due}T00:00:00.000Z`;
+  }
+  // 已經帶時區的完整格式，確保轉成 UTC
+  try {
+    const d = new Date(due);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  } catch { /* fallback */ }
+  return due;
+}
+
 // ── 工具執行邏輯 ──────────────────────────────────────────
 async function execute(
   toolName: string,
@@ -496,7 +513,9 @@ async function execute(
         title: params.title as string,
       };
       if (params.notes) body.notes = params.notes;
-      if (params.due) body.due = params.due;
+      // Google Tasks API 要求 due 格式為 RFC 3339（不含毫秒）
+      // AI 可能傳 "2026-03-25" 或 "2026-03-25T00:00:00.000Z"，統一轉成 "YYYY-MM-DDT00:00:00.000Z"
+      if (params.due) body.due = normalizeDue(params.due as string);
 
       const result = await gtasksFetch(
         `/lists/${encodeURIComponent(params.tasklist as string)}/tasks`,
@@ -516,7 +535,7 @@ async function execute(
       const body: Record<string, unknown> = {};
       if (params.title !== undefined) body.title = params.title;
       if (params.notes !== undefined) body.notes = params.notes;
-      if (params.due !== undefined) body.due = params.due;
+      if (params.due !== undefined) body.due = normalizeDue(params.due as string);
       if (params.status !== undefined) body.status = params.status;
 
       const result = await gtasksFetch(

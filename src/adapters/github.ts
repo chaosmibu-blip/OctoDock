@@ -1251,10 +1251,13 @@ async function execute(
     }
 
     // 取得檔案內容（base64 解碼為純文字，支援指定分支）
+    // 如果路徑是目錄，GitHub API 會回傳陣列（由 formatResponse 格式化為目錄列表）
     case "github_get_file": {
       const ref = params.branch ? `?ref=${params.branch}` : "";
+      // 移除尾部斜線（GitHub API 不接受 /src/ 但接受 /src）
+      const cleanPath = (params.path as string).replace(/\/+$/, "");
       const result = await githubFetch(
-        `/repos/${params.owner}/${params.repo}/contents/${params.path}${ref}`,
+        `/repos/${params.owner}/${params.repo}/contents/${cleanPath}${ref}`,
         token,
       );
       return {

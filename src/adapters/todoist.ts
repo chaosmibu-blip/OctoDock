@@ -781,19 +781,12 @@ async function execute(
     }
 
     case "todoist_quick_add": {
-      /* Quick Add 端點 */
-      const data = await fetch("https://api.todoist.com/api/v1/tasks/quick_add", {
+      /* Quick Add 端點（v1 API：需要 meta=true 才會回傳完整結果） */
+      const data = await todoistFetch("/tasks/quick_add", token, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ text: params.text }),
+        body: JSON.stringify({ text: params.text, meta: true }),
       });
-      if (!data.ok) {
-        throw new Error(`Todoist Quick Add error: ${data.status} ${await data.text()} (TODOIST_QUICK_ADD_ERROR)`);
-      }
-      return json(await data.json());
+      return json(data);
     }
 
     // ════════════════════════════════════════════

@@ -165,6 +165,120 @@ export function checkParams(
         warnings.push(`Auto-expanded date-only ${key} to full timestamp: ${params[key]}`);
       }
     }
+
+    // ── J3e: Google Calendar start/end 字串 → 物件自動轉換 ──
+    // Google Calendar API 要求 start/end 為 {dateTime:"..."} 或 {date:"..."}
+    // AI 常傳字串（"2026-03-25T15:00:00+08:00"），自動包裝成物件
+    for (const key of ["start", "end"]) {
+      const val = params[key];
+      if (typeof val === "string") {
+        params[key] = /^\d{4}-\d{2}-\d{2}$/.test(val)
+          ? { date: val }
+          : { dateTime: val };
+        warnings.push(`Auto-wrapped ${key} string to object: ${JSON.stringify(params[key])}`);
+      }
+    }
+  }
+
+  // ── J3f: Google Tasks due 日期格式正規化 ──
+  // Google Tasks API 要求 due 為 RFC 3339 格式（含完整時間）
+  // AI 可能傳 "2026-03-25"（純日期）或帶毫秒的格式
+  if (app === "google_tasks" && params.due && typeof params.due === "string") {
+    const due = params.due as string;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+      params.due = `${due}T00:00:00.000Z`;
+      warnings.push(`Auto-expanded date-only due to RFC 3339: ${params.due}`);
+    } else {
+      // 確保轉成標準 ISO 格式（處理帶時區偏移的格式）
+      try {
+        const d = new Date(due);
+        if (!isNaN(d.getTime())) {
+          params.due = d.toISOString();
+        }
+      } catch { /* 保持原值 */ }
+    }
+  }
+
+  // ── J3g: 路徑尾部斜線清理（GitHub） ──
+  // GitHub API 不接受 "src/components/"，只接受 "src/components"
+  if (app === "github" && params.path && typeof params.path === "string") {
+    const cleanPath = (params.path as string).replace(/\/+$/, "");
+    if (cleanPath !== params.path) {
+      params.path = cleanPath;
+      warnings.push(`Auto-removed trailing slash from path: "${cleanPath}"`);
+    }
+  }
+
+  // ── J3h: 通用參數格式正規化（跨 App 共用） ──
+
+  // Gmail: to/cc/bcc 陣列 → 逗號分隔字串
+  if (app === "gmail") {
+    for (const key of ["to", "cc", "bcc"]) {
+      if (Array.isArray(params[key])) {
+        params[key] = (params[key] as string[]).join(", ");
+        warnings.push(`Auto-joined ${key} array to comma-separated string`);
+      }
+    }
+  }
+
+  // GitHub: labels/assignees 逗號字串 → 陣列
+  if (app === "github") {
+    for (const key of ["labels", "assignees"]) {
+      if (typeof params[key] === "string") {
+        params[key] = (params[key] as string).split(",").map(s => s.trim()).filter(Boolean);
+        warnings.push(`Auto-split ${key} string to array`);
+      }
+    }
+  }
+
+  // Discord: message_ids 數字 → 字串
+  if (app === "discord" && Array.isArray(params.message_ids)) {
+    params.message_ids = (params.message_ids as unknown[]).map(id => String(id));
+  }
+
+  // Google Sheets: values 1D 陣列 → 2D 陣列（單列包裝）
+  if (app === "google_sheets" && Array.isArray(params.values)) {
+    const vals = params.values as unknown[];
+    // 如果第一個元素不是陣列，代表 AI 傳了 1D 陣列，自動包成 2D
+    if (vals.length > 0 && !Array.isArray(vals[0])) {
+      params.values = [vals];
+      warnings.push(`Auto-wrapped 1D values array to 2D: [[...]]`);
+    }
+  }
+
+  // Google Docs: rows/columns 字串 → 數字
+  if (app === "google_docs") {
+    for (const key of ["rows", "columns", "index"]) {
+      if (typeof params[key] === "string" && /^\d+$/.test(params[key] as string)) {
+        params[key] = parseInt(params[key] as string, 10);
+        warnings.push(`Auto-converted ${key} from string to number`);
+      }
+    }
+  }
+
+  // Google Drive: share type 別名正規化
+  if (app === "google_drive" && params.type === "email") {
+    params.type = "user";
+    warnings.push(`Auto-corrected share type: "email" → "user"`);
+  }
+
+  // Canva: pages 參數正規化（範圍字串/單一數字 → 0-based 陣列）
+  if (app === "canva" && params.pages !== undefined) {
+    const pages = params.pages;
+    if (typeof pages === "number") {
+      // 單一數字 → 0-based 陣列
+      params.pages = [pages > 0 ? pages - 1 : 0];
+      warnings.push(`Auto-wrapped single page number to array (0-based)`);
+    } else if (typeof pages === "string") {
+      // 範圍字串 "1-3" → [0, 1, 2]
+      const match = (pages as string).match(/^(\d+)-(\d+)$/);
+      if (match) {
+        const start = Math.max(0, parseInt(match[1], 10) - 1);
+        const end = parseInt(match[2], 10) - 1;
+        params.pages = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+        warnings.push(`Auto-converted page range "${pages}" to 0-based array`);
+      }
+    }
   }
 
   // ── U7/J3d: 必填參數攔截 — 在打上游 API 前就攔截缺少必填參數的情況 ──

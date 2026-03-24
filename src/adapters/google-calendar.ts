@@ -661,6 +661,19 @@ const tools: ToolDefinition[] = [
 ];
 
 // ── 工具執行邏輯 ──────────────────────────────────────────
+/**
+ * AI 可能傳字串（"2026-03-25T15:00:00+08:00"）而非物件（{dateTime:"..."}）
+ * 自動轉換：字串 → {dateTime} 或 {date}（全天事件用 YYYY-MM-DD 格式）
+ */
+function wrapTime(val: unknown) {
+  if (typeof val === "string") {
+    return /^\d{4}-\d{2}-\d{2}$/.test(val)
+      ? { date: val }
+      : { dateTime: val };
+  }
+  return val;
+}
+
 async function execute(
   toolName: string,
   params: Record<string, unknown>,
@@ -723,8 +736,8 @@ async function execute(
       // 組裝事件物件，只包含有值的欄位
       const eventBody: Record<string, unknown> = {
         summary: params.summary,
-        start: params.start,
-        end: params.end,
+        start: wrapTime(params.start),
+        end: wrapTime(params.end),
       };
       if (params.description) eventBody.description = params.description;
       if (params.location) eventBody.location = params.location;
@@ -751,8 +764,8 @@ async function execute(
       // 只傳送需要更新的欄位
       const patchBody: Record<string, unknown> = {};
       if (params.summary !== undefined) patchBody.summary = params.summary;
-      if (params.start !== undefined) patchBody.start = params.start;
-      if (params.end !== undefined) patchBody.end = params.end;
+      if (params.start !== undefined) patchBody.start = wrapTime(params.start);
+      if (params.end !== undefined) patchBody.end = wrapTime(params.end);
       if (params.description !== undefined) patchBody.description = params.description;
       if (params.location !== undefined) patchBody.location = params.location;
 

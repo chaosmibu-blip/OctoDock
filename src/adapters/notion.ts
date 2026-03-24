@@ -1888,12 +1888,14 @@ async function preValidate(
       const unknownProps: string[] = [];
       const warnings: string[] = [];
       for (const propName of Object.keys(userProps)) {
-        // title 是系統欄位，跳過
+        // title 是系統欄位 — AI 常用 "Title"、"Name"、"名稱" 等名稱，自動修正為實際欄位名
         if (propName.toLowerCase() === "title" || propName === "名稱" || propName === "Name") {
-          // 找到 title 類型的欄位名稱，如果不完全匹配則提示
           const titleProp = Object.entries(dbProps).find(([, p]) => p.type === "title");
           if (titleProp && titleProp[0] !== propName) {
-            warnings.push(`此資料庫的標題欄位名稱是「${titleProp[0]}」，不是「${propName}」`);
+            warnings.push(`標題欄位名稱自動修正：「${propName}」→「${titleProp[0]}」`);
+            // 自動修正：把值搬到正確的 title 欄位名
+            userProps[titleProp[0]] = userProps[propName];
+            delete userProps[propName];
           }
           continue;
         }
