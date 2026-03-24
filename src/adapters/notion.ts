@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type {
   AppAdapter,
+  DoResult,
   EntityInfo,
+  NameValidationResult,
   OAuthConfig,
   ToolDefinition,
   ToolResult,
@@ -1755,6 +1757,229 @@ function extractEntities(action: string, rawData: unknown): EntityInfo[] {
   return entities;
 }
 
+// ── 必經路徑：名稱參數宣告 ──────────────────────────────────
+// 告訴 server.ts 的 validateAndResolveNames 哪些參數是「名稱」
+// 注意：translateSimplifiedParams 會先把 folder→parent_id、page→page_id、database→database_id
+//       如果記憶查不到，這些欄位會保留名稱字串，由這裡接手驗證
+const nameParamMap: Record<string, string> = {
+  parent_id: "page",        // AI 傳 parent_id: "會議紀錄"（translateSimplifiedParams 沒解析到）
+  folder: "page",           // AI 傳 folder: "會議紀錄"（alias，可能沒被轉換）
+  parent: "page",           // AI 傳 parent: "會議紀錄"（alias）
+  page_id: "page",          // AI 傳 page_id: "某頁面"（直接用 API 欄位名但填了名稱）
+  page: "page",             // AI 傳 page: "某頁面"（alias）
+  database_id: "database",  // AI 傳 database_id: "待辦清單"
+  database: "database",     // AI 傳 database: "待辦清單"（alias）
+};
+
+// ── 必經路徑：名稱→ID 驗證 ──────────────────────────────────
+// memory 查不到時，透過 Notion search API 驗證名稱是否存在
+async function validateNameParam(
+  paramKey: string,
+  paramValue: string,
+  token: string,
+): Promise<NameValidationResult | null> {
+  // 判斷要搜尋的物件類型
+  const entityType = nameParamMap[paramKey];
+  if (!entityType) return null;
+
+  // Notion search 的 filter 值
+  const filterValue = entityType === "database" ? "database" : "page";
+
+  try {
+    const result = await notionFetch("/search", token, {
+      method: "POST",
+      body: JSON.stringify({
+        query: paramValue,
+        filter: { value: filterValue, property: "object" },
+        page_size: 10,
+      }),
+    }) as { results: Array<Record<string, unknown>> };
+
+    const items = result.results ?? [];
+    // 提取標題和 ID
+    const candidates = items.map(item => ({
+      name: extractNotionTitle(item) ?? "(untitled)",
+      id: item.id as string,
+    }));
+
+    // 精確匹配（大小寫不敏感）
+    const exact = candidates.find(c =>
+      c.name.toLowerCase() === paramValue.toLowerCase(),
+    );
+    if (exact) {
+      return { confidence: "certain", resolvedId: exact.id, resolvedName: exact.name };
+    }
+
+    // 模糊匹配（包含關係）
+    const fuzzy = candidates.find(c =>
+      c.name.toLowerCase().includes(paramValue.toLowerCase()) ||
+      paramValue.toLowerCase().includes(c.name.toLowerCase()),
+    );
+    if (fuzzy) {
+      return {
+        confidence: "partial",
+        resolvedId: fuzzy.id,
+        resolvedName: fuzzy.name,
+        warning: `Found similar ${filterValue}: "${fuzzy.name}"`,
+        candidates,
+      };
+    }
+
+    // 完全找不到
+    if (candidates.length > 0) {
+      return { confidence: "not_found", candidates };
+    }
+    return { confidence: "not_found" };
+  } catch {
+    return null; // API 出錯 → 不攔截
+  }
+}
+
+// ── 必經路徑：Per-App 專屬攔截 ──────────────────────────────
+// 超出名稱驗證範圍的 Notion 特有檢查
+
+/** Notion DB 欄位類型（用於 schema 驗證） */
+interface NotionProperty {
+  id: string;
+  name: string;
+  type: string;
+  [key: string]: unknown;
+}
+
+async function preValidate(
+  action: string,
+  params: Record<string, unknown>,
+  token: string,
+): Promise<DoResult | null> {
+  // ── create_database_item：驗證 database schema ──
+  // 查 DB 的欄位結構，確認 AI 傳的 properties 格式正確
+  if (action === "create_database_item" || action === "notion_create_database_item") {
+    const dbId = params.database_id as string | undefined;
+    if (!dbId) return null; // 沒有 database_id → 讓後面的 param-guard 處理
+
+    // 跳過非 UUID 的值（名稱驗證由 validateNameParam 處理）
+    if (!/^[0-9a-f]{8}-/.test(dbId)) return null;
+
+    try {
+      const db = await notionFetch(`/databases/${dbId}`, token) as {
+        title: Array<{ plain_text: string }>;
+        properties: Record<string, NotionProperty>;
+      };
+
+      const dbProps = db.properties;
+      const dbTitle = db.title?.map(t => t.plain_text).join("") ?? "(untitled)";
+      const userProps = params.properties as Record<string, unknown> | undefined;
+
+      if (!userProps || Object.keys(userProps).length === 0) {
+        // 沒有傳 properties → 提供 schema 資訊讓 AI 知道要填什麼
+        const schemaLines = Object.entries(dbProps).map(([name, prop]) => {
+          // 對 select / multi_select 列出選項
+          const options = getPropertyOptions(prop);
+          const optionStr = options ? ` [${options}]` : "";
+          return `- **${name}** (${prop.type})${optionStr}`;
+        });
+        return {
+          ok: false,
+          error: `create_database_item 需要 properties 參數。資料庫「${dbTitle}」的欄位結構：\n${schemaLines.join("\n")}`,
+        };
+      }
+
+      // 驗證每個 property 名稱是否存在於 DB schema
+      const unknownProps: string[] = [];
+      const warnings: string[] = [];
+      for (const propName of Object.keys(userProps)) {
+        // title 是系統欄位，跳過
+        if (propName.toLowerCase() === "title" || propName === "名稱" || propName === "Name") {
+          // 找到 title 類型的欄位名稱，如果不完全匹配則提示
+          const titleProp = Object.entries(dbProps).find(([, p]) => p.type === "title");
+          if (titleProp && titleProp[0] !== propName) {
+            warnings.push(`此資料庫的標題欄位名稱是「${titleProp[0]}」，不是「${propName}」`);
+          }
+          continue;
+        }
+
+        // 精確匹配
+        if (dbProps[propName]) continue;
+
+        // 大小寫不敏感匹配
+        const caseMatch = Object.keys(dbProps).find(
+          k => k.toLowerCase() === propName.toLowerCase(),
+        );
+        if (caseMatch) {
+          warnings.push(`欄位名稱大小寫不符：傳入「${propName}」，實際是「${caseMatch}」`);
+          // 自動修正：把值搬到正確的欄位名
+          userProps[caseMatch] = userProps[propName];
+          delete userProps[propName];
+          continue;
+        }
+
+        unknownProps.push(propName);
+      }
+
+      // 有不存在的欄位名 → 攔截
+      if (unknownProps.length > 0) {
+        const schemaLines = Object.entries(dbProps).map(([name, prop]) => {
+          const options = getPropertyOptions(prop);
+          const optionStr = options ? ` [${options}]` : "";
+          return `- **${name}** (${prop.type})${optionStr}`;
+        });
+        return {
+          ok: false,
+          error: `資料庫「${dbTitle}」沒有以下欄位：${unknownProps.join("、")}。\n\n可用欄位：\n${schemaLines.join("\n")}`,
+          candidates: Object.entries(dbProps).map(([name, prop]) => ({
+            title: `${name} (${prop.type})`,
+            id: prop.id,
+          })),
+        };
+      }
+
+      // 有警告但不攔截（大小寫修正等）
+      if (warnings.length > 0) {
+        // 不攔截，但把警告塞進 params 讓 server.ts 回傳時合併
+        params._preValidateWarnings = warnings;
+      }
+    } catch {
+      // DB schema 查詢失敗 → 不攔截，讓原本的流程處理
+    }
+  }
+
+  // ── create_page：驗證 parent 是否存在且可寫入 ──
+  // 如果 parent_id 已經是 UUID（名稱驗證已確認），驗證它是否可存取
+  if (action === "create_page" || action === "notion_create_page") {
+    const parentId = params.parent_id as string | undefined;
+    if (parentId && /^[0-9a-f]{8}-/.test(parentId)) {
+      try {
+        // 用 GET page 確認可存取（Notion 會回 404 如果無權限或不存在）
+        await notionFetch(`/pages/${parentId}`, token);
+        // 能讀到就表示存在且有權限
+      } catch (err) {
+        const msg = (err as Error).message ?? "";
+        if (msg.includes("404") || msg.includes("not found") || msg.includes("Could not find")) {
+          return {
+            ok: false,
+            error: `指定的 parent_id「${parentId}」不存在或 OctoDock integration 沒有存取權限。請確認該頁面已分享給 OctoDock integration。`,
+          };
+        }
+        // 其他錯誤不攔截
+      }
+    }
+  }
+
+  return null; // 不攔截，繼續執行
+}
+
+/** 從 Notion property 定義中提取 select / multi_select / status 的選項 */
+function getPropertyOptions(prop: NotionProperty): string | null {
+  const type = prop.type;
+  // select / multi_select 的選項在 prop[type].options
+  const propData = prop[type] as { options?: Array<{ name: string }> } | undefined;
+  if (!propData?.options || propData.options.length === 0) return null;
+  // 最多顯示 8 個選項
+  const names = propData.options.map(o => o.name);
+  if (names.length <= 8) return names.join(", ");
+  return names.slice(0, 8).join(", ") + ` ...+${names.length - 8}`;
+}
+
 export const notionAdapter: AppAdapter = {
   name: "notion",
   displayName: { zh: "Notion", en: "Notion" },
@@ -1768,4 +1993,7 @@ export const notionAdapter: AppAdapter = {
   formatError: notionFormatError,
   execute,
   extractEntities, // 架構層自動學習：從回傳中提取 名稱→ID 映射
+  nameParamMap,
+  validateNameParam,
+  preValidate,
 };

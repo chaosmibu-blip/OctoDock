@@ -625,6 +625,13 @@ function registerDoTool(
         if (!result.warnings) result.warnings = [];
         result.warnings.push(...nameWarnings);
       }
+      // 合併 preValidate 產生的警告（例如 Notion DB 欄位大小寫修正）
+      const preValWarnings = translatedParams._preValidateWarnings as string[] | undefined;
+      if (preValWarnings?.length) {
+        if (!result.warnings) result.warnings = [];
+        result.warnings.push(...preValWarnings);
+        delete translatedParams._preValidateWarnings;
+      }
 
       // C1: pre-context — 停用 context 欄位，實測 AI 不使用這些資訊
       // context 欄位增加回傳 token 但不改變 AI 行為，完全移除
