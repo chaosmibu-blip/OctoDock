@@ -1,6 +1,6 @@
 ---
 name: 架構思維
-description: 碰到問題時自動判斷是單一 App 的問題還是通用架構的問題，通用的就改架構不改個別 App
+description: 當你修改 server.ts、types.ts、middleware、或任何核心模組時，檢查這次改動是否需要同步到其他層：改了 tool schema 的參數 → DB operations 表要有對應欄位；改了 param-guard 規則 → 確認所有 App 都適用還是只該針對特定 App；在 adapter 裡做了格式轉換 → 判斷該不該提升到 param-guard；加了新的提前返回路徑 → 確認有 logOperation 且帶齊所有欄位。
 ---
 
 # 架構思維

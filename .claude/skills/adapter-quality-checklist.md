@@ -1,6 +1,6 @@
 ---
 name: Adapter 品質檢查清單
-description: 開發或審查 App Adapter 時自動檢查的品質基準線
+description: 當你新增或修改 src/adapters/ 下的檔案時，用這份清單逐項確認：回傳格式有沒有轉成 AI 友善格式（G1）、CRUD 是否完整（G2）、讀寫格式是否對稱（G3）、help 有沒有分層（B2）、錯誤有沒有友善提示（B3）。同時檢查 param-guard 有沒有對應的轉換規則、formatResponse 有沒有處理所有 action。
 ---
 
 # Adapter 品質檢查清單

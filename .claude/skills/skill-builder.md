@@ -1,6 +1,6 @@
 ---
 name: Skill 建立器
-description: 當用戶要建立新 skill 時，自動完成完整的建立流程：寫 skill 檔案、加 CLAUDE.md 觸發規則、確認不重複不衝突。
+description: 當用戶要求建立新 skill 時，按這個流程做：確認不跟現有 skill 重疊 → 寫 .claude/skills/ 檔案（frontmatter + 內容）→ 在 CLAUDE.md Skills 表格加觸發規則 → 驗證 description 寫得夠清楚讓 AI 能靠語意理解判斷何時載入。
 user_invocable: true
 trigger: Use this skill when the user asks to create a new skill, add a skill, build a skill, or mentions '建 skill', '新增 skill', '加一個 skill'. Also trigger when user provides a skill spec or workflow and wants it saved as a reusable skill.
 ---

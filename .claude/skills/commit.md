@@ -1,6 +1,6 @@
 ---
 name: Commit 完整性檢查
-description: 每次 commit 前自動檢查，確保不遺漏檔案、不洩漏敏感資訊、不破壞 build。
+description: 當你準備 commit 時，檢查四件事：（1）有沒有改了但忘記 git add 的檔案；（2）有沒有敏感資訊（token、密碼、連線字串）混進去；（3）npm run build 能不能過；（4）這次改動涉及的資料流是否完整——改了 MCP tool schema 的欄位，DB 和 logOperation 有沒有同步；改了 adapter，param-guard 和 i18n 有沒有同步。
 user_invocable: true
 trigger: Use this skill when the user says 'commit', 'git commit', '提交', or when you are about to create a git commit.
 ---

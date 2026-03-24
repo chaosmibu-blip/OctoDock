@@ -1,6 +1,6 @@
 ---
 name: 自我改進檢查
-description: 每次修正程式碼或開始新功能時，自動判斷是否需要改進或建立新的 CLAUDE.md 規則和 skill
+description: 已合併到 cognitive-evolution.md。本 skill 保留作為歷史參考，實際使用請看 cognitive-evolution.md。
 ---
 
 # 自我改進檢查

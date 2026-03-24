@@ -1,6 +1,6 @@
 ---
 name: 認知進化引擎
-description: OctoDock 的核心迭代機制。從 AI 使用 OctoDock 的成功/失敗中提煉認知，優化系統讓 AI 下次用得更好。涵蓋兩個層面：程式碼層（param-guard、error-learner、middleware）和知識層（CLAUDE.md、skill）。
+description: 當工作過程中產生了「對未來同類工作有價值的新理解」時，判斷它該沉澱在哪裡：能用程式碼自動解決的改程式碼（param-guard / middleware）；不能自動化的寫入 CLAUDE.md 開發原則或踩過的坑；需要多步驟流程的建 skill。典型情境：修了第二次同類 bug、用戶糾正了做法、查 production 數據發現模式、做完後覺得「早知道就好了」。
 ---
 
 # 認知進化引擎
@@ -20,18 +20,19 @@ AI 使用 OctoDock → 成功/失敗記錄到 operations
 
 ## 觸發時機
 
-**在覺察到「這個認知能讓 AI 更好地使用 OctoDock」時觸發。**
+**具體的 if-then 規則，不靠「覺察」：**
 
-| 情境 | 為什麼有價值 | 優先做什麼 |
-|------|-------------|-----------|
-| production 失敗記錄出現模式 | 數據驅動，最可靠 | 先修程式碼，再寫認知 |
-| 同一問題在第二個 App 出現 | 個別 → 架構的升級信號 | 提升到 middleware 層 |
-| AI 傳的參數格式 API 不認 | 系統性阻抗失配 | 加 param-guard 轉換規則 |
-| AI 重試同一操作多次才成功 | 錯誤引導不夠好 | 改 formatError / error-hints |
-| 用戶糾正做法或方向 | 偏好/原則需更新 | 更新 CLAUDE.md |
-| 發現中介層缺少某類處理 | 架構缺口 | 評估是否新增 middleware |
+| 當你做了這件事 | 立刻檢查 |
+|--------------|---------|
+| 改了 `server.ts` 的 tool schema（z.object 參數定義） | operations 表有沒有對應欄位？logOperation 有沒有傳？ |
+| 在 adapter 裡做了格式轉換（日期、字串→物件等） | 這個轉換該不該提升到 param-guard？其他 App 有沒有同樣問題？ |
+| 修了一個 bug，而且這類 bug 之前修過 | 升級到架構層（middleware / param-guard / CLAUDE.md 開發原則） |
+| 用戶說「不對」「不是這樣」「改回去」 | 寫入 CLAUDE.md 開發原則或踩過的坑 |
+| 查 production 數據發現失敗模式 | 先改程式碼修復 → 再寫 CLAUDE.md |
+| 加了新的提前返回路徑（return before executeWithMiddleware） | 有沒有 logOperation？有沒有帶所有必填欄位？ |
+| 新增 MCP 參數 | DB schema + migration + logOperation + 所有呼叫點都要同步 |
 
-**不觸發：** 單純 typo、單一 adapter 的孤立 bug、例行 CRUD。
+**不觸發：** 單純修 typo、只改一個 adapter 的孤立 bug、例行 CRUD。
 
 ---
 

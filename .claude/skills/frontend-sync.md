@@ -1,6 +1,6 @@
 ---
 name: 前後端同步檢查
-description: 後端有變更時自動檢查前端是否需要同步更新
+description: 當你改了後端（adapter、MCP、auth、schema）時，檢查前端有沒有要同步：新增 App → dashboard-client.tsx 的 APP_KEYS 要加、i18n.tsx 要加 app 描述和 tool 描述；改了 OAuth 流程 → oauth-env.ts 的環境變數映射要對上；改了工具名稱或新增 action → i18n 的 tool.* key 要補。
 ---
 
 # 前後端同步檢查
