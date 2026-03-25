@@ -178,3 +178,8 @@ AI 使用 OctoDock → 成功/失敗記錄到 operations
 | 閾值硬編碼 | MIN_OPS_FOR_PATTERN=3、ANOMALY_MULTIPLIER=3 都寫死 | 無法適應不同使用量的用戶 |
 | 單步預測 | action-chain 只用一階 Markov chain | 看不見多步驟工作流 |
 | 錯誤類型未區分 | error-learner 把所有非暫態錯誤一視同仁 | 無法針對性修正 |
+
+---
+相關 Skill：
+- 如果需要建新 skill → `skill-builder.md`
+- 提交前 → `commit.md`

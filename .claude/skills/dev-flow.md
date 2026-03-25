@@ -28,3 +28,10 @@
 18. 改了架構或加了欄位 → grep 所有相關程式碼確認沒有遺漏
 19. 更新文件（CLAUDE.md、skills、i18n）
 20. 回頭檢查：隔一段時間用 production 數據驗證資料流有沒有斷裂
+
+---
+相關 Skill：
+- 3 個以上檔案改動 → `planning-doc.md`（先寫規劃）
+- 寫程式碼時 → `implementation-rules.md`（編碼慣例和資料流規則）
+- 後端變更 → `frontend-sync.md`（同步前端）
+- 提交前 → `commit.md`

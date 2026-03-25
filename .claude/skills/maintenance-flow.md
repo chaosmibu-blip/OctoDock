@@ -6,3 +6,8 @@
 2. 技術債清理：累積的 TODO、已知但未修的問題
 3. 過期資料清除：stored_results 的 24 小時過期、operations 的 90 天保留
 4. 效能檢查：有沒有變慢的查詢或膨脹的表
+
+---
+相關 Skill：
+- 發現系統性問題 → `cognitive-evolution.md`
+- 提交前 → `commit.md`

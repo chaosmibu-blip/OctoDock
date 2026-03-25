@@ -62,3 +62,8 @@ description: 每次新增一個 App adapter 時，自動研究該 App 的免費 
 - 不要猜 API 規格，一定要查官方文件
 - 免費 API 優先，付費 API 標記清楚
 - 同一個 OAuth 能共用的就共用（例如 Google 全家桶）
+
+---
+相關 Skill：
+- 研究完寫 adapter → `adapter-quality-checklist.md`（品質基準線逐項檢查）
+- 寫程式碼時 → `implementation-rules.md`

@@ -107,3 +107,9 @@ async function getYoutubeTranscript() {
 - `.claude/agents/octodock-dev.md` — 開發指南
 - `.claude/agents/mcp-server-builder.md` — MCP 開發
 - `.claude/agents/oauth-integrator.md` — 認證開發
+
+---
+相關 Skill：
+- 新增 adapter → `adapter-quality-checklist.md`
+- 改了前端 → `ui-review.md`
+- 提交前 → `commit.md`

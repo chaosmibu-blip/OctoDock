@@ -99,3 +99,9 @@ description: 當你修改 server.ts、types.ts、middleware、或任何核心模
 5. `.claude/skills/setup-xxx.md` — 操作手冊
 
 不需要改 server.ts、types.ts、記憶引擎、SOP 系統。這些都是通用的。
+
+---
+相關 Skill：
+- 如果決定改 middleware/param-guard → `cognitive-evolution.md`
+- 如果決定改 adapter → `adapter-quality-checklist.md`
+- 提交前 → `commit.md`
