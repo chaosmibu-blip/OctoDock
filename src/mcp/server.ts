@@ -174,7 +174,7 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   registerDoTool(server, user.id, connectedAppNames, connectedAppConfigs, agentInstanceId);
 
   // ── 註冊 octodock_help ──
-  registerHelpTool(server, user.id, connectedAppNames, connectedAppConfigs);
+  registerHelpTool(server, user.id, connectedAppNames, connectedAppConfigs, agentInstanceId);
 
   // octodock_sop 已移除 — SOP 功能由 do(app:"system") + intent 自動匹配覆蓋
 
@@ -383,6 +383,33 @@ function registerDoTool(
       let result: DoResult;
       const startTime = Date.now();
 
+      // ── 單一出口：統一記錄 + 回傳 ──
+      // 所有 return 都經過 exitDo，確保每條路徑都寫入 operations 表
+      // executeWithMiddleware 內部已自行記錄，用 _alreadyLogged 避免重複
+      let _alreadyLogged = false;
+      function exitDo(
+        r: DoResult,
+        opts?: { toolName?: string; skipLog?: boolean },
+      ) {
+        if (!opts?.skipLog && !_alreadyLogged) {
+          logOperation({
+            userId,
+            appName: app ?? "system",
+            toolName: opts?.toolName ?? "unknown",
+            action,
+            params,
+            intent,
+            result: { ok: r.ok, error: r.error, summary: r.summary, code: r.errorCode },
+            success: r.ok,
+            durationMs: Date.now() - startTime,
+            agentInstanceId,
+          });
+        }
+        return {
+          content: [{ type: "text" as const, text: serializeDoResult(r) }],
+        };
+      }
+
       // ── 系統操作（記憶、Bot 對話等）──
       if (app === "system") {
         if (!systemActionMap[action]) {
@@ -394,21 +421,7 @@ function registerDoTool(
         } else {
           result = await executeSystemAction(userId, action, params);
         }
-        // 非同步記錄到 operations 表（不阻塞回應）
-        logOperation({
-          userId,
-          appName: "system",
-          toolName: `system_${action}`,
-          action,
-          params,
-          intent,
-          result: { ok: result.ok, summary: result.summary ?? result.error },
-          success: result.ok,
-          durationMs: Date.now() - startTime,
-        });
-        return {
-          content: [{ type: "text" as const, text: serializeDoResult(result) }],
-        };
+        return exitDo(result, { toolName: `system_${action}` });
       }
 
       // ── App 操作 ──
@@ -416,10 +429,8 @@ function registerDoTool(
       // 用量限制檢查（Free 用戶每月 1,000 次）
       const usageLimitError = await checkUsageLimit(userId);
       if (usageLimitError) {
-        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: usageLimitError }, success: false, intent, durationMs: Date.now() - startTime });
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify({ ok: false, error: usageLimitError }) }],
-        };
+        result = { ok: false, error: usageLimitError };
+        return exitDo(result);
       }
 
       // 檢查 App 是否已連結
@@ -429,10 +440,7 @@ function registerDoTool(
           error: `App "${app}" is not connected (APP_NOT_CONNECTED)`,
           suggestions: connectedAppNames,
         };
-        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, intent, durationMs: Date.now() - startTime });
-        return {
-          content: [{ type: "text" as const, text: serializeDoResult(result) }],
-        };
+        return exitDo(result);
       }
 
       // 取得 Adapter
@@ -442,10 +450,7 @@ function registerDoTool(
           ok: false,
           error: `Adapter for "${app}" not found (ADAPTER_NOT_FOUND)`,
         };
-        logOperation({ userId, appName: app, toolName: "unknown", action, params, result: { ok: false, error: result.error }, success: false, intent, durationMs: Date.now() - startTime });
-        return {
-          content: [{ type: "text" as const, text: serializeDoResult(result) }],
-        };
+        return exitDo(result);
       }
 
       // A: Action alias 機制 — AI 猜的名字自動對應正確 action（ACTION_ALIASES 定義在 module scope）
@@ -470,10 +475,7 @@ function registerDoTool(
           error: errorMsg,
           suggestions: fuzzyMatch ? [fuzzyMatch, ...availableActions.filter(a => a !== fuzzyMatch)] : availableActions,
         };
-        logOperation({ userId, appName: app, toolName: `unknown_${action}`, action, params, result: { ok: false, error: result.error }, success: false, intent, durationMs: Date.now() - startTime });
-        return {
-          content: [{ type: "text" as const, text: serializeDoResult(result) }],
-        };
+        return exitDo(result, { toolName: `unknown_${action}` });
       }
 
       // ── 權限檢查：用戶是否停用了此 action ──
@@ -484,8 +486,7 @@ function registerDoTool(
           error: `Action "${resolvedAction}" is disabled for ${app}. The user turned it off in Dashboard settings. (ACTION_DISABLED)`,
           errorCode: "ACTION_DISABLED",
         };
-        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "ACTION_DISABLED" }, success: false, intent, durationMs: Date.now() - startTime });
-        return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
+        return exitDo(result, { toolName });
       }
 
       // B3: MCP 層 rate limit 檢查（per-user + per-action 高風險限制）
@@ -498,10 +499,7 @@ function registerDoTool(
           retryable: true,
           retryAfterMs: rateCheck.retryAfterMs,
         };
-        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "RATE_LIMITED" }, success: false, intent, durationMs: Date.now() - startTime });
-        return {
-          content: [{ type: "text" as const, text: serializeDoResult(result) }],
-        };
+        return exitDo(result, { toolName });
       }
 
       // ── 參數格式轉換：簡化參數 → API 原始格式 ──
@@ -535,8 +533,7 @@ function registerDoTool(
       );
       if (nameValidation.blocked && nameValidation.blockResult) {
         result = nameValidation.blockResult;
-        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "NAME_VALIDATION_BLOCKED" }, success: false, intent, durationMs: Date.now() - startTime });
-        return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
+        return exitDo(result, { toolName });
       }
       // 把驗證過的參數寫回（名稱已替換成 ID）
       Object.assign(translatedParams, nameValidation.resolvedParams);
@@ -550,8 +547,7 @@ function registerDoTool(
           const preValResult = await adapter.preValidate(action, translatedParams, earlyToken);
           if (preValResult) {
             result = preValResult;
-            logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "PRE_VALIDATE_BLOCKED" }, success: false, intent, durationMs: Date.now() - startTime });
-            return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
+            return exitDo(result, { toolName });
           }
         } catch {
           // preValidate 出錯不攔截，繼續執行
@@ -562,8 +558,7 @@ function registerDoTool(
       const guardResult = checkParams(app, toolName, translatedParams);
       if (guardResult?.blocked) {
         result = { ok: false, error: guardResult.error };
-        logOperation({ userId, appName: app, toolName, action, params, result: { ok: false, error: result.error, code: "PARAM_GUARD_BLOCKED" }, success: false, intent, durationMs: Date.now() - startTime });
-        return { content: [{ type: "text" as const, text: serializeDoResult(result) }] };
+        return exitDo(result, { toolName });
       }
       // J3: 非攔截的警告，暫存到 guardWarnings，等 result 初始化後再合併
       const guardWarnings = guardResult?.warnings;
@@ -616,9 +611,7 @@ function registerDoTool(
             data: { dryRun: true, wouldAffect: null, note: "Could not preview target" },
           };
         }
-        return {
-          content: [{ type: "text" as const, text: serializeDoResult(result) }],
-        };
+        return exitDo(result, { toolName });
       }
       // 非 dry-run 時移除 dryRun 參數（如果 AI 誤傳了）
       if ("dryRun" in translatedParams) {
@@ -716,6 +709,8 @@ function registerDoTool(
         (p, t) => adapter.execute(toolName, p, t),
         { agentInstanceId, prefetchedToken: token, intent },
       );
+      // executeWithMiddleware 內部已記錄，標記避免出口函式重複記錄
+      _alreadyLogged = true;
 
       // 轉換成標準化的 DoResult
       result = toolResultToDoResult(toolResult, app);
@@ -1085,9 +1080,7 @@ function registerDoTool(
         );
       }
 
-      return {
-        content: [{ type: "text" as const, text: serializeDoResult(result) }],
-      };
+      return exitDo(result, { toolName });
     },
   );
 }
@@ -1104,6 +1097,7 @@ function registerHelpTool(
   userId: string,
   connectedAppNames: string[],
   connectedAppConfigs: Record<string, { disabledActions?: string[] }>,
+  agentInstanceId: string | null,
 ): void {
   server.tool(
     "octodock_help",
@@ -1128,19 +1122,25 @@ function registerHelpTool(
     },
     async (args) => {
       const { app, action, difficulty = "" } = args as { app?: string; action?: string; difficulty: string };
+      const helpStartTime = Date.now();
 
-      // 記錄 help 呼叫（含 difficulty）到 operations 表
-      logOperation({
-        userId,
-        appName: app ?? "system",
-        toolName: "octodock_help",
-        action: action ?? "list",
-        params: { app, action },
-        difficulty,
-        result: { ok: true },
-        success: true,
-        durationMs: 0, // help 不計耗時，結果在回傳後才知道
-      });
+      // ── 單一出口：統一記錄 + 回傳 ──
+      // 所有 return 都經過 exitHelp，確保每條路徑都寫入 operations 表
+      function exitHelp(text: string, opts?: { action?: string; success?: boolean }) {
+        logOperation({
+          userId,
+          appName: app ?? "system",
+          toolName: "octodock_help",
+          action: opts?.action ?? action ?? "list",
+          params: { app, action, difficulty },
+          difficulty,
+          agentInstanceId,
+          result: { ok: opts?.success !== false, summary: text.substring(0, 200) },
+          success: opts?.success !== false,
+          durationMs: Date.now() - helpStartTime,
+        });
+        return { content: [{ type: "text" as const, text }] };
+      }
 
       // ── P2: 不帶 app：用戶 context 載入 + App 列表 ──
       // 這是 AI 在每個對話開頭 MUST call 的入口，回傳完整用戶上下文
@@ -1342,25 +1342,19 @@ function registerHelpTool(
           }
         }
 
-        return {
-          content: [{ type: "text" as const, text }],
-        };
+        return exitHelp(text);
       }
 
       // ── 帶 app + action：回傳特定 action 的詳細參數和範例（B2 help 分層）──
       if (app && action) {
         const adapterForAction = getAdapter(app);
         if (!adapterForAction) {
-          return {
-            content: [{ type: "text" as const, text: `App "${app}" not found.` }],
-          };
+          return exitHelp(`App "${app}" not found.`, { success: false });
         }
 
         // 權限檢查：如果 action 被停用，提示用戶
         if (connectedAppConfigs[app]?.disabledActions?.includes(action)) {
-          return {
-            content: [{ type: "text" as const, text: `⛔ Action "${action}" for ${app} is disabled by the user in Dashboard settings. It cannot be executed.` }],
-          };
+          return exitHelp(`⛔ Action "${action}" for ${app} is disabled by the user in Dashboard settings. It cannot be executed.`);
         }
 
         // 優先用 adapter.getSkill(action) — 包含完整範例
@@ -1424,9 +1418,7 @@ function registerHelpTool(
               // 失敗率查詢失敗不影響 help 回傳
             }
 
-            return {
-              content: [{ type: "text" as const, text: skillText }],
-            };
+            return exitHelp(skillText);
           }
         }
 
@@ -1440,12 +1432,7 @@ function registerHelpTool(
           const available = adapterForAction.actionMap
             ? Object.keys(adapterForAction.actionMap).join(", ")
             : adapterForAction.tools.map((t) => t.name).join(", ");
-          return {
-            content: [{
-              type: "text" as const,
-              text: `Action "${action}" not found in ${app}. Available: ${available}`,
-            }],
-          };
+          return exitHelp(`Action "${action}" not found in ${app}. Available: ${available}`, { success: false });
         }
 
         const params = Object.entries(toolDef.inputSchema)
@@ -1458,31 +1445,20 @@ function registerHelpTool(
 
         const detail = `## ${app}.${action}\n\n${toolDef.description}\n\n### Parameters\n${params || "  (none)"}`;
 
-        return {
-          content: [{ type: "text" as const, text: detail }],
-        };
+        return exitHelp(detail);
       }
 
       // ── 帶 app：回傳該 App 的 Skill ──
 
       // system 虛擬 App
       if (app === "system") {
-        return {
-          content: [{ type: "text" as const, text: getSystemSkill() }],
-        };
+        return exitHelp(getSystemSkill());
       }
 
       // 一般 App
       const adapter = getAdapter(app);
       if (!adapter) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `App "${app}" not found. Available apps: ${connectedAppNames.join(", ")}, system`,
-            },
-          ],
-        };
+        return exitHelp(`App "${app}" not found. Available apps: ${connectedAppNames.join(", ")}, system`, { success: false });
       }
 
       // 優先用 getSkill()（精簡版）
@@ -1491,7 +1467,7 @@ function registerHelpTool(
       // Context 壓縮：超過 1500 字元只回傳 action 名稱清單 + 提示用 help(app, action) 查詳情
       if (adapter.getSkill) {
         let skillText = adapter.getSkill() ?? "";
-        if (!skillText) return { content: [{ type: "text", text: `No help available for ${app}.` }] };
+        if (!skillText) return exitHelp(`No help available for ${app}.`, { success: false });
 
         /* Context 壓縮：action 太多時只回傳精簡清單，避免爆 context */
         const MAX_SKILL_LENGTH = 1500;
@@ -1585,9 +1561,7 @@ function registerHelpTool(
           skillText += `\n\n⛔ **Disabled by user**: ${disabled.map(a => `~~${a}~~`).join(", ")}`;
         }
 
-        return {
-          content: [{ type: "text" as const, text: skillText }],
-        };
+        return exitHelp(skillText);
       }
 
       // Fallback：從 actionMap 或 tools 列表產生 skill
@@ -1595,11 +1569,7 @@ function registerHelpTool(
         ? Object.keys(adapter.actionMap).join(", ")
         : adapter.tools.map((t) => `${t.name}: ${t.description}`).join("\n");
 
-      return {
-        content: [
-          { type: "text" as const, text: `${app} actions: ${actions}` },
-        ],
-      };
+      return exitHelp(`${app} actions: ${actions}`);
     },
   );
 }
