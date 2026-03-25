@@ -17,7 +17,9 @@
     "build": "node scripts/validate-adapters.js && next build",
     "start": "next start",
     "lint": "eslint",
-    "check-sync": "npx tsx scripts/check-sync.ts"
+    "check-sync": "npx tsx scripts/check-sync.ts",
+    "check-schema": "npx tsx scripts/check-schema-coverage.ts",
+    "check-data": "npx tsx scripts/check-data-integrity.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
