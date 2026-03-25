@@ -6,6 +6,7 @@ import { encrypt } from "@/lib/crypto";
 import { APP_URL } from "@/lib/constants";
 import type { OAuthConfig, TokenSet } from "@/adapters/types";
 import { getOAuthClientId, getOAuthClientSecret } from "@/lib/oauth-env";
+import { fetchAppUser } from "@/lib/fetch-app-user";
 
 // Google 系列 App 名稱（用於一鍵連接 callback）
 const GOOGLE_APPS = ["gmail", "google_calendar", "google_drive", "google_sheets", "google_docs", "google_tasks", "youtube"];
@@ -170,6 +171,9 @@ export async function GET(
       }
       const tokens = await tokenRes.json();
 
+      // 查 Google 用戶身份（所有 Google App 共用同一個身份）
+      const googleUser = await fetchAppUser("gmail", tokens.access_token);
+
       // 同一組 token 寫入 7 個 Google App
       for (const gApp of GOOGLE_APPS) {
         const adapter = getAdapter(gApp);
@@ -184,6 +188,8 @@ export async function GET(
             refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : null,
             tokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
             scopes: (adapter.authConfig as OAuthConfig).scopes,
+            appUserId: googleUser?.appUserId ?? null,
+            appUserName: googleUser?.appUserName ?? null,
             status: "active",
           })
           .onConflictDoUpdate({
@@ -192,6 +198,8 @@ export async function GET(
               accessToken: encrypt(tokens.access_token),
               refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined,
               tokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
+              appUserId: googleUser?.appUserId ?? undefined,
+              appUserName: googleUser?.appUserName ?? undefined,
               status: "active",
               updatedAt: new Date(),
             },
@@ -253,6 +261,9 @@ export async function GET(
       }
       const tokens = await tokenRes.json();
 
+      // 查 Microsoft 用戶身份（所有 Microsoft App 共用同一個身份）
+      const msUser = await fetchAppUser("microsoft_excel", tokens.access_token);
+
       // 同一組 token 寫入 3 個 Microsoft App
       for (const msApp of MICROSOFT_APPS) {
         const msAdapter = getAdapter(msApp);
@@ -267,6 +278,8 @@ export async function GET(
             refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : null,
             tokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null,
             scopes: (msAdapter.authConfig as OAuthConfig).scopes,
+            appUserId: msUser?.appUserId ?? null,
+            appUserName: msUser?.appUserName ?? null,
             status: "active",
           })
           .onConflictDoUpdate({
@@ -275,6 +288,8 @@ export async function GET(
               accessToken: encrypt(tokens.access_token),
               refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined,
               tokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : undefined,
+              appUserId: msUser?.appUserId ?? undefined,
+              appUserName: msUser?.appUserName ?? undefined,
               status: "active",
               updatedAt: new Date(),
             },
@@ -341,6 +356,9 @@ export async function GET(
       };
     }
 
+    // 查用戶在此 App 的身份
+    const appUser = await fetchAppUser(appName, tokens.access_token);
+
     await db
       .insert(connectedApps)
       .values({
@@ -355,6 +373,8 @@ export async function GET(
           ? new Date(Date.now() + tokens.expires_in * 1000)
           : null,
         scopes: adapter.authConfig.scopes,
+        appUserId: appUser?.appUserId ?? null,
+        appUserName: appUser?.appUserName ?? null,
         status: "active",
       })
       .onConflictDoUpdate({
@@ -367,6 +387,8 @@ export async function GET(
           tokenExpiresAt: tokens.expires_in
             ? new Date(Date.now() + tokens.expires_in * 1000)
             : undefined,
+          appUserId: appUser?.appUserId ?? undefined,
+          appUserName: appUser?.appUserName ?? undefined,
           status: "active",
           updatedAt: new Date(),
         },
