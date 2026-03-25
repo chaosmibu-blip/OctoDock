@@ -39,6 +39,20 @@ export async function POST(req: NextRequest) {
       if (!adapterSpec?.trim()) {
         return NextResponse.json({ error: "Adapter spec required" }, { status: 400 });
       }
+
+      /* 驗證 adapter spec 是合法 JSON 且有基本結構 */
+      const cleaned = adapterSpec.trim().replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/, "");
+      try {
+        const parsed = JSON.parse(cleaned);
+        if (!parsed.appName && !parsed.app_name) {
+          return NextResponse.json({ error: "Adapter spec missing appName" }, { status: 400 });
+        }
+        if (!Array.isArray(parsed.actions) || parsed.actions.length === 0) {
+          return NextResponse.json({ error: "Adapter spec missing actions array" }, { status: 400 });
+        }
+      } catch {
+        return NextResponse.json({ error: "Adapter spec is not valid JSON" }, { status: 400 });
+      }
     }
 
     /* 存入 DB */

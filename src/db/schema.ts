@@ -102,6 +102,7 @@ export const operations = pgTable(
     result: jsonb("result"),
     success: boolean("success").default(true),
     durationMs: integer("duration_ms"),
+    parentOperationId: uuid("parent_operation_id"), // 事件圖譜：這個操作是因為哪個操作觸發的
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [

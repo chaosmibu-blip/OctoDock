@@ -11,36 +11,124 @@ function buildPrompt(appName: string, apiDocsUrl: string, authType: string): str
     : authType === "api_key" ? "API Key / Bot Token"
     : "OAuth 2.0 (OctoDock will create the OAuth App)";
 
-  return `I need to write an adapter spec for integrating "${appName || "[APP_NAME]"}" with OctoDock, a unified MCP server that lets AI agents operate multiple apps.
+  const name = appName || "[APP_NAME]";
+
+  return `I need to write an adapter spec for integrating "${name}" with OctoDock, a unified MCP server that lets AI agents operate multiple apps through two tools: octodock_do(app, action, params) and octodock_help(app, action).
 
 API documentation: ${apiDocsUrl || "[PASTE_API_DOCS_URL_HERE]"}
 
-Please generate an adapter specification in JSON format with the following structure:
+## What OctoDock needs from each adapter
+
+Each adapter defines:
+1. **actionMap** — maps simple action names (e.g. "publish") to internal tool names (e.g. "threads_publish")
+2. **actions** — each action's API endpoint, HTTP method, parameters, and how to format the response for AI
+3. **skill descriptions** — short help text shown when AI calls octodock_help(app, action)
+4. **error hints** — common API errors mapped to user-friendly messages
+
+## Output format
+
+Generate a JSON spec with this structure:
 
 {
-  "appName": "${appName || "[APP_NAME]"}",
+  "appName": "${name}",
+  "displayName": "${name}",
   "authType": "${authLabel}",
+  "baseUrl": "https://api.example.com",
+  "actionMap": {
+    "simple_action_name": "internal_tool_name"
+  },
   "actions": [
     {
-      "name": "action_name",
-      "description": "What this action does",
-      "method": "GET/POST/PUT/DELETE",
-      "endpoint": "/api/path",
+      "name": "internal_tool_name",
+      "action": "simple_action_name",
+      "description": "One-line English description for AI",
+      "method": "GET|POST|PUT|PATCH|DELETE",
+      "endpoint": "/api/path/:param",
       "params": {
-        "param_name": { "type": "string", "required": true, "description": "..." }
+        "param_name": {
+          "type": "string|number|boolean|object|array",
+          "required": true,
+          "description": "What this param does"
+        }
       },
-      "responseFormat": "Description of how to format the response for AI consumption"
+      "responseFormat": "Describe how to convert the raw API JSON into a human-readable summary. e.g. 'Return: Done. Post ID: {id}' or 'Return each item as: - {title} (ID: {id}, status: {status})'"
     }
+  ],
+  "skillOverview": "One-line summary of all actions, shown when AI calls octodock_help(app). e.g. 'publish(text) — publish post | get_posts(limit?) — get recent posts'",
+  "errorHints": [
+    { "match": "expired|invalid.*token", "hint": "Token expired. Please reconnect ${name} from the Dashboard." },
+    { "match": "not found", "hint": "Resource not found. Check if the ID is correct." },
+    { "match": "rate|limit", "hint": "Rate limit reached. Please wait and retry." }
   ]
 }
 
-Guidelines:
+## Real example: Threads adapter spec
+
+{
+  "appName": "threads",
+  "displayName": "Threads",
+  "authType": "OAuth 2.0",
+  "baseUrl": "https://graph.threads.net/v1.0",
+  "actionMap": {
+    "publish": "threads_publish",
+    "get_posts": "threads_get_posts",
+    "reply": "threads_reply",
+    "get_insights": "threads_get_insights",
+    "get_profile": "threads_get_profile"
+  },
+  "actions": [
+    {
+      "name": "threads_publish",
+      "action": "publish",
+      "description": "Publish a new text post to Threads",
+      "method": "POST",
+      "endpoint": "/me/threads + /me/threads_publish (two-step: create container then publish)",
+      "params": {
+        "text": { "type": "string", "required": true, "description": "Post content (max 500 chars)" }
+      },
+      "responseFormat": "Return: Done. Post ID: {id}"
+    },
+    {
+      "name": "threads_get_posts",
+      "action": "get_posts",
+      "description": "Get recent posts from user's Threads account",
+      "method": "GET",
+      "endpoint": "/me/threads?fields=id,text,timestamp,permalink&limit={limit}",
+      "params": {
+        "limit": { "type": "number", "required": false, "description": "Number of posts (default 10, max 25)" }
+      },
+      "responseFormat": "Return each post as: - {text preview max 100 chars}\\n  ID: {id} | {timestamp} | {permalink}"
+    },
+    {
+      "name": "threads_reply",
+      "action": "reply",
+      "description": "Reply to an existing Threads post",
+      "method": "POST",
+      "endpoint": "/me/threads + /me/threads_publish (two-step with reply_to_id)",
+      "params": {
+        "post_id": { "type": "string", "required": true, "description": "ID of the post to reply to" },
+        "text": { "type": "string", "required": true, "description": "Reply content" }
+      },
+      "responseFormat": "Return: Done. Post ID: {id}"
+    }
+  ],
+  "skillOverview": "publish(text) — publish text post | get_posts(limit?) — recent posts | reply(post_id, text) — reply to post | get_insights(post_id) — engagement metrics | get_profile() — user profile",
+  "errorHints": [
+    { "match": "expired|invalid.*token", "hint": "Token expired. Reconnect Threads from Dashboard." },
+    { "match": "not found", "hint": "Post not found. Check if post_id is correct." },
+    { "match": "rate|limit", "hint": "Rate limited. Wait and retry." }
+  ]
+}
+
+## Guidelines
 - Cover full CRUD for each resource type (list, get, create, update, delete)
-- Use simple action names like "list_tasks", "create_project", "delete_item"
-- Include all required AND optional parameters
-- For responseFormat, describe how to convert raw API JSON into human-readable text
-- Group actions by resource type (e.g., Projects, Tasks, Comments)
+- Use simple, consistent action names: list_X, get_X, create_X, update_X, delete_X
+- Internal tool names should be prefixed with the app name: {app}_{action}
+- Include ALL required and optional parameters with clear descriptions
+- responseFormat must describe how to convert raw JSON to readable text — never say "return raw JSON"
+- errorHints: include 3-5 common API error patterns with user-friendly messages
 - Include 10-30 actions covering the most useful operations
+- Group actions by resource type in the array
 
 Output ONLY the JSON code block, no extra explanation.`;
 }
@@ -108,10 +196,40 @@ export function DevelopersClient() {
     copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
   }, [subAppName, subApiDocs, subAuthType]);
 
-  /* 前端表單驗證：必填欄位是否填了 */
+  /* spec JSON 驗證 */
+  const [specError, setSpecError] = useState<string | null>(null);
+
+  /** 驗證 adapter spec 的格式和必要欄位 */
+  const validateSpec = useCallback((raw: string): string | null => {
+    if (!raw.trim()) return null; // 還沒填，不顯示錯誤
+
+    // 自動去除 markdown code fence（AI 常包一層 ```json ... ```）
+    const cleaned = raw.trim().replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/, "");
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return t("dev.submit.spec_error_json");
+    }
+
+    if (!parsed.appName && !parsed.app_name) return t("dev.submit.spec_error_app_name");
+    const actions = parsed.actions;
+    if (!Array.isArray(actions) || actions.length === 0) return t("dev.submit.spec_error_actions");
+
+    // 檢查每個 action 的基本結構
+    for (let i = 0; i < actions.length; i++) {
+      const a = actions[i] as Record<string, unknown>;
+      if (!a.name) return t("dev.submit.spec_error_action_name").replace("{i}", String(i + 1));
+    }
+
+    return null; // 驗證通過
+  }, [t]);
+
+  /* 前端表單驗證：必填欄位是否填了 + spec 格式正確 */
   const isFormValid = tab === "request"
     ? !!(reqAppName.trim() && reqReason.trim() && reqEmail.trim())
-    : !!(subAppName.trim() && subApiDocs.trim() && subEmail.trim() && subSpec.trim());
+    : !!(subAppName.trim() && subApiDocs.trim() && subEmail.trim() && subSpec.trim() && !specError);
 
   return (
     <div className="min-h-screen bg-[#faf9f6]">
@@ -299,11 +417,22 @@ export function DevelopersClient() {
               <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.spec_title")}</label>
               <textarea
                 value={subSpec}
-                onChange={(e) => setSubSpec(e.target.value)}
+                onChange={(e) => {
+                  setSubSpec(e.target.value);
+                  setSpecError(validateSpec(e.target.value));
+                }}
                 placeholder={t("dev.submit.spec_placeholder")}
                 rows={10}
-                className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1D9E75] resize-none"
+                className={`w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 resize-none ${
+                  specError ? "border-red-400 focus:ring-red-300" : "focus:ring-[#1D9E75]"
+                }`}
               />
+              {specError && (
+                <p className="mt-1 text-xs text-red-500">{specError}</p>
+              )}
+              {subSpec.trim() && !specError && (
+                <p className="mt-1 text-xs text-green-600">{t("dev.submit.spec_valid")}</p>
+              )}
             </div>
           </div>
         )}

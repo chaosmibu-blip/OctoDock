@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/db";
-import { connectedApps, storedResults } from "@/db/schema";
-import { eq, lt, or, isNull, and, gte, desc, sql } from "drizzle-orm";
+import { connectedApps, storedResults, operations as opsTable } from "@/db/schema";
+import { eq, lt, or, isNull, and, gte, desc, ne, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware, logOperation } from "./middleware/logger";
@@ -383,6 +383,39 @@ function registerDoTool(
       let result: DoResult;
       const startTime = Date.now();
 
+      // ── 事件圖譜：因果偵測 ──
+      // 因果的本質：「這筆操作用了前面某筆操作的結果」
+      // 判斷方式：當前 params 裡有沒有引用前面操作 result 中的 ID
+      // 不限時間——上午產生的 ID 晚上用，仍然是因果
+      let _parentOperationId: string | null = null;
+      try {
+        // 查用戶最近幾筆操作的 result（不只看上一筆，因為因果可能跨好幾步）
+        const recentOps = await db
+          .select({ id: opsTable.id, result: opsTable.result })
+          .from(opsTable)
+          .where(eq(opsTable.userId, userId))
+          .orderBy(desc(opsTable.createdAt))
+          .limit(10);
+
+        const paramsStr = JSON.stringify(params);
+        const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+        // 從最近的開始找，找到第一筆有因果關係的就停
+        for (const prev of recentOps) {
+          const resultStr = JSON.stringify(prev.result ?? {});
+          const resultIds = resultStr.match(uuidPattern) ?? [];
+          for (const id of resultIds) {
+            if (paramsStr.includes(id)) {
+              _parentOperationId = prev.id;
+              break;
+            }
+          }
+          if (_parentOperationId) break;
+        }
+      } catch {
+        // 因果偵測失敗不影響主流程
+      }
+
       // ── 單一出口：統一記錄 + 回傳 ──
       // 所有 return 都經過 exitDo，確保每條路徑都寫入 operations 表
       // executeWithMiddleware 內部已自行記錄，用 _alreadyLogged 避免重複
@@ -403,6 +436,7 @@ function registerDoTool(
             success: r.ok,
             durationMs: Date.now() - startTime,
             agentInstanceId,
+            parentOperationId: _parentOperationId,
           });
         }
         return {
