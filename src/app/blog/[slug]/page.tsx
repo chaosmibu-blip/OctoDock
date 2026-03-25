@@ -7,11 +7,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { marked } from "marked";
-import { fetchPostBySlug, fetchPostContent } from "@/lib/notion-blog";
+import { fetchPostBySlug, fetchPostContent, fetchPublishedPosts } from "@/lib/notion-blog";
 import { BASE_URL } from "@/lib/constants";
 
 // ISR: 1 小時重新驗證
 export const revalidate = 3600;
+
+/** Build 時預先渲染所有已發布文章 — 讓爬蟲第一次來就拿到完整 HTML */
+export async function generateStaticParams() {
+  const posts = await fetchPublishedPosts();
+  return posts.map((post) => ({ slug: post.slug }));
+}
 
 /** 動態產生 SEO metadata */
 export async function generateMetadata({
@@ -97,6 +103,37 @@ export default async function BlogPostPage({
               "@type": "WebPage",
               "@id": `${BASE_URL}/blog/${slug}`,
             },
+          }),
+        }}
+      />
+
+      {/* BreadcrumbList 結構化資料 — Google 搜尋結果顯示路徑導航 */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              {
+                "@type": "ListItem",
+                position: 1,
+                name: "首頁",
+                item: BASE_URL,
+              },
+              {
+                "@type": "ListItem",
+                position: 2,
+                name: "Blog",
+                item: `${BASE_URL}/blog`,
+              },
+              {
+                "@type": "ListItem",
+                position: 3,
+                name: post.title,
+                item: `${BASE_URL}/blog/${slug}`,
+              },
+            ],
           }),
         }}
       />

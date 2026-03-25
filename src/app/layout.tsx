@@ -91,6 +91,9 @@ export default function RootLayout({
                 "Cross-agent memory (Claude, ChatGPT, Cursor)",
                 "Auto-detect repeated workflows (SOP)",
                 "Smart parameter suggestions"
+              ],
+              "sameAs": [
+                "https://github.com/chaosmibu-blip/OctoDock"
               ]
             }),
           }}
