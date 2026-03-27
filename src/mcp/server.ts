@@ -163,7 +163,7 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   // ── 註冊 octodock_help ──
   registerHelpTool(server, user.id, connectedAppNames, connectedAppConfigs);
 
-  // octodock_sop 已移除 — SOP 功能由 do(app:"system") + intent 自動匹配覆蓋
+  // octodock_sop 已移除 — 工作流功能由 do(app:"system") + intent 自動匹配覆蓋
 
   return server;
 }
@@ -579,18 +579,17 @@ function registerDoTool(
         delete translatedParams.suppress_suggestions;
       }
 
-      // ── 必經路徑：SOP intent 匹配 ──
-      // 如果 AI 有填 intent，用語意搜尋找匹配的 SOP
-      // 匹配到的 SOP 附在回傳裡（跟一般操作結果並列），AI 可以選擇跟著 SOP 做
-      let matchedSop: string | null = null;
+      // ── 工作流 intent 匹配 ──
+      // 用 intent 語意搜尋匹配的工作流，讓 AI 知道以前做過類似的多步驟流程
+      let matchedWorkflow: string | null = null;
       if (intent) {
         try {
-          const sopMemories = await queryMemory(userId, intent, "sop", undefined, 1);
-          if (sopMemories.length > 0) {
-            matchedSop = sopMemories[0].value;
+          const wfMemories = await queryMemory(userId, intent, "workflow", undefined, 1);
+          if (wfMemories.length > 0) {
+            matchedWorkflow = wfMemories[0].value;
           }
         } catch {
-          // SOP 查詢失敗不影響主流程
+          // 工作流查詢失敗不影響主流程
         }
       }
 
@@ -982,8 +981,8 @@ function registerDoTool(
           if (!result.warnings) result.warnings = [];
           result.warnings.push(...postCheckResult.value.warnings);
         }
-        // SOP 自動辨識 — I8/J4 最終修正：靜默自動存 SOP，不產生 suggestion
-        // detectSopCandidate 現在直接自動存 SOP 並回傳 null，不再需要處理回傳值
+        // 工作流自動辨識：偵測重複操作模式，靜默存成工作流
+        // detectSopCandidate 直接自動存並回傳 null
         // E1: 操作鏈建議（G5: suppress_suggestions 時跳過）
         if (!suppressSuggestions && nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
           result.nextSuggestion = nextSuggestionResult.value;
@@ -1081,11 +1080,11 @@ function registerDoTool(
         }
       }
 
-      // ── SOP 匹配結果附在 context ──
-      // 不限成功或失敗都給 AI 看，因為 SOP 的目的是讓 AI 知道以前做過哪些流程
-      if (matchedSop) {
+      // ── 工作流匹配結果附在 context ──
+      // 不限成功或失敗都給 AI 看，讓 AI 知道以前做過哪些類似的多步驟流程
+      if (matchedWorkflow) {
         const existing = result.context ? result.context + "\n\n" : "";
-        result.context = existing + `⚡ Matching SOP found:\n${matchedSop}`;
+        result.context = existing + `⚡ Matching workflow found:\n${matchedWorkflow}`;
       }
 
       // ── 必經路徑：意圖偏差偵測 ──
@@ -1152,7 +1151,7 @@ function registerHelpTool(
 ): void {
   server.tool(
     "octodock_help",
-    `Get guidance when unsure about which app to use, what action to take, or how to fill parameters. Describe your \`difficulty\` and receive: matching SOPs with exact call sequences, relevant user memory, parameter examples from past operations, and recommended approaches. Use this before octodock_do when you need direction. [schema:${MCP_SCHEMA_VERSION}]`,
+    `Get guidance when unsure about which app to use, what action to take, or how to fill parameters. Describe your \`difficulty\` and receive: matching workflows with exact call sequences, relevant user memory, parameter examples from past operations, and recommended approaches. Use this before octodock_do when you need direction. [schema:${MCP_SCHEMA_VERSION}]`,
     {
       app: z
         .string()
@@ -1310,15 +1309,15 @@ function registerHelpTool(
           // 頻率查詢失敗不影響主流程
         }
 
-        // ── Phase 4: 列出可用 SOP ──
+        // ── 列出已儲存的工作流 ──
         try {
-          const sops = await listMemory(userId, "sop");
-          if (sops.length > 0) {
-            const sopList = sops.map((s) => `- **${s.key}**`).join("\n");
-            text += `\n\n## Saved Workflows (SOPs)\n\n${sopList}\n\nUse \`octodock_do(app:"system", action:"sop_get", params:{name:"..."})\` to view and execute.`;
+          const workflows = await listMemory(userId, "workflow");
+          if (workflows.length > 0) {
+            const wfList = workflows.map((s) => `- **${s.key}**`).join("\n");
+            text += `\n\n## Saved Workflows\n\n${wfList}\n\nUse \`octodock_do(app:"system", action:"workflow_get", params:{name:"..."})\` to view.`;
           }
         } catch {
-          // SOP 查詢失敗不影響主流程
+          // 工作流查詢失敗不影響主流程
         }
 
         // E3: Action 推薦引擎 — 用戶最常用的操作
@@ -1338,20 +1337,20 @@ function registerHelpTool(
         text += `\n\n---\n**Unsure? → octodock_help(difficulty:"...") | Ready? → octodock_do(intent:"...")**`;
 
         // ── 必經路徑：difficulty 驅動的精準指引 ──
-        // 用 difficulty 做語意搜尋，從記憶、操作歷史、SOP 中拼湊答案
+        // 用 difficulty 做語意搜尋，從記憶、操作歷史、工作流中拼湊答案
         if (difficulty) {
           try {
             const guidanceParts: string[] = [];
 
-            // 搜尋相關 SOP
-            const sopResults = await queryMemory(userId, difficulty, "sop", undefined, 2);
-            if (sopResults.length > 0) {
-              guidanceParts.push("**Matching workflows:**\n" + sopResults.map(s => `- ${s.key}: ${s.value}`).join("\n"));
+            // 搜尋相關工作流
+            const wfResults = await queryMemory(userId, difficulty, "workflow", undefined, 2);
+            if (wfResults.length > 0) {
+              guidanceParts.push("**Matching workflows:**\n" + wfResults.map(s => `- ${s.key}: ${s.value}`).join("\n"));
             }
 
             // 搜尋相關記憶（偏好 + 上下文）
             const memResults = await queryMemory(userId, difficulty, undefined, undefined, 3);
-            const relevantMem = memResults.filter(m => m.category !== "sop"); // SOP 已單獨處理
+            const relevantMem = memResults.filter(m => m.category !== "workflow"); // 工作流已單獨處理
             if (relevantMem.length > 0) {
               guidanceParts.push("**Relevant memory:**\n" + relevantMem.map(m => `- [${m.category}] ${m.key}: ${m.value}`).join("\n"));
             }
@@ -2233,4 +2232,4 @@ function extractDefaultSummary(rawData: unknown): Record<string, unknown> | null
   return hasData ? summary : null;
 }
 
-// octodock_sop 已移除 — SOP 功能由 do(app:"system", action:"sop_list/sop_get") + intent 自動匹配覆蓋
+// octodock_sop 已移除 — 工作流功能由 do(app:"system", action:"workflow_list/workflow_get") + intent 自動匹配覆蓋

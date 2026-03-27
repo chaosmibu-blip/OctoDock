@@ -25,12 +25,12 @@ export const systemActionMap: Record<string, string> = {
   memory_query: "system_memory_query",
   memory_store: "system_memory_store",
   bot_conversations: "system_bot_conversations",
-  // SOP 系統（Phase 4）
-  sop_list: "system_sop_list",
-  sop_get: "system_sop_get",
-  sop_create: "system_sop_create",
-  sop_update: "system_sop_update",
-  sop_delete: "system_sop_delete",
+  // 工作流系統
+  workflow_list: "system_workflow_list",
+  workflow_get: "system_workflow_get",
+  workflow_create: "system_workflow_create",
+  workflow_update: "system_workflow_update",
+  workflow_delete: "system_workflow_delete",
   // 輕量筆記（B4）
   note: "system_note",
   // 記憶導入（onboarding：AI 把對用戶的認知傳給 OctoDock）
@@ -82,18 +82,18 @@ export const systemActionMap: Record<string, string> = {
  */
 export function getSystemSkill(): string {
   return `system actions:
-  memory_query(query, category?) — search user memory (preference/pattern/context/sop)
+  memory_query(query, category?) — search user memory (preference/pattern/context/workflow)
   memory_store(key, value, category, app_name?) — store a memory entry
   memory_delete_app(app_name) — delete all memories for a specific app
   memory_delete_key(key) — delete a single memory entry by key
   memory_delete_all(confirm:true) — delete ALL user memories (requires confirm:true)
   memory_export() — export all memories as structured data
   bot_conversations(platform, platform_user_id?, limit?) — view bot chat history (line/telegram)
-  sop_list() — list all saved SOPs
-  sop_get(name) — get a specific SOP by name
-  sop_create(name, content) — create a new SOP (content in markdown)
-  sop_update(name, content) — update an existing SOP
-  sop_delete(name) — delete a SOP
+  workflow_list() — list all saved workflows (multi-step operation sequences)
+  workflow_get(name) — get a specific workflow by name
+  workflow_create(name, content) — create a new workflow (content in markdown)
+  workflow_update(name, content) — update an existing workflow
+  workflow_delete(name) — delete a workflow
   note(text) — quick note for cross-agent memory
   import_memory(memories) — batch import memories from AI (for onboarding)
   get_stored(ref, lines?) — retrieve full content of a truncated response (e.g. ref:"abc123", lines:"50-100")
@@ -127,7 +127,7 @@ export function getSystemSkill(): string {
     content_key: (optional) which field from source result to use. Default: auto-detects from markdown/content/text/body fields.
     verify: (optional, default true) read back after write and compare to catch errors.
     Example: transfer(from:{app:"notion", action:"get_page", params:{page_id:"abc"}}, to:{app:"google_docs", action:"insert_text", params:{document_id:"xyz"}})
-SOPs persist across agents and sessions.`;
+Workflows persist across agents and sessions.`;
 }
 
 /**
@@ -212,69 +212,67 @@ export async function executeSystemAction(
     }
 
     // ============================================================
-    // SOP 系統（Phase 4）
-    // SOP = Markdown 流程文件，存在 memory 表 category='sop'
-    // 取代 n8n/Zapier 的拖拉流程圖，用中文寫流程文件
-    // AI 透過 help 或 do 取得 SOP 內容，然後一步一步執行
+    // 工作流系統
+    // 記錄用戶做過的多步驟操作流程，存在 memory 表 category='workflow'
+    // AI 可以參考過去的工作流來執行類似的操作
     // ============================================================
 
-    // ── SOP 列表：列出所有已儲存的 SOP ──
-    case "sop_list": {
-      const sops = await listMemory(userId, "sop");
-      if (sops.length === 0) {
-        return { ok: true, data: "No SOPs found. Create one with sop_create(name, content)." };
+    // ── 工作流列表 ──
+    case "workflow_list": {
+      const workflows = await listMemory(userId, "workflow");
+      if (workflows.length === 0) {
+        return { ok: true, data: "No workflows found. Create one with workflow_create(name, content)." };
       }
-      const list = sops.map((s) => {
+      const list = workflows.map((s) => {
         const preview = s.value.substring(0, 80).replace(/\n/g, " ");
         return `- **${s.key}**: ${preview}${s.value.length > 80 ? "..." : ""}`;
       }).join("\n");
-      return { ok: true, data: `## Your SOPs\n\n${list}` };
+      return { ok: true, data: `## Your Workflows\n\n${list}` };
     }
 
-    // ── SOP 取得：取得特定 SOP 的完整內容 ──
-    case "sop_get": {
+    // ── 工作流取得 ──
+    case "workflow_get": {
       const name = params.name as string;
-      const results = await queryMemory(userId, name, "sop");
-      const sop = results.find((r) => r.key === name);
-      if (!sop) {
+      const results = await queryMemory(userId, name, "workflow");
+      const wf = results.find((r) => r.key === name);
+      if (!wf) {
         return {
           ok: false,
-          error: `SOP "${name}" not found`,
-          suggestions: (await listMemory(userId, "sop")).map((s) => s.key),
+          error: `Workflow "${name}" not found`,
+          suggestions: (await listMemory(userId, "workflow")).map((s) => s.key),
         };
       }
-      return { ok: true, data: `# SOP: ${sop.key}\n\n${sop.value}`, title: sop.key };
+      return { ok: true, data: `# Workflow: ${wf.key}\n\n${wf.value}`, title: wf.key };
     }
 
-    // ── SOP 建立：建立新的 SOP（Markdown 格式） ──
-    case "sop_create": {
+    // ── 工作流建立 ──
+    case "workflow_create": {
       const name = params.name as string;
       const content = params.content as string;
-      // 檢查是否已存在
-      const existing = await queryMemory(userId, name, "sop");
+      const existing = await queryMemory(userId, name, "workflow");
       if (existing.find((r) => r.key === name)) {
         return {
           ok: false,
-          error: `SOP "${name}" already exists. Use sop_update to modify it.`,
+          error: `Workflow "${name}" already exists. Use workflow_update to modify it.`,
         };
       }
-      await storeMemory(userId, name, content, "sop");
-      return { ok: true, data: `SOP "${name}" created.`, title: name };
+      await storeMemory(userId, name, content, "workflow");
+      return { ok: true, data: `Workflow "${name}" created.`, title: name };
     }
 
-    // ── SOP 更新：更新現有 SOP 的內容 ──
-    case "sop_update": {
+    // ── 工作流更新 ──
+    case "workflow_update": {
       const name = params.name as string;
       const content = params.content as string;
-      await storeMemory(userId, name, content, "sop");
-      return { ok: true, data: `SOP "${name}" updated.`, title: name };
+      await storeMemory(userId, name, content, "workflow");
+      return { ok: true, data: `Workflow "${name}" updated.`, title: name };
     }
 
-    // ── SOP 刪除 ──
-    case "sop_delete": {
+    // ── 工作流刪除 ──
+    case "workflow_delete": {
       const name = params.name as string;
-      await deleteMemory(userId, name, "sop");
-      return { ok: true, data: `SOP "${name}" deleted.` };
+      await deleteMemory(userId, name, "workflow");
+      return { ok: true, data: `Workflow "${name}" deleted.` };
     }
 
     // ── 記憶導入（onboarding）：AI 把對用戶的認知批次傳給 OctoDock ──
@@ -497,9 +495,9 @@ export async function executeSystemAction(
         undo_last: "Undo the last destructive operation (replace_content, delete_page)",
         resource_group_create: "Create a cross-app resource group",
         resource_group_get: "Get or list resource groups",
-        sop_list: "List saved SOPs",
-        sop_create: "Create a new SOP workflow",
-        sop_get: "Get SOP details",
+        workflow_list: "List saved workflows",
+        workflow_create: "Create a new workflow",
+        workflow_get: "Get workflow details",
         note: "Quick note to memory",
       };
       for (const [actionName, desc] of Object.entries(SYSTEM_ACTION_DESCS)) {

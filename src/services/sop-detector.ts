@@ -3,17 +3,15 @@ import { operations } from "@/db/schema";
 import { eq, and, gte } from "drizzle-orm";
 
 // ============================================================
-// SOP 自動辨識引擎（Phase 8）
-// 從用戶的操作記錄中自動偵測重複的操作流程
-//
-// I8/J4 最終修正：偵測到重複 pattern → 靜默自動存成 SOP
-// 不問、不提示、不通知。AI 不會看通知，存就存了。
-// 下次 AI 做類似事時自然會從 SOP 裡找到。
+// 工作流自動辨識引擎
+// 從用戶的操作記錄中自動偵測重複的多步驟操作流程
+// 偵測到重複 pattern → 靜默自動存成工作流
+// 下次 AI 做類似事時自然會從工作流裡找到
 // ============================================================
 
-/** SOP 候選建議（保留介面向下相容） */
+/** 工作流候選建議 */
 export interface SopSuggestion {
-  type: "sop_candidate";
+  type: "workflow_candidate";
   message: string;
   pattern: string[];
   frequency: number;
@@ -29,11 +27,11 @@ const ANALYSIS_WINDOW_DAYS = 14;
 const SESSION_GAP_MINUTES = 30;
 
 /**
- * 檢查用戶是否有重複的操作模式，回傳 SOP 候選建議
- * 在每次 octodock_do 完成後呼叫，如果偵測到候選 SOP 就附在回傳裡
+ * 檢查用戶是否有重複的操作模式，回傳 workflow 候選建議
+ * 在每次 octodock_do 完成後呼叫，如果偵測到候選 workflow 就附在回傳裡
  *
  * @param userId 用戶 ID
- * @returns SOP 候選建議，或 null
+ * @returns workflow 候選建議，或 null
  */
 export async function detectSopCandidate(
   userId: string,
@@ -79,7 +77,7 @@ export async function detectSopCandidate(
     // 過濾太短的模式（至少 2 步）
     if (candidate.pattern.length < 2) return null;
 
-    // SOP 命名：用完整流程的首尾步驟，讓名稱看得出整個流程在做什麼
+    // workflow 命名：用完整流程的首尾步驟，讓名稱看得出整個流程在做什麼
     // 例如 "notion.search → google_docs.insert_text" → "notion 搜尋 → google_docs 寫入"
     const VERB_MAP: Record<string, string> = {
       create_page: "建立頁面", append_content: "追加內容", replace_content: "替換內容",
@@ -99,17 +97,17 @@ export async function detectSopCandidate(
       ? `${firstApp}: ${firstVerb} → ${lastVerb}`
       : `${firstApp} ${firstVerb} → ${lastApp} ${lastVerb}`;
 
-    // I8/J4 最終修正：靜默自動存成 SOP，不問不提示
-    // U15: 存 SOP 前比對現有 SOP 的 action 序列，避免重複
+    // I8/J4 最終修正：靜默自動存成 workflow，不問不提示
+    // U15: 存 workflow 前比對現有 workflow 的 action 序列，避免重複
     const patternKey = candidate.pattern.join(" → ");
     try {
       const { storeMemory, queryMemory, listMemory: lm } = await import("@/services/memory-engine");
 
-      // U15: 去重 — 比對現有 SOP 的 action 序列
-      const existingSops = await lm(userId, "sop");
+      // U15: 去重 — 比對現有 workflow 的 action 序列
+      const existingSops = await lm(userId, "workflow");
       const candidateSequence = candidate.pattern.join(" → ");
       const isDuplicate = existingSops.some((sop) => {
-        // 從 SOP 內容提取步驟序列
+        // 從 workflow 內容提取步驟序列
         const stepMatches = sop.value.match(/`octodock_do\(app:"([^"]+)", action:"([^"]+)"\)`/g);
         if (!stepMatches) return false;
         const existingSequence = stepMatches.map((m) => {
@@ -121,13 +119,13 @@ export async function detectSopCandidate(
       });
 
       if (isDuplicate) {
-        // 已有相同序列的 SOP，跳過
+        // 已有相同序列的 workflow，跳過
         return null;
       }
 
-      // V8: 檢查是否已存過同名的 SOP，有重名就加數字後綴
+      // V8: 檢查是否已存過同名的 workflow，有重名就加數字後綴
       let finalSopName = sopName;
-      const existing = await queryMemory(userId, sopName, "sop");
+      const existing = await queryMemory(userId, sopName, "workflow");
       if (existing.find((r) => r.key === sopName)) {
         // 找到可用的數字後綴（例如 "notion: 追加內容 2"）
         let suffix = 2;
@@ -143,7 +141,7 @@ export async function detectSopCandidate(
         // 用最終 action 推斷流程描述
         const sopDescription = inferSopDescription(candidate.pattern);
 
-        // 自動產生 SOP 內容（Markdown 格式，含參數建議）
+        // 自動產生 workflow 內容（Markdown 格式，含參數建議）
         const sopContent = [
           `# ${finalSopName}`,
           ``,
@@ -167,10 +165,10 @@ export async function detectSopCandidate(
           `---`,
           `*自動產生於 ${new Date().toISOString().substring(0, 10)}*`,
         ].join("\n");
-        await storeMemory(userId, finalSopName, sopContent, "sop");
+        await storeMemory(userId, finalSopName, sopContent, "workflow");
       }
     } catch (err) {
-      console.error("Auto SOP creation failed:", err);
+      console.error("Auto workflow creation failed:", err);
     }
 
     // 回傳 null — 不再產生 suggestion 推給 AI
@@ -273,7 +271,7 @@ interface ParamHint {
   description: string; // 動態值的描述（如「每次不同的標題」）
 }
 
-/** 不該出現在 SOP 參數提示裡的大型內容欄位 */
+/** 不該出現在 workflow 參數提示裡的大型內容欄位 */
 const CONTENT_FIELDS = new Set([
   "content", "text", "body", "description", "message",
   "markdown", "html", "raw", "data", "payload", "children",
@@ -346,7 +344,7 @@ function analyzeStepParams(
 }
 
 /**
- * 從 pattern 推斷 SOP 描述（一句話說明流程目的）
+ * 從 pattern 推斷 workflow 描述（一句話說明流程目的）
  * 根據首尾動作推斷：search → create_page = 「搜尋後建立頁面」
  */
 function inferSopDescription(pattern: string[]): string {
