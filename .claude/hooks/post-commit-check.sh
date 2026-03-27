@@ -25,7 +25,7 @@ fi
 # ── 架構思維 ──
 # 核心架構檔案有變更時提醒
 if echo "$CHANGED" | grep -qE "src/mcp/server\.ts|src/adapters/types\.ts|src/mcp/middleware/"; then
-  echo "🐙 [架構思維] 核心架構有變更 — 請讀取 .claude/skills/architecture-thinking.md 確認這是架構層問題還是個別 App 問題"
+  echo "🐙 [思考] 核心架構有變更 — 請讀取 .claude/skills/thinking.md 的架構決策章節，確認這是架構層問題還是個別 App 問題"
 fi
 
 # ── DB migration 提醒 ──
