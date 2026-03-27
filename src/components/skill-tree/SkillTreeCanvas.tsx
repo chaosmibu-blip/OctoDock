@@ -240,12 +240,38 @@ export function SkillTreeCanvas() {
   }, [dragging, dragStart]);
   const handleMouseUp = useCallback(() => setDragging(false), []);
 
+  /* ── 觸控：單指平移 + 雙指縮放 ── */
   const touchRef = useRef<{ x: number; y: number } | null>(null);
+  const pinchRef = useRef<number | null>(null); // 雙指間距
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 1) { const t = e.touches[0]; touchRef.current = { x: t.clientX - pan.x, y: t.clientY - pan.y }; }
+    if (e.touches.length === 2) {
+      // 雙指：記錄初始間距
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchRef.current = Math.hypot(dx, dy);
+      touchRef.current = null; // 取消單指平移
+    } else if (e.touches.length === 1) {
+      // 單指：平移
+      const t = e.touches[0];
+      touchRef.current = { x: t.clientX - pan.x, y: t.clientY - pan.y };
+      pinchRef.current = null;
+    }
   }, [pan]);
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 1 && touchRef.current) { const t = e.touches[0]; setPan({ x: t.clientX - touchRef.current.x, y: t.clientY - touchRef.current.y }); }
+    e.preventDefault(); // 防止頁面滾動
+    if (e.touches.length === 2 && pinchRef.current !== null) {
+      // 雙指縮放
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.hypot(dx, dy);
+      const scale = newDist / pinchRef.current;
+      setZoom(z => Math.min(3, Math.max(0.2, z * scale)));
+      pinchRef.current = newDist;
+    } else if (e.touches.length === 1 && touchRef.current) {
+      // 單指平移
+      const t = e.touches[0];
+      setPan({ x: t.clientX - touchRef.current.x, y: t.clientY - touchRef.current.y });
+    }
   }, []);
 
   const handleNodeClick = useCallback((e: React.MouseEvent, node: SkillNode) => {
@@ -594,7 +620,7 @@ export function SkillTreeCanvas() {
         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}
         onTouchEnd={() => { touchRef.current = null; }}
         onClick={handleCanvasClick}
-        style={{ cursor: dragging ? 'grabbing' : 'grab' }}
+        style={{ cursor: dragging ? 'grabbing' : 'grab', touchAction: 'none' }}
       >
         <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
           <defs>

@@ -13,7 +13,7 @@ export function ProgressBar({ unlocked, total, recommendation, onRecommendationC
   const pct = total > 0 ? Math.round((unlocked / total) * 100) : 0;
 
   return (
-    <div className="fixed top-4 right-4 z-40 rounded-lg px-4 py-3 min-w-[220px] max-w-[280px] border border-slate-700/50"
+    <div className="fixed top-14 right-4 sm:top-4 z-40 rounded-lg px-3 py-2.5 sm:px-4 sm:py-3 min-w-[160px] sm:min-w-[220px] max-w-[200px] sm:max-w-[280px] border border-slate-700/50"
       style={{ background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(12px)' }}
     >
       {/* 進度 */}

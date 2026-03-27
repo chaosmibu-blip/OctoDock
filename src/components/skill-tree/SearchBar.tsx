@@ -35,7 +35,7 @@ export function SearchBar({ nodes, onSearch, onSelectNode }: Props) {
   }, []);
 
   return (
-    <div ref={containerRef} className="fixed top-4 left-4 z-40 w-64">
+    <div ref={containerRef} className="fixed top-4 left-4 z-40 w-48 sm:w-64">
       {/* 搜尋框 */}
       <div className="rounded-lg flex items-center px-3 py-2 gap-2 border border-slate-700/50"
         style={{ background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(12px)' }}
