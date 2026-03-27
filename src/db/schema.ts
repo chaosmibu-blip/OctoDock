@@ -65,7 +65,7 @@ export const connectedApps = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     appName: text("app_name").notNull(),
-    authType: text("auth_type").notNull().default("oauth2"), // 'oauth2' | 'api_key' | 'bot_token'
+    authType: text("auth_type").notNull().default("oauth2"), // 'oauth2' | 'api_key' | 'bot_token' | 'phone_auth'
     accessToken: text("access_token").notNull(), // AES-256-GCM encrypted
     refreshToken: text("refresh_token"), // AES-256-GCM encrypted
     tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
@@ -121,7 +121,7 @@ export const memory = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    category: text("category").notNull(), // 'preference' | 'pattern' | 'context'
+    category: text("category").notNull(), // 'preference' | 'pattern' | 'context' | 'sop'
     appName: text("app_name"), // NULL = cross-app memory
     key: text("key").notNull(),
     value: text("value").notNull(),

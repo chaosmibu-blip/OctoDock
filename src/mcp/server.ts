@@ -6,7 +6,7 @@ import { eq, lt, or, isNull, and, gte, desc, ne, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getAdapter, getAllAdapters } from "./registry";
 import { executeWithMiddleware, logOperation } from "./middleware/logger";
-import { checkMcpRateLimit } from "@/lib/rate-limit";
+// checkMcpRateLimit 已移除 — OctoDock 是執行者不是守衛
 import { getPreContext } from "./middleware/pre-context";
 import { runPostCheck } from "./middleware/post-check";
 import { suggestNextAction, getRecoveryHint, findCrossAppContext, getLikelyNextActions } from "./middleware/action-chain";
@@ -523,18 +523,9 @@ function registerDoTool(
         return exitDo(result, { toolName });
       }
 
-      // B3: MCP 層 rate limit 檢查（per-user + per-action 高風險限制）
-      const rateCheck = checkMcpRateLimit(userId, toolName);
-      if (!rateCheck.allowed) {
-        result = {
-          ok: false,
-          error: `Rate limit exceeded. Please retry later. (RATE_LIMITED)`,
-          errorCode: "RATE_LIMITED",
-          retryable: true,
-          retryAfterMs: rateCheck.retryAfterMs,
-        };
-        return exitDo(result, { toolName });
-      }
+      // B3: MCP rate limit 已移除 — OctoDock 是執行者不是守衛
+      // App API 的 rate limit 由 OctoDock 內部控速處理（bulk operation、retry），AI 不需要碰到
+      // 保留免費用戶月度配額（商業模型），在 usage-limit middleware 中處理
 
       // ── 參數格式轉換：簡化參數 → API 原始格式 ──
       // 掃描 params 中的簡化欄位（folder、page、database 等），
@@ -916,6 +907,12 @@ function registerDoTool(
         }
       }
 
+      // ── 錯誤引導：提示 AI 用 octodock_help 查正確語法 ──
+      if (!result.ok && app !== "system") {
+        result.error = (result.error ?? "") +
+          `\n\n→ For correct parameters: octodock_do(app:"system", action:"find_tool", params:{task:"${action} in ${app}"})`;
+      }
+
       // ── NOT_FOUND 智慧復原：自動搜尋候選 ──
       // 404 時從 params 推斷用戶想找什麼，自動搜尋一次，把候選放在回傳裡
       // AI 看到 candidates 就能自己選正確 ID，不用叫用戶改設定
@@ -965,11 +962,15 @@ function registerDoTool(
             ));
           const failCount = failRows[0]?.count ?? 0;
           if (failCount >= 3) {
+            const failMsg = `⚠️ 此操作近 24 小時內失敗 ${failCount} 次。建議先用 octodock_help(app:"${app}", action:"${action}") 確認參數格式，或用 search 確認正確 ID。`;
             result.frequentFailure = {
               count: failCount,
               since: twentyFourHoursAgo.toISOString(),
-              suggestion: `此操作近 24 小時內失敗 ${failCount} 次。建議先用 octodock_help(app:"${app}", action:"${action}") 確認參數格式，或用 search 確認正確 ID。`,
+              suggestion: failMsg,
             };
+            // 同時放進 warnings，確保 AI 一定看到（warnings 在回傳第一層）
+            if (!result.warnings) result.warnings = [];
+            result.warnings.unshift(failMsg);
           }
         } catch {
           // 查詢失敗不影響錯誤回傳
@@ -1007,6 +1008,37 @@ function registerDoTool(
           const existing = result.context ? result.context + "\n\n" : "";
           const crossAppText = (crossAppResult.value as Array<{ app: string; action: string; title: string; date: string }>).map((c) => `- [${c.app}] ${c.action}: ${c.title} (${c.date})`).join("\n");
           result.context = existing + "Related across apps:\n" + crossAppText;
+        }
+
+        // ── Transfer 提示：讀取大量內容時自動提示 server-side 搬移 ──
+        // 偵測條件：(1) 讀取類操作 (2) 回傳內容 > 1000 字 (3) intent 提到其他 App
+        if (result.ok && result.data && app !== "system") {
+          const dataStr = typeof result.data === "string" ? result.data : JSON.stringify(result.data);
+          const isReadAction = /^(get|read|search|download|list|query|fetch)/.test(action);
+          if (isReadAction && dataStr.length > 1000) {
+            // 檢查 intent 是否暗示要搬到其他 App
+            const intentLower = (intent ?? "").toLowerCase();
+            const transferPatterns = /搬|移|複製|copy|transfer|寫入|寫進|貼到|放到|存到|匯入|import|paste|move|送到|傳到|轉到/;
+            const otherAppMentioned = connectedAppNames.some(
+              (name) => name !== app && intentLower.includes(name.replace(/_/g, " ")),
+            );
+
+            if (transferPatterns.test(intentLower) || otherAppMentioned) {
+              // intent 明確提到跨 App 搬移 → 強提示
+              if (!result.warnings) result.warnings = [];
+              result.warnings.unshift(
+                `💡 偵測到你要把內容搬到其他 App。用 system.transfer 可以 server-side 直接搬移（${dataStr.length} 字），不需要重新生成內容。` +
+                `\n用法：octodock_do(app:"system", action:"transfer", intent:"...", params:{` +
+                `from:{app:"${app}", action:"${action}", params:{${Object.keys(translatedParams).map(k => `${k}:"..."`).join(", ")}}}, ` +
+                `to:{app:"目標App", action:"寫入action", params:{必要參數}}})`,
+              );
+            } else if (dataStr.length > 2000) {
+              // 內容很長但 intent 沒提到搬移 → 輕提示，放 context 不放 warning
+              const existing = result.context ? result.context + "\n\n" : "";
+              result.context = existing +
+                `💡 如果要把此內容（${dataStr.length} 字）寫入其他 App，可用 system.transfer 做 server-side 搬移，避免重新生成。`;
+            }
+          }
         }
 
         // ── 回傳壓縮（Level 3）──

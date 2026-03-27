@@ -165,7 +165,7 @@ Create a new task.
   priority (optional): 1 (normal) to 4 (urgent)
   due_string (optional): Natural language due date, e.g. "tomorrow at 3pm", "every monday"
   due_date (optional): Specific date "YYYY-MM-DD"
-  due_datetime (optional): Specific datetime "YYYY-MM-DDTHH:MM:SS" (requires due_timezone or defaults to UTC)
+  due_datetime (optional): Specific datetime "YYYY-MM-DDTHH:MM:SS" (UTC)
 ### Example
 octodock_do(app:"todoist", action:"create_task", params:{content:"Review PR #123", project_id:"2203306141", priority:3, due_string:"tomorrow at 10am", labels:["work"]})`,
 

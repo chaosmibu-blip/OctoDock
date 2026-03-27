@@ -66,6 +66,9 @@ export const systemActionMap: Record<string, string> = {
   docx_to_markdown: "system_docx_to_markdown",   // DOCX → Markdown
   docx_to_html: "system_docx_to_html",           // DOCX → HTML
 
+  // 跨 App 內容搬移（server-side，不經過 AI token 生成）
+  transfer: "system_transfer",
+
   // 檔案生成工具（生成後自動上傳到已連接的雲端）
   create_qr: "system_create_qr",             // QR Code 生成
   process_image: "system_process_image",     // 圖片處理（resize/compress/convert/watermark）
@@ -113,6 +116,17 @@ export function getSystemSkill(): string {
   process_image(url, operations) — process image: resize/compress/convert/watermark. operations:[{type:"resize",width:800},{type:"compress",quality:80}]
   create_chart(type, labels, datasets, title?) — generate chart PNG. type: "bar"|"line"|"pie"|"doughnut"|"radar"
   svg_to_png(svg, width?, height?) — convert SVG code to PNG image
+## Cross-App Resource Groups & Undo
+  resource_group_create(name, resources) — group resources across apps. resources:[{app:"notion", id:"page-id", label:"Meeting Notes"}, {app:"todoist", id:"task-id"}]
+  resource_group_get(name?) — get a resource group by name, or list all groups if name is omitted
+  undo_last(app?) — undo the most recent destructive operation (replace_content or delete_page). app: target app name (default: "notion"). Only works if a snapshot was saved.
+## Cross-App Transfer (server-side, no AI token generation)
+  transfer(from, to, content_key?, verify?) — read content from one app and write to another, entirely on the server. AI does NOT need to carry the content.
+    from: {app: "source app name", action: "read action (e.g. get_page, get, read, download)", params: {action-specific params like page_id, document_id}}
+    to: {app: "target app name", action: "write action (e.g. replace_content, insert_text, create_file)", params: {target-specific params like document_id — content is auto-filled}}
+    content_key: (optional) which field from source result to use. Default: auto-detects from markdown/content/text/body fields.
+    verify: (optional, default true) read back after write and compare to catch errors.
+    Example: transfer(from:{app:"notion", action:"get_page", params:{page_id:"abc"}}, to:{app:"google_docs", action:"insert_text", params:{document_id:"xyz"}})
 SOPs persist across agents and sessions.`;
 }
 
@@ -709,10 +723,8 @@ export async function executeSystemAction(
       if (actions.some((a) => a.app === "system" && a.action === "batch_do")) {
         return { ok: false, error: "Recursive batch_do is not allowed." };
       }
-      const maxBatch = 20; // 批次上限
-      if (actions.length > maxBatch) {
-        return { ok: false, error: `Maximum ${maxBatch} actions per batch.` };
-      }
+      // 批次上限移除 — OctoDock 自動控速，AI 不需要知道限制
+      // App API rate limit 由 APP_RATE_LIMITS 配置 + 內部控速處理
 
       const mode = (params.mode as string) ?? "parallel";
       const onError = (params.on_error as string) ?? "continue";
@@ -1684,6 +1696,201 @@ export async function executeSystemAction(
       } catch (err) {
         return { ok: false, error: `DOCX → HTML 轉換失敗: ${err instanceof Error ? err.message : String(err)}` };
       }
+    }
+
+    // ── 跨 App 內容搬移：server-side transfer，內容不經過 AI token 生成 ──
+    case "transfer": {
+      const from = params.from as { app: string; action: string; params?: Record<string, unknown> } | undefined;
+      const to = params.to as { app: string; action: string; params?: Record<string, unknown> } | undefined;
+      if (!from?.app || !from?.action || !to?.app || !to?.action) {
+        return { ok: false, error: "from:{app,action,params?} and to:{app,action,params?} are required." };
+      }
+
+      const { getAdapter } = await import("@/mcp/registry");
+      const { executeWithMiddleware } = await import("@/mcp/middleware/logger");
+      const { getValidToken } = await import("@/services/token-manager");
+      const { checkParams } = await import("@/mcp/middleware/param-guard");
+
+      // ── Step 1: 從來源 App 讀取內容 ──
+      const fromAdapter = getAdapter(from.app);
+      if (!fromAdapter) return { ok: false, error: `來源 App "${from.app}" 不存在 (SOURCE_APP_NOT_FOUND)` };
+      const fromToolName = fromAdapter.actionMap?.[from.action];
+      if (!fromToolName) return { ok: false, error: `來源 App "${from.app}" 沒有 "${from.action}" 操作 (SOURCE_ACTION_NOT_FOUND)` };
+
+      let fromData: unknown;
+      try {
+        const fromParams = { ...(from.params ?? {}) };
+        const fromGuard = checkParams(from.app, fromToolName, fromParams);
+        if (fromGuard?.blocked) return { ok: false, error: `來源參數錯誤: ${fromGuard.error}` };
+
+        const fromToken = await getValidToken(userId, from.app);
+        const fromResult = await executeWithMiddleware(
+          userId, from.app, fromToolName, fromParams,
+          (p, t) => fromAdapter.execute(fromToolName, p, t),
+          { prefetchedToken: fromToken },
+        );
+        if (fromResult.isError) {
+          const errMsg = fromResult.content[0]?.text ?? "Unknown error";
+          const hint = fromAdapter.formatError?.(from.action, errMsg);
+          return { ok: false, error: `來源讀取失敗: ${hint ?? errMsg}` };
+        }
+        // 解析來源資料
+        const rawText = fromResult.content[0]?.text ?? "";
+        try { fromData = JSON.parse(rawText); } catch { fromData = rawText; }
+      } catch (err) {
+        return { ok: false, error: `來源讀取例外: ${err instanceof Error ? err.message : String(err)}` };
+      }
+
+      // ── Step 2: 從來源結果中提取內容 ──
+      const contentKey = params.content_key as string | undefined;
+      let content = "";
+
+      if (contentKey) {
+        // 用戶指定的欄位
+        const val = typeof fromData === "object" && fromData !== null
+          ? (fromData as Record<string, unknown>)[contentKey]
+          : undefined;
+        if (val === undefined) {
+          return { ok: false, error: `來源結果中找不到欄位 "${contentKey}"。可用欄位: ${typeof fromData === "object" && fromData !== null ? Object.keys(fromData as Record<string, unknown>).join(", ") : "(非物件)"}` };
+        }
+        content = typeof val === "string" ? val : JSON.stringify(val);
+      } else {
+        // 自動偵測：常見的內容欄位名稱
+        const autoKeys = ["markdown", "content", "text", "body", "html", "message", "description"];
+        let found = false;
+        if (typeof fromData === "object" && fromData !== null) {
+          const obj = fromData as Record<string, unknown>;
+          for (const key of autoKeys) {
+            if (typeof obj[key] === "string" && (obj[key] as string).length > 0) {
+              content = obj[key] as string;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            // 如果有 formatResponse，用它來取得格式化後的文字
+            if (fromAdapter.formatResponse) {
+              try {
+                content = fromAdapter.formatResponse(from.action, fromData);
+                found = true;
+              } catch {
+                // 繼續嘗試其他方式
+              }
+            }
+          }
+          if (!found) {
+            // 最後手段：整個結果轉字串
+            content = typeof fromData === "string" ? fromData : JSON.stringify(fromData);
+          }
+        } else {
+          content = typeof fromData === "string" ? fromData : JSON.stringify(fromData);
+        }
+      }
+
+      if (!content || content.length === 0) {
+        return { ok: false, error: "來源內容為空，無法搬移 (SOURCE_CONTENT_EMPTY)" };
+      }
+
+      // ── Step 3: 寫入目標 App ──
+      const toAdapter = getAdapter(to.app);
+      if (!toAdapter) return { ok: false, error: `目標 App "${to.app}" 不存在 (TARGET_APP_NOT_FOUND)` };
+      const toToolName = toAdapter.actionMap?.[to.action];
+      if (!toToolName) return { ok: false, error: `目標 App "${to.app}" 沒有 "${to.action}" 操作 (TARGET_ACTION_NOT_FOUND)` };
+
+      let toData: unknown;
+      try {
+        // 組合目標參數：用戶提供的 params + 來源內容
+        const toParams: Record<string, unknown> = { ...(to.params ?? {}) };
+
+        // 自動填入內容欄位：根據目標 action 推測應該放在哪個參數
+        const contentParamCandidates = ["content", "text", "body", "markdown", "message", "description"];
+        const hasContentParam = contentParamCandidates.some((k) => toParams[k] !== undefined);
+        if (!hasContentParam) {
+          // 用目標 adapter 的 tool schema 找到內容欄位
+          const targetTool = toAdapter.tools.find((t) => t.name === toToolName);
+          if (targetTool?.inputSchema) {
+            const schemaKeys = Object.keys(targetTool.inputSchema);
+            const matchedKey = contentParamCandidates.find((k) => schemaKeys.includes(k));
+            if (matchedKey) {
+              toParams[matchedKey] = content;
+            } else {
+              // 找第一個 string 類型的非 ID 欄位
+              const stringKey = schemaKeys.find((k) => !k.includes("id") && !k.includes("Id") && k !== "title" && k !== "name");
+              if (stringKey) toParams[stringKey] = content;
+              else toParams.content = content; // 最後手段
+            }
+          } else {
+            toParams.content = content;
+          }
+        }
+
+        const toGuard = checkParams(to.app, toToolName, toParams);
+        if (toGuard?.blocked) return { ok: false, error: `目標參數錯誤: ${toGuard.error}` };
+
+        const toToken = await getValidToken(userId, to.app);
+        const toResult = await executeWithMiddleware(
+          userId, to.app, toToolName, toParams,
+          (p, t) => toAdapter.execute(toToolName, p, t),
+          { prefetchedToken: toToken },
+        );
+        if (toResult.isError) {
+          const errMsg = toResult.content[0]?.text ?? "Unknown error";
+          const hint = toAdapter.formatError?.(to.action, errMsg);
+          return { ok: false, error: `目標寫入失敗: ${hint ?? errMsg}` };
+        }
+        const rawText = toResult.content[0]?.text ?? "";
+        try { toData = JSON.parse(rawText); } catch { toData = rawText; }
+      } catch (err) {
+        return { ok: false, error: `目標寫入例外: ${err instanceof Error ? err.message : String(err)}` };
+      }
+
+      // ── Step 4: 驗證（可選）──
+      const verify = params.verify !== false; // 預設開啟
+      let verifyResult: { matched: boolean; diff?: string } | undefined;
+
+      if (verify && toAdapter.formatResponse) {
+        // 嘗試用 formatResponse 取得寫入後的內容來比對
+        try {
+          const formatted = toAdapter.formatResponse(to.action, toData);
+          // 簡單比對：去掉空白後比較前 200 字
+          const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
+          const srcSnippet = normalize(content).slice(0, 200);
+          const dstSnippet = normalize(formatted).slice(0, 200);
+          verifyResult = {
+            matched: dstSnippet.includes(srcSnippet.slice(0, 50)) || srcSnippet.includes(dstSnippet.slice(0, 50)),
+          };
+          if (!verifyResult.matched) {
+            verifyResult.diff = `來源前50字: "${srcSnippet.slice(0, 50)}" / 目標前50字: "${dstSnippet.slice(0, 50)}"`;
+          }
+        } catch {
+          // 驗證失敗不阻擋，只記錄
+          verifyResult = { matched: false, diff: "驗證過程出錯，但寫入可能已成功" };
+        }
+      }
+
+      // ── 組合回傳（Markdown 格式，AI 直接讀不用解析 JSON）──
+      const destFormatted = toAdapter.formatResponse
+        ? toAdapter.formatResponse(to.action, toData)
+        : (typeof toData === "string" ? toData : JSON.stringify(toData));
+      const verifyLine = verifyResult
+        ? (verifyResult.matched ? "✅ 驗證通過" : `⚠️ 驗證未完全匹配${verifyResult.diff ? `: ${verifyResult.diff}` : ""}`)
+        : "（未驗證）";
+      const mdResult = [
+        `## Transfer 完成`,
+        `- **來源**: ${from.app}.${from.action}`,
+        `- **目標**: ${to.app}.${to.action}`,
+        `- **內容長度**: ${content.length} 字`,
+        `- **驗證**: ${verifyLine}`,
+        ``,
+        `### 目標寫入結果`,
+        destFormatted,
+      ].join("\n");
+
+      return {
+        ok: true,
+        data: mdResult,
+        ...(verifyResult && !verifyResult.matched ? { warnings: ["⚠️ 寫入後驗證未完全匹配，建議人工確認"] } : {}),
+      };
     }
 
     // ── 未知操作 ──

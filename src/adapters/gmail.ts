@@ -198,6 +198,7 @@ Search emails using Gmail search syntax.
 ### Parameters
   query: Gmail search query (same syntax as Gmail search bar, e.g. "from:boss@company.com is:unread")
   max_results (optional): Max results (default 10, max 50)
+  page_token (optional): Pagination token (returned in previous search results when more pages exist)
 ### Example
 octodock_do(app:"gmail", action:"search", params:{query:"is:unread from:client@company.com"})
 octodock_do(app:"gmail", action:"search", params:{query:"subject:invoice after:2026/03/01", max_results:5})`,
@@ -301,6 +302,7 @@ Search and list email threads (conversations). Each thread groups related emails
 ### Parameters
   query (optional): Gmail search query (default: all threads)
   max_results (optional): Max threads to return (default 10, max 50)
+  page_token (optional): Pagination token (returned in previous results when more pages exist)
 ### Example
 octodock_do(app:"gmail", action:"list_threads", params:{query:"from:client@company.com", max_results:5})`,
 
@@ -489,6 +491,10 @@ const tools: ToolDefinition[] = [
         .number()
         .optional()
         .describe("Maximum number of results (default 10, max 50)"),
+      page_token: z
+        .string()
+        .optional()
+        .describe("Pagination token from previous search results"),
     },
   },
   {
@@ -590,6 +596,7 @@ const tools: ToolDefinition[] = [
     inputSchema: {
       query: z.string().optional().describe("Gmail search query (default: all threads)"),
       max_results: z.number().optional().describe("Maximum number of threads (default 10, max 50)"),
+      page_token: z.string().optional().describe("Pagination token from previous results"),
     },
   },
   {

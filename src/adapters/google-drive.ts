@@ -112,6 +112,85 @@ async function driveMultipartUpload(
   return res.json();
 }
 
+// ── 輔助函式：二進位檔案上傳（base64 → Google Drive）──────
+async function driveMultipartUploadBinary(
+  metadata: Record<string, unknown>,
+  base64Content: string,
+  mimeType: string,
+  token: string,
+): Promise<unknown> {
+  const boundary = "octodock_binary_" + Date.now();
+
+  // 將 base64 轉為 binary Buffer
+  const binaryContent = Buffer.from(base64Content, "base64");
+
+  // 組裝 multipart body（metadata JSON + binary content）
+  const metadataPart = JSON.stringify(metadata);
+  const headerBefore = [
+    `--${boundary}\r\n`,
+    "Content-Type: application/json; charset=UTF-8\r\n\r\n",
+    metadataPart,
+    `\r\n--${boundary}\r\n`,
+    `Content-Type: ${mimeType}\r\n`,
+    "Content-Transfer-Encoding: base64\r\n\r\n",
+  ].join("");
+  const headerAfter = `\r\n--${boundary}--`;
+
+  const headerBuf = Buffer.from(headerBefore, "utf-8");
+  const footerBuf = Buffer.from(headerAfter, "utf-8");
+  const body = Buffer.concat([headerBuf, binaryContent, footerBuf]);
+
+  const res = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": `multipart/related; boundary=${boundary}`,
+        "Content-Length": String(body.length),
+      },
+      body,
+    },
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: { message: res.statusText } }));
+    throw new Error(
+      `Google Drive upload error: ${(error as { error: { message: string } }).error.message} (GDRIVE_UPLOAD_ERROR)`,
+    );
+  }
+  return res.json();
+}
+
+// ── MIME 類型自動偵測（從檔名副檔名）──────────────────────
+function detectMimeType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const mimeMap: Record<string, string> = {
+    pdf: "application/pdf",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    doc: "application/msword",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    xls: "application/vnd.ms-excel",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ppt: "application/vnd.ms-powerpoint",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    mp4: "video/mp4",
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    zip: "application/zip",
+    csv: "text/csv",
+    json: "application/json",
+    txt: "text/plain",
+    html: "text/html",
+    md: "text/markdown",
+  };
+  return mimeMap[ext] ?? "application/octet-stream";
+}
+
 // ── 輔助函式：檔案大小格式化（bytes → KB/MB/GB）──────────
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
@@ -158,6 +237,7 @@ const actionMap: Record<string, string> = {
   delete_permission: "gdrive_delete_permission",
   empty_trash: "gdrive_empty_trash",
   read_pdf: "gdrive_read_pdf",
+  upload: "gdrive_upload",
 };
 
 // ── do+help 架構：技能描述（供 agent 理解可用操作）────────
@@ -302,6 +382,19 @@ Download a PDF file from Google Drive and extract its text content. Returns plai
   file_id: Google Drive file ID of the PDF
 ### Example
 octodock_do(app:"google_drive", action:"read_pdf", params:{file_id:"1a6nCHFdxzjMWGmDcuzOcdzPgd6sLdH1c"})`,
+
+  upload: `## google_drive.upload
+Upload a binary file (PDF, DOCX, PPTX, images, etc.) to Google Drive from base64-encoded content.
+### Parameters
+  name: File name with extension (e.g. "report.pdf"). MIME type is auto-detected from extension.
+  data: File content as base64-encoded string
+  parent_id (optional): Parent folder ID (default: root)
+  mime_type (optional): Override auto-detected MIME type
+### Supported formats
+  PDF (.pdf), Word (.docx), Excel (.xlsx), PowerPoint (.pptx), Images (.png/.jpg/.gif/.webp), Video (.mp4), Audio (.mp3), ZIP (.zip), and more
+### Example
+octodock_do(app:"google_drive", action:"upload", params:{name:"report.pdf", data:"JVBERi0xLjQK..."})
+octodock_do(app:"google_drive", action:"upload", params:{name:"photo.png", data:"iVBORw0KGgo...", parent_id:"folder_id"})`,
 };
 
 function getSkill(action?: string): string | null {
@@ -317,15 +410,18 @@ function getSkill(action?: string): string | null {
 - 「匯出 Google Doc 為 PDF」→ export(file_id, format:"pdf")
 - 「分享檔案給某人」→ share(file_id, role:"writer", type:"user", email:"...")
 - 「建資料夾」→ create_folder(name, parent_id?)
+- 「上傳二進位檔案」→ upload(name:"report.pdf", data:"base64...")
 
 ### 注意事項
 - search 用 Drive 查詢語法（name contains '...', mimeType='...'）
 - delete 預設移到垃圾桶，permanent=true 才永久刪除
 - download 只能下載純文字，Google Workspace 檔案要用 export
 - read_pdf 會下載 PDF 並擷取文字（適合掃描文件）
+- upload 支援所有二進位格式（PDF/DOCX/PPTX/圖片等），MIME 從副檔名自動偵測
+- create 只適合純文字檔案，二進位檔案一律用 upload
 
 ### 全部 actions (${Object.keys(actionMap).length})
-  search, get_file, download, create, update, delete, empty_trash, share,
+  search, get_file, download, create, upload, update, delete, empty_trash, share,
   copy, move, create_folder, export, list_permissions, add_comment,
   list_comments, delete_permission, read_pdf
 Use octodock_help(app:"google_drive", action:"ACTION") for detailed params + example.`;
@@ -379,6 +475,11 @@ function formatResponse(action: string, rawData: unknown): string {
     case "create": {
       const c = rawData as any;
       return `Created: ${c.name} (${mimeToLabel(c.mimeType)})\nID: ${c.id}\nURL: ${c.webViewLink ?? "N/A"}`;
+    }
+    case "upload": {
+      const u = rawData as any;
+      const size = u.size ? ` (${formatFileSize(parseInt(u.size))})` : "";
+      return `Uploaded: ${u.name} (${mimeToLabel(u.mimeType)})${size}\nID: ${u.id}\nURL: ${u.webViewLink ?? "N/A"}`;
     }
     case "update": {
       const u = rawData as any;
@@ -517,6 +618,17 @@ const tools: ToolDefinition[] = [
         .string()
         .optional()
         .describe("Parent folder ID (default: root)"),
+    },
+  },
+  {
+    name: "gdrive_upload",
+    description:
+      "Upload a binary file (PDF, DOCX, PPTX, images, etc.) to Google Drive. Accepts base64-encoded content. MIME type is auto-detected from file extension.",
+    inputSchema: {
+      name: z.string().describe("File name with extension (e.g. 'report.pdf'). MIME type auto-detected from extension."),
+      data: z.string().describe("File content as base64-encoded string"),
+      parent_id: z.string().optional().describe("Parent folder ID (default: root)"),
+      mime_type: z.string().optional().describe("Override auto-detected MIME type (e.g. 'application/pdf')"),
     },
   },
   {
@@ -738,6 +850,23 @@ async function execute(
       // 文字檔案使用 multipart upload
       const content = (params.content as string) ?? "";
       const result = await driveMultipartUpload(metadata, content, mimeType, token);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // 上傳二進位檔案（base64 → Google Drive）
+    case "gdrive_upload": {
+      const fileName = params.name as string;
+      const base64Data = params.data as string;
+      const mimeType = (params.mime_type as string) ?? detectMimeType(fileName);
+      const metadata: Record<string, unknown> = { name: fileName };
+
+      if (params.parent_id) {
+        metadata.parents = [params.parent_id];
+      }
+
+      const result = await driveMultipartUploadBinary(metadata, base64Data, mimeType, token);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };

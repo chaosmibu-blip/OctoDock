@@ -101,7 +101,7 @@ export interface DoResult {
   context?: string; // 用戶上下文摘要（僅 session 首次 do() 附帶）
   summary?: Record<string, unknown>; // C5: 操作結果可驗證摘要
   warnings?: string[]; // C2: 異常偵測警告
-  nextSuggestion?: { app: string; action: string; reason: string; probability: number }; // E1: 操作鏈建議
+  nextSuggestion?: { app: string; action: string; reason: string; probability: number; exampleCall?: string }; // E1: 操作鏈建議（含呼叫語法範例）
   recoveryHint?: { lastSuccessfulParams: Record<string, unknown>; note: string }; // E2: 失敗修復建議
   candidates?: Array<{ title: string; id: string }>; // NOT_FOUND 時自動搜尋的候選結果
   frequentFailure?: { count: number; since: string; suggestion: string }; // 高頻失敗偵測

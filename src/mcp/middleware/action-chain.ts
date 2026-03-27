@@ -27,7 +27,7 @@ export async function suggestNextAction(
   userId: string,
   appName: string,
   toolName: string,
-): Promise<{ app: string; action: string; reason: string; probability: number } | null> {
+): Promise<{ app: string; action: string; reason: string; probability: number; exampleCall?: string } | null> {
   try {
     const historyStart = new Date(Date.now() - CHAIN_HISTORY_DAYS * 24 * 60 * 60 * 1000);
 
@@ -72,11 +72,42 @@ export async function suggestNextAction(
     // 把 toolName 轉回 action name（去掉 app 前綴）
     const actionName = top.next_tool.replace(/^[^_]+_/, "");
 
+    // 查最近一次成功的 params 當範例（過濾掉大型內容欄位）
+    let exampleCall: string | undefined;
+    try {
+      const lastParams = await db
+        .select({ params: operations.params })
+        .from(operations)
+        .where(
+          and(
+            eq(operations.userId, userId),
+            eq(operations.appName, top.next_app),
+            eq(operations.toolName, top.next_tool),
+            eq(operations.success, true),
+          ),
+        )
+        .orderBy(desc(operations.createdAt))
+        .limit(1);
+      const rawParams = (lastParams[0]?.params as Record<string, unknown>) ?? {};
+      const filtered = filterStructuralParams(rawParams);
+      if (filtered && Object.keys(filtered).length > 0) {
+        const paramsStr = Object.entries(filtered)
+          .map(([k, v]) => `${k}:${JSON.stringify(v)}`)
+          .join(", ");
+        exampleCall = `octodock_do(app:"${top.next_app}", action:"${actionName}", intent:"...", params:{${paramsStr}})`;
+      } else {
+        exampleCall = `octodock_do(app:"${top.next_app}", action:"${actionName}", intent:"...", params:{...})`;
+      }
+    } catch {
+      // 查 params 失敗不影響建議本身
+    }
+
     return {
       app: top.next_app,
       action: actionName,
       reason: `Past ${CHAIN_HISTORY_DAYS} days: ${Math.round(prob * 100)}% of the time after ${toolName}`,
       probability: Math.round(prob * 100) / 100,
+      exampleCall,
     };
   } catch (err) {
     console.error("Action chain suggestion failed:", err);

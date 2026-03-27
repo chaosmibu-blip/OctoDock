@@ -46,6 +46,8 @@ async function importAllAdapters(): Promise<void> {
     import("@/adapters/canva"),
     // 簡報
     import("@/adapters/gamma"),
+    // 任務管理
+    import("@/adapters/todoist"),
   ]);
 
   for (const result of modules) {

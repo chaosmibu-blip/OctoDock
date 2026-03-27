@@ -42,6 +42,35 @@ export const RETENTION_DAYS = 30;
 /** 操作日誌保留天數 */
 export const OPERATIONS_RETENTION_DAYS = 90;
 
+// ── App API Rate Limits（批量操作控速用）──
+/**
+ * 各 App API 的速率限制
+ * bulk operation 的控速器根據此配置自動調節寫入速度
+ * rps = requests per second, rpm = requests per minute, rph = requests per hour
+ */
+export const APP_RATE_LIMITS: Record<string, { rps: number; description: string }> = {
+  notion: { rps: 3, description: "Notion API: 3 requests/second" },
+  gmail: { rps: 5, description: "Gmail API: ~250 quota units/second (send ~5/s)" },
+  google_docs: { rps: 5, description: "Google Docs API: ~5 requests/second per user" },
+  google_drive: { rps: 10, description: "Google Drive API: ~10 requests/second per user" },
+  google_sheets: { rps: 5, description: "Google Sheets API: ~5 requests/second per user" },
+  google_calendar: { rps: 10, description: "Google Calendar API: ~10 requests/second per user" },
+  google_tasks: { rps: 5, description: "Google Tasks API: ~5 requests/second per user" },
+  todoist: { rps: 2, description: "Todoist API: 450 requests/15 minutes (~2/s safe)" },
+  github: { rps: 10, description: "GitHub API: 5000 requests/hour (~1.4/s, 10/s burst)" },
+  telegram: { rps: 1, description: "Telegram Bot API: 1 message/second per chat" },
+  telegram_user: { rps: 1, description: "Telegram User API: 1 message/second per chat" },
+  discord: { rps: 5, description: "Discord API: 50 requests/second global (~5/s safe)" },
+  slack: { rps: 1, description: "Slack API: 1 request/second (Tier 2)" },
+  youtube: { rps: 3, description: "YouTube Data API: 10000 units/day (search=100, write=50)" },
+  line: { rps: 5, description: "LINE Messaging API: ~5 requests/second" },
+  canva: { rps: 3, description: "Canva API: 20 create/min, 10 export/min" },
+  microsoft_excel: { rps: 4, description: "Microsoft Graph: ~4 requests/second per app+user" },
+  microsoft_word: { rps: 4, description: "Microsoft Graph: ~4 requests/second per app+user" },
+  microsoft_powerpoint: { rps: 4, description: "Microsoft Graph: ~4 requests/second per app+user" },
+  gamma: { rps: 2, description: "Gamma API: estimated ~2 requests/second" },
+};
+
 // ── AI 設定 ──
 /** AI 呼叫的預設 max_tokens */
 export const DEFAULT_MAX_TOKENS = 1024;

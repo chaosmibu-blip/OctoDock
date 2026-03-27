@@ -370,7 +370,7 @@ export function checkParams(
     google_docs: {
       gdocs_get: ["document_id"],
       gdocs_insert_text: ["document_id", "text"],
-      gdocs_replace_text: ["document_id", "find", "replace"],
+      gdocs_replace_text: ["document_id", "findText", "replaceText"],
       gdocs_append_text: ["document_id", "text"],
     },
     github: {
