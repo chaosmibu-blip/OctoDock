@@ -72,6 +72,9 @@ export async function suggestNextAction(
     // 把 toolName 轉回 action name（去掉 app 前綴）
     const actionName = top.next_tool.replace(/^[^_]+_/, "");
 
+    // 過濾：不建議破壞性操作（統計上正確但建議後 AI 可能盲目執行）
+    if (/delete|trash|archive|remove|empty/.test(actionName)) return null;
+
     // 查最近一次成功的 params 當範例（過濾掉大型內容欄位）
     let exampleCall: string | undefined;
     try {
