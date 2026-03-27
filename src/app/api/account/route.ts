@@ -91,7 +91,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      message: "帳號已永久刪除。所有資料（包括已連接的 App token、記憶、使用紀錄、SOP）已全部清除。",
+      message: "帳號已永久刪除。所有資料（包括已連接的 App token、記憶、使用紀錄、工作流）已全部清除。",
     });
   } catch (err) {
     console.error("[account-delete] Failed to delete account:", err);

@@ -10,7 +10,7 @@ import { eq, and, gte } from "drizzle-orm";
 // ============================================================
 
 /** 工作流候選建議 */
-export interface SopSuggestion {
+export interface WorkflowSuggestion {
   type: "workflow_candidate";
   message: string;
   pattern: string[];
@@ -33,9 +33,9 @@ const SESSION_GAP_MINUTES = 30;
  * @param userId 用戶 ID
  * @returns workflow 候選建議，或 null
  */
-export async function detectSopCandidate(
+export async function detectWorkflowCandidate(
   userId: string,
-): Promise<SopSuggestion | null> {
+): Promise<WorkflowSuggestion | null> {
   try {
     const since = new Date();
     since.setDate(since.getDate() - ANALYSIS_WINDOW_DAYS);
@@ -93,7 +93,7 @@ export async function detectSopCandidate(
     const [lastApp, lastAction] = lastStep.split(".");
     const firstVerb = VERB_MAP[firstAction] ?? firstAction;
     const lastVerb = VERB_MAP[lastAction] ?? lastAction;
-    const sopName = firstApp === lastApp
+    const workflowName = firstApp === lastApp
       ? `${firstApp}: ${firstVerb} → ${lastVerb}`
       : `${firstApp} ${firstVerb} → ${lastApp} ${lastVerb}`;
 
@@ -104,11 +104,11 @@ export async function detectSopCandidate(
       const { storeMemory, queryMemory, listMemory: lm } = await import("@/services/memory-engine");
 
       // U15: 去重 — 比對現有 workflow 的 action 序列
-      const existingSops = await lm(userId, "workflow");
+      const existingWorkflows = await lm(userId, "workflow");
       const candidateSequence = candidate.pattern.join(" → ");
-      const isDuplicate = existingSops.some((sop) => {
+      const isDuplicate = existingWorkflows.some((wf) => {
         // 從 workflow 內容提取步驟序列
-        const stepMatches = sop.value.match(/`octodock_do\(app:"([^"]+)", action:"([^"]+)"\)`/g);
+        const stepMatches = wf.value.match(/`octodock_do\(app:"([^"]+)", action:"([^"]+)"\)`/g);
         if (!stepMatches) return false;
         const existingSequence = stepMatches.map((m) => {
           const appMatch = m.match(/app:"([^"]+)"/);
@@ -124,28 +124,28 @@ export async function detectSopCandidate(
       }
 
       // V8: 檢查是否已存過同名的 workflow，有重名就加數字後綴
-      let finalSopName = sopName;
-      const existing = await queryMemory(userId, sopName, "workflow");
-      if (existing.find((r) => r.key === sopName)) {
+      let finalWorkflowName = workflowName;
+      const existing = await queryMemory(userId, workflowName, "workflow");
+      if (existing.find((r) => r.key === workflowName)) {
         // 找到可用的數字後綴（例如 "notion: 追加內容 2"）
         let suffix = 2;
-        while (existing.find((r) => r.key === `${sopName} ${suffix}`)) {
+        while (existing.find((r) => r.key === `${workflowName} ${suffix}`)) {
           suffix++;
         }
-        finalSopName = `${sopName} ${suffix}`;
+        finalWorkflowName = `${workflowName} ${suffix}`;
       }
-      if (!existing.find((r) => r.key === finalSopName)) {
+      if (!existing.find((r) => r.key === finalWorkflowName)) {
         // 統計每一步最常用的參數，區分固定值和動態值
         const stepParams = analyzeStepParams(recentOps, candidate.pattern);
 
         // 用最終 action 推斷流程描述
-        const sopDescription = inferSopDescription(candidate.pattern);
+        const workflowDescription = inferWorkflowDescription(candidate.pattern);
 
         // 自動產生 workflow 內容（Markdown 格式，含參數建議）
-        const sopContent = [
-          `# ${finalSopName}`,
+        const workflowContent = [
+          `# ${finalWorkflowName}`,
           ``,
-          sopDescription,
+          workflowDescription,
           `自動偵測的操作流程（出現 ${candidate.count} 次）`,
           `序列：${patternKey}`,
           ``,
@@ -165,7 +165,7 @@ export async function detectSopCandidate(
           `---`,
           `*自動產生於 ${new Date().toISOString().substring(0, 10)}*`,
         ].join("\n");
-        await storeMemory(userId, finalSopName, sopContent, "workflow");
+        await storeMemory(userId, finalWorkflowName, workflowContent, "workflow");
       }
     } catch (err) {
       console.error("Auto workflow creation failed:", err);
@@ -347,7 +347,7 @@ function analyzeStepParams(
  * 從 pattern 推斷 workflow 描述（一句話說明流程目的）
  * 根據首尾動作推斷：search → create_page = 「搜尋後建立頁面」
  */
-function inferSopDescription(pattern: string[]): string {
+function inferWorkflowDescription(pattern: string[]): string {
   if (pattern.length < 2) return "";
 
   const DESC_MAP: Record<string, string> = {

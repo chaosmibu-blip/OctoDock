@@ -245,7 +245,9 @@ export function isAppAdapter(obj: unknown): obj is AppAdapter {
     typeof obj === "object" &&
     obj !== null &&
     "name" in obj &&
+    "displayName" in obj &&
     "authType" in obj &&
+    "authConfig" in obj &&
     "tools" in obj &&
     "execute" in obj &&
     "actionMap" in obj &&

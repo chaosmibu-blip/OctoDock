@@ -39,11 +39,17 @@ export async function GET(request: NextRequest) {
       fields?: Record<string, { filled: number; total: number; rate: string; ok: boolean }>;
     }> = {};
 
+    // 白名單：只允許查詢 THRESHOLDS 定義的表和欄位，加上 pg_tables 回傳的表名做行數統計
+    const allowedTables = new Set(Object.keys(THRESHOLDS));
+    const isValidIdentifier = (name: string) => /^[a-z_][a-z0-9_]*$/.test(name);
+
     for (const row of tables.rows) {
       const tableName = row.tablename as string;
       if (tableName === "_migrations") continue;
+      // 防禦：驗證表名格式，防止非預期的識別符注入
+      if (!isValidIdentifier(tableName)) continue;
 
-      const countResult = await db.execute(sql.raw(`SELECT COUNT(*) as total FROM "${tableName}"`));
+      const countResult = await db.execute(sql`SELECT COUNT(*) as total FROM ${sql.identifier(tableName)}`);
       const total = parseInt(countResult.rows[0]?.total as string ?? "0");
       report[tableName] = { rowCount: total };
 
@@ -52,8 +58,9 @@ export async function GET(request: NextRequest) {
       if (tableThresholds && total > 0) {
         report[tableName].fields = {};
         for (const [field, threshold] of Object.entries(tableThresholds)) {
+          if (!isValidIdentifier(field)) continue;
           const fillResult = await db.execute(
-            sql.raw(`SELECT COUNT("${field}") as filled FROM "${tableName}" WHERE "${field}" IS NOT NULL`),
+            sql`SELECT COUNT(${sql.identifier(field)}) as filled FROM ${sql.identifier(tableName)} WHERE ${sql.identifier(field)} IS NOT NULL`,
           );
           const filled = parseInt(fillResult.rows[0]?.filled as string ?? "0");
           const rate = filled / total;

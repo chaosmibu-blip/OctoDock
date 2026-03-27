@@ -89,7 +89,7 @@ export default function RootLayout({
               "featureList": [
                 "Connect 16+ apps through one MCP URL",
                 "Cross-agent memory (Claude, ChatGPT, Cursor)",
-                "Auto-detect repeated workflows (SOP)",
+                "Auto-detect repeated workflows",
                 "Smart parameter suggestions"
               ],
               "sameAs": [

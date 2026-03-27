@@ -17,7 +17,7 @@ import { checkParams } from "./middleware/param-guard";
 import { learnFromError } from "./middleware/error-learner";
 import { checkUsageLimit, incrementUsage } from "./middleware/usage-limit";
 import { learnIdentifier, resolveIdentifier, listMemory, queryMemory } from "@/services/memory-engine";
-import { detectSopCandidate } from "@/services/sop-detector";
+import { detectWorkflowCandidate } from "@/services/workflow-detector";
 import {
   systemActionMap,
   getSystemSkill,
@@ -163,7 +163,7 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   // ── 註冊 octodock_help ──
   registerHelpTool(server, user.id, connectedAppNames, connectedAppConfigs);
 
-  // octodock_sop 已移除 — 工作流功能由 do(app:"system") + intent 自動匹配覆蓋
+  // 工作流功能由 do(app:"system") + intent 自動匹配覆蓋
 
   return server;
 }
@@ -967,11 +967,11 @@ function registerDoTool(
         // 用量計數（非同步，不阻塞回應）
         incrementUsage(userId).catch(() => {});
 
-        // 並行執行 post-success 的 DB 查詢（C2、SOP、E1、E4），避免串行拖慢回應
+        // 並行執行 post-success 的 DB 查詢（C2、workflow、E1、E4），避免串行拖慢回應
         const keyword = result.title ?? (translatedParams.title as string) ?? (translatedParams.subject as string);
         const [postCheckResult, , nextSuggestionResult, crossAppResult] = await Promise.allSettled([
           runPostCheck(userId, app, toolName, translatedParams),
-          detectSopCandidate(userId),
+          detectWorkflowCandidate(userId),
           suggestNextAction(userId, app, toolName),
           keyword ? findCrossAppContext(userId, app, keyword) : Promise.resolve([]),
         ]);
@@ -982,7 +982,7 @@ function registerDoTool(
           result.warnings.push(...postCheckResult.value.warnings);
         }
         // 工作流自動辨識：偵測重複操作模式，靜默存成工作流
-        // detectSopCandidate 直接自動存並回傳 null
+        // detectWorkflowCandidate 直接自動存並回傳 null
         // E1: 操作鏈建議（G5: suppress_suggestions 時跳過）
         if (!suppressSuggestions && nextSuggestionResult.status === "fulfilled" && nextSuggestionResult.value) {
           result.nextSuggestion = nextSuggestionResult.value;
@@ -2232,4 +2232,4 @@ function extractDefaultSummary(rawData: unknown): Record<string, unknown> | null
   return hasData ? summary : null;
 }
 
-// octodock_sop 已移除 — 工作流功能由 do(app:"system", action:"workflow_list/workflow_get") + intent 自動匹配覆蓋
+// 工作流功能由 do(app:"system", action:"workflow_list/workflow_get") + intent 自動匹配覆蓋

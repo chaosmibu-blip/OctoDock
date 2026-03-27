@@ -120,7 +120,7 @@ export const memory = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    category: text("category").notNull(), // 'preference' | 'pattern' | 'context' | 'sop'
+    category: text("category").notNull(), // 'preference' | 'pattern' | 'context' | 'workflow'
     appName: text("app_name"), // NULL = cross-app memory
     key: text("key").notNull(),
     value: text("value").notNull(),

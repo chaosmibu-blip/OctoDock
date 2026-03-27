@@ -18,7 +18,7 @@ function escapeLike(input: string): string {
 export interface MemoryEntry {
   key: string; // 記憶的識別鍵（例如 "folder:會議"）
   value: string; // 記憶的內容（例如 page_id）
-  category: string; // 分類：preference / pattern / context / sop
+  category: string; // 分類：preference / pattern / context / workflow
   appName: string | null; // 關聯的 App（null 表示跨 App 記憶）
   confidence: number | null; // 信心分數（0-1，越高越可靠）
   lastUsedAt: Date | null; // 最近使用時間（用於排序和清理）

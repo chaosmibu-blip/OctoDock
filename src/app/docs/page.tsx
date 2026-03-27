@@ -98,12 +98,12 @@ export default function DocsPage() {
           </p>
         </section>
 
-        {/* SOP */}
+        {/* Workflows */}
         <section className="mt-10">
-          <h2 className="text-2xl font-semibold text-gray-900">SOP (Standard Operating Procedures)</h2>
+          <h2 className="text-2xl font-semibold text-gray-900">Workflows</h2>
           <p className="mt-3 text-gray-600 leading-relaxed">
             OctoDock automatically detects repeated operation patterns and saves
-            them as workflows. You can also create SOPs manually. SOPs persist
+            them as workflows. You can also create workflows manually. Workflows persist
             across agents and sessions.
           </p>
         </section>

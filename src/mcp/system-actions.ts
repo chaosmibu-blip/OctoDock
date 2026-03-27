@@ -479,7 +479,7 @@ export async function executeSystemAction(
         }
       }
 
-      // U10: 也搜尋 system actions（undo_last、batch_do、sop_list 等）
+      // U10: 也搜尋 system actions（undo_last、batch_do、workflow_list 等）
       const SYSTEM_ACTION_DESCS: Record<string, string> = {
         memory_query: "Search user memories and preferences",
         memory_store: "Store a memory or preference",

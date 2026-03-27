@@ -40,7 +40,7 @@ async function cleanOAuthTokens(): Promise<number> {
 
 /**
  * 清理超過 90 天的操作紀錄
- * - 保留近 90 天的紀錄供稽核和 SOP 偵測使用
+ * - 保留近 90 天的紀錄供稽核和工作流偵測使用
  * - 超過 90 天的紀錄自動刪除，防止表無限膨脹
  */
 async function cleanOldOperations(): Promise<number> {

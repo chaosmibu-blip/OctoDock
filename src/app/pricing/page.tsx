@@ -151,7 +151,7 @@ export default function PricingPage() {
               {[
                 "Everything in Free",
                 "Unlimited MCP tool calls",
-                "Custom SOP workflows",
+                "Custom workflows",
                 "Action Chain (multi-step in one prompt)",
                 "Response Compression (save tokens)",
                 "Priority processing speed",

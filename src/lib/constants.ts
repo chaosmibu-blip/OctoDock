@@ -35,7 +35,7 @@ export const NOTION_BLOG_MAX_BLOCKS = 500;
 export const NOTION_API_BLOCK_LIMIT = 100;
 
 // ── 時間窗口 ──
-/** SOP 偵測的 session 間隔（30 分鐘） */
+/** 工作流偵測的 session 間隔（30 分鐘） */
 export const SESSION_GAP_MS = 30 * 60 * 1000;
 /** 記憶保留天數 */
 export const RETENTION_DAYS = 30;

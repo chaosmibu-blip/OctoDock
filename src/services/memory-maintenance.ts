@@ -41,7 +41,7 @@ export async function runMaintenanceIfNeeded(userId: string): Promise<void> {
 
 /**
  * 記憶衰減：超過 60 天沒使用的記憶降低 confidence
- * SOP 和手動存的記憶不衰減
+ * workflow 和手動存的記憶不衰減
  */
 async function decayMemories(userId: string): Promise<void> {
   const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
@@ -51,7 +51,7 @@ async function decayMemories(userId: string): Promise<void> {
     SET confidence = GREATEST(0.1, confidence - 0.1),
         updated_at = NOW()
     WHERE user_id = ${userId}
-      AND category != 'sop'
+      AND category != 'workflow'
       AND confidence > 0.1
       AND (
         (last_used_at IS NOT NULL AND last_used_at < ${sixtyDaysAgo})
@@ -63,7 +63,7 @@ async function decayMemories(userId: string): Promise<void> {
 
 /**
  * 記憶清理：刪除 confidence 極低且長期未使用的記憶
- * SOP 永遠不自動刪除
+ * workflow 永遠不自動刪除
  */
 async function cleanupMemories(userId: string): Promise<void> {
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
@@ -71,7 +71,7 @@ async function cleanupMemories(userId: string): Promise<void> {
   await db.execute(sql`
     DELETE FROM memory
     WHERE user_id = ${userId}
-      AND category != 'sop'
+      AND category != 'workflow'
       AND confidence <= 0.1
       AND (
         (last_used_at IS NOT NULL AND last_used_at < ${ninetyDaysAgo})

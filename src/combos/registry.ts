@@ -29,8 +29,8 @@ export interface ComboResult extends ComboDefinition {
 
 /* ── 組合技定義清單 ── */
 /* T 組修正：技能樹從空長出來，不預設任何跨 App 組合技。
- * 組合技由 sop-detector 從 operations pattern 自動偵測產生（只限同 App 內）。
- * 跨 App 流程只有使用者透過 AI 定義的 SOP 才會出現。
+ * 組合技由 workflow-detector 從 operations pattern 自動偵測產生（只限同 App 內）。
+ * 跨 App 流程只有使用者透過 AI 定義的 workflow 才會出現。
  * 預設的跨 App 組合技全部刪除 — 沒有使用者行為依據的自動執行會添亂。
  */
 const COMBO_DEFINITIONS: ComboDefinition[] = [
