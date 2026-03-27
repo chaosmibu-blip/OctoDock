@@ -1081,8 +1081,9 @@ function registerDoTool(
         }
       }
 
-      // ── 必經路徑：SOP 匹配結果附在 context ──
-      if (matchedSop && result.ok) {
+      // ── SOP 匹配結果附在 context ──
+      // 不限成功或失敗都給 AI 看，因為 SOP 的目的是讓 AI 知道以前做過哪些流程
+      if (matchedSop) {
         const existing = result.context ? result.context + "\n\n" : "";
         result.context = existing + `⚡ Matching SOP found:\n${matchedSop}`;
       }

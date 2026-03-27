@@ -79,18 +79,25 @@ export async function detectSopCandidate(
     // 過濾太短的模式（至少 2 步）
     if (candidate.pattern.length < 2) return null;
 
-    // P: SOP 命名 — 最終動作 + 目標物件（人話）
-    // 中間步驟（search、get_page 等）是手段不是目的，不出現在名稱裡
+    // SOP 命名：用完整流程的首尾步驟，讓名稱看得出整個流程在做什麼
+    // 例如 "notion.search → google_docs.insert_text" → "notion 搜尋 → google_docs 寫入"
     const VERB_MAP: Record<string, string> = {
       create_page: "建立頁面", append_content: "追加內容", replace_content: "替換內容",
       send: "寄信", create_event: "建立事件", create_task: "建立任務",
       create_issue: "建立 Issue", delete_page: "刪除頁面", create: "建立",
       update: "更新", delete: "刪除", search: "搜尋", get: "讀取",
+      get_page: "讀取頁面", get_file: "讀取檔案", insert_text: "寫入文字",
+      append_text: "追加文字", send_message: "發送訊息", search_code: "搜尋程式碼",
     };
+    const firstStep = candidate.pattern[0];
     const lastStep = candidate.pattern[candidate.pattern.length - 1];
+    const [firstApp, firstAction] = firstStep.split(".");
     const [lastApp, lastAction] = lastStep.split(".");
-    const verb = VERB_MAP[lastAction] ?? lastAction;
-    const sopName = `${lastApp}: ${verb}`;  // 例如 "notion: 追加內容"
+    const firstVerb = VERB_MAP[firstAction] ?? firstAction;
+    const lastVerb = VERB_MAP[lastAction] ?? lastAction;
+    const sopName = firstApp === lastApp
+      ? `${firstApp}: ${firstVerb} → ${lastVerb}`
+      : `${firstApp} ${firstVerb} → ${lastApp} ${lastVerb}`;
 
     // I8/J4 最終修正：靜默自動存成 SOP，不問不提示
     // U15: 存 SOP 前比對現有 SOP 的 action 序列，避免重複
