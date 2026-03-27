@@ -115,23 +115,13 @@ function findFuzzyActionMatch(unknown: string, available: string[]): string | nu
   return null;
 }
 
-/** A1: 從 HTTP request headers 提取 Agent 實例識別資訊 */
-function extractAgentInstanceId(headers?: Headers): string | null {
-  if (!headers) return null;
-  // 優先用明確的 X-Agent-Id header，其次用 User-Agent
-  return headers.get("x-agent-id")
-    ?? headers.get("x-client-id")
-    ?? headers.get("user-agent")
-    ?? null;
-}
-
 /**
  * 為特定用戶建立 MCP server 實例
  * 每個 MCP 請求都會建立一個新的 server（stateless 架構）
  * server 只註冊 octodock_do 和 octodock_help 兩個工具
  *
  * @param user 已驗證的用戶資訊
- * @param requestHeaders HTTP request headers（用於提取 agent 實例 ID）
+ * @param requestHeaders HTTP request headers（保留備用）
  */
 export async function createServerForUser(user: User, requestHeaders?: Headers): Promise<McpServer> {
   // 動態版本號：用 git SHA 讓客戶端知道 server 有更新
@@ -167,14 +157,11 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
   }
   const connectedAppNames = Object.keys(connectedAppConfigs);
 
-  // A1: 從 request headers 提取 agent 實例 ID
-  const agentInstanceId = extractAgentInstanceId(requestHeaders);
-
   // ── 註冊 octodock_do ──
-  registerDoTool(server, user.id, connectedAppNames, connectedAppConfigs, agentInstanceId);
+  registerDoTool(server, user.id, connectedAppNames, connectedAppConfigs);
 
   // ── 註冊 octodock_help ──
-  registerHelpTool(server, user.id, connectedAppNames, connectedAppConfigs, agentInstanceId);
+  registerHelpTool(server, user.id, connectedAppNames, connectedAppConfigs);
 
   // octodock_sop 已移除 — SOP 功能由 do(app:"system") + intent 自動匹配覆蓋
 
@@ -347,7 +334,6 @@ function registerDoTool(
   userId: string,
   connectedAppNames: string[],
   connectedAppConfigs: Record<string, { disabledActions?: string[] }>,
-  agentInstanceId: string | null,
 ): void {
   server.tool(
     "octodock_do",
@@ -435,7 +421,6 @@ function registerDoTool(
             result: { ok: r.ok, error: r.error, summary: r.summary, code: r.errorCode },
             success: r.ok,
             durationMs: Date.now() - startTime,
-            agentInstanceId,
             parentOperationId: _parentOperationId,
           });
         }
@@ -732,7 +717,7 @@ function registerDoTool(
         toolName,
         translatedParams,
         (p, t) => adapter.execute(toolName, p, t),
-        { agentInstanceId, prefetchedToken: token, intent },
+        { prefetchedToken: token, intent },
       );
       // executeWithMiddleware 內部已記錄，標記避免出口函式重複記錄
       _alreadyLogged = true;
@@ -1163,7 +1148,6 @@ function registerHelpTool(
   userId: string,
   connectedAppNames: string[],
   connectedAppConfigs: Record<string, { disabledActions?: string[] }>,
-  agentInstanceId: string | null,
 ): void {
   server.tool(
     "octodock_help",
@@ -1200,7 +1184,6 @@ function registerHelpTool(
           action: opts?.action ?? action ?? "list",
           params: { app, action, difficulty },
           difficulty,
-          agentInstanceId,
           result: { ok: opts?.success !== false, summary: text.substring(0, 200) },
           success: opts?.success !== false,
           durationMs: Date.now() - helpStartTime,

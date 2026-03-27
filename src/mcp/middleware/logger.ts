@@ -20,9 +20,8 @@ import {
 // 這也是 OctoDock「越用越懂你」的基礎 — 所有操作都自動記錄
 // ============================================================
 
-/** 操作執行器的額外選項（A1：傳遞 agent 實例資訊） */
+/** 操作執行器的額外選項 */
 export interface MiddlewareOptions {
-  agentInstanceId?: string | null; // 從 HTTP header 提取的 Agent 實例 ID
   prefetchedToken?: string | null; // 預取的 token，避免重複呼叫 getValidToken
   intent?: string | null; // AI 描述的操作目的（追蹤填寫率）
 }
@@ -36,7 +35,7 @@ export interface MiddlewareOptions {
  * @param toolName 內部工具名稱（例如 "notion_create_page"）
  * @param params 操作參數
  * @param handler 實際的 API 呼叫函式（來自 adapter.execute）
- * @param options 額外選項（agentInstanceId 等）
+ * @param options 額外選項
  * @returns 工具執行結果
  */
 export async function executeWithMiddleware(
@@ -84,7 +83,6 @@ export async function executeWithMiddleware(
       params,
       intent: options?.intent ?? null,
       result: resultSummary,
-      agentInstanceId: options?.agentInstanceId ?? null,
       success: true,
       durationMs: Date.now() - startTime,
     });
@@ -124,7 +122,6 @@ export async function executeWithMiddleware(
         code: classified.code,
         retryable: classified.retryable,
       },
-      agentInstanceId: options?.agentInstanceId ?? null,
       success: false,
       durationMs: Date.now() - startTime,
     });

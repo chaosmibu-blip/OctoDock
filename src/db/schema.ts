@@ -92,7 +92,6 @@ export const operations = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    agentInstanceId: text("agent_instance_id"), // 區分同類型下的不同 Agent 實例（從 header 提取）
     appName: text("app_name").notNull(),
     toolName: text("tool_name").notNull(),
     action: text("action").notNull(),
