@@ -14,10 +14,14 @@ import { Legend } from './Legend';
 import { SearchBar } from './SearchBar';
 import { ConnectDialog } from './ConnectDialog';
 
-const TEAL = '#1D9E75';
-const GOLD = '#D4A843';
-const GRAY = '#CBD5E1';
-const GRAY_LIGHT = '#E2E8F0';
+const TEAL = '#34D399';       // 暗底上更亮的綠
+const TEAL_DIM = '#1D9E75';   // 品牌綠（用於較暗的元素）
+const GOLD = '#FBBF24';       // 暗底上更亮的金
+const GRAY = '#475569';       // 暗底灰
+const GRAY_LIGHT = '#334155'; // 暗底淡灰
+const BG_DARK = '#0B1120';    // 深藍黑背景
+const BG_CARD = '#111827';    // 節點卡片背景
+const PURPLE = '#A78BFA';     // 自動發現的紫
 
 export function SkillTreeCanvas() {
   /* ── API 資料 ── */
@@ -294,26 +298,25 @@ export function SkillTreeCanvas() {
     let opacity: number;
 
     if (isCombo) {
-      /* 組合技虛線永遠可見 */
+      /* 組合技虛線 — 暗底上用半透明亮色 */
       stroke = isActive ? GOLD : GRAY;
       if (hoveredNode) {
-        opacity = highlighted ? 0.8 : 0.1;
+        opacity = highlighted ? 0.7 : 0.05;
       } else {
-        opacity = isActive ? 0.6 : 0.2;
+        opacity = isActive ? 0.4 : 0.1;
       }
       if (highlighted) stroke = GOLD;
     } else {
-      /* App → action 細線 */
-      // U20: 區分已使用/未使用的 action 連線色彩
+      /* App → action 細線 — 暗底上發光感 */
       const edgeLit = isActive || isPreviewing;
       const targetUsed = to.used === true;
       stroke = edgeLit
-        ? (targetUsed ? TEAL : '#A7D8C8') // U20: 已用深綠, 未用淡綠
+        ? (targetUsed ? TEAL : TEAL_DIM)
         : GRAY_LIGHT;
       if (highlighted) stroke = TEAL;
       opacity = hoveredNode
-        ? (highlighted ? 0.8 : isPreviewing ? 0.3 : 0.05)
-        : (isActive ? (targetUsed ? 0.4 : 0.15) : 0.08); // U20: 已用較深
+        ? (highlighted ? 0.6 : isPreviewing ? 0.15 : 0.03)
+        : (isActive ? (targetUsed ? 0.3 : 0.1) : 0.04);
     }
 
     return (
@@ -321,7 +324,7 @@ export function SkillTreeCanvas() {
         key={`edge-${i}`}
         x1={from.x} y1={from.y} x2={to.x} y2={to.y}
         stroke={stroke}
-        strokeWidth={isCombo ? 1.5 : 1}
+        strokeWidth={isCombo ? 1.5 : 0.8}
         strokeDasharray={isCombo ? '6 4' : 'none'}
         opacity={opacity}
         style={{ transition: 'opacity 300ms' }}
@@ -337,13 +340,13 @@ export function SkillTreeCanvas() {
     const dimmedBySearch = searchMatches && !searchMatches.has(node.id);
     const dimmedByHover = hoveredNode && !highlightedNodes.has(node.id) && hoveredNode !== node.id;
 
-    /* ── App（外圈）── */
+    /* ── App（外圈）— 暗底發光卡片 ── */
     if (node.type === 'source') {
       const size = 44;
-      const r = 8;
-      const isPreviewing = previewApp === node.id; // hover 未連接 App 時預覽亮起
-      const showLit = isConnected || isPreviewing;  // 連接或預覽中都顯示亮起
-      const opacity = dimmedBySearch ? 0.15 : dimmedByHover ? 0.2 : 1;
+      const r = 10;
+      const isPreviewing = previewApp === node.id;
+      const showLit = isConnected || isPreviewing;
+      const opacity = dimmedBySearch ? 0.15 : dimmedByHover ? 0.15 : 1;
 
       return (
         <g key={node.id} opacity={opacity} style={{ cursor: 'pointer', transition: 'opacity 300ms' }}
@@ -351,51 +354,65 @@ export function SkillTreeCanvas() {
           onMouseEnter={() => setHoveredNode(node.id)}
           onMouseLeave={() => setHoveredNode(null)}
         >
-          {/* 光暈：已連接 = teal，預覽 = teal 半透明脈動 */}
+          {/* 外發光 — 已連接的 App 有持續的 glow */}
           {showLit && (
-            <rect x={node.x - size - 4} y={node.y - size - 4}
-              width={(size + 4) * 2} height={(size + 4) * 2}
-              rx={r + 4} ry={r + 4}
-              fill="none" stroke={TEAL} strokeWidth={isPreviewing ? 1.5 : 1}
-              opacity={isPreviewing ? 0.4 : 0.2}
-              style={{ filter: `blur(${isPreviewing ? 6 : 4}px)`, transition: 'opacity 300ms' }}
+            <rect x={node.x - size - 8} y={node.y - size - 8}
+              width={(size + 8) * 2} height={(size + 8) * 2}
+              rx={r + 6} ry={r + 6}
+              fill="none" stroke={TEAL} strokeWidth={1}
+              opacity={isPreviewing ? 0.3 : 0.15}
+              style={{ filter: `blur(${isPreviewing ? 10 : 8}px)`, transition: 'opacity 300ms' }}
             />
           )}
+          {/* hover 時更強的外圈光暈 */}
+          {isHovered && showLit && (
+            <rect x={node.x - size - 12} y={node.y - size - 12}
+              width={(size + 12) * 2} height={(size + 12) * 2}
+              rx={r + 10} ry={r + 10}
+              fill="none" stroke={TEAL} strokeWidth={2}
+              opacity={0.2}
+              style={{ filter: 'blur(16px)' }}
+            />
+          )}
+          {/* 卡片本體 — 暗色玻璃感 */}
           <rect x={node.x - size} y={node.y - size}
             width={size * 2} height={size * 2} rx={r} ry={r}
-            fill={showLit ? '#F0FDF9' : '#FAFAFA'}
-            stroke={showLit ? TEAL : '#D1D5DB'}
-            strokeWidth={isHovered || isSelected ? 2.5 : 1.5}
-            style={{ transition: 'fill 300ms, stroke 300ms' }}
+            fill={showLit ? '#0F2A1F' : BG_CARD}
+            stroke={showLit ? TEAL_DIM : '#1E293B'}
+            strokeWidth={isHovered || isSelected ? 2 : 1}
+            opacity={showLit ? 1 : 0.8}
+            style={{ transition: 'fill 300ms, stroke 300ms, stroke-width 200ms' }}
           />
           <text x={node.x} y={node.y - 6} textAnchor="middle" dominantBaseline="middle"
-            fill={showLit ? '#0F4F3E' : '#9CA3AF'} fontSize={12} fontWeight={600}
+            fill={showLit ? '#E2E8F0' : '#64748B'} fontSize={12} fontWeight={600}
             fontFamily="Inter, sans-serif"
           >
             {node.label}
           </text>
           <text x={node.x} y={node.y + 12} textAnchor="middle" dominantBaseline="middle"
-            fill={showLit ? '#6B7280' : '#D1D5DB'} fontSize={9}
+            fill={showLit ? '#94A3B8' : '#475569'} fontSize={9}
             fontFamily="JetBrains Mono, monospace"
           >
-            · {node.actionCount ?? 0} actions
+            {node.actionCount ?? 0} actions
           </text>
           <text x={node.x} y={node.y + size + 14} textAnchor="middle" dominantBaseline="middle"
-            fill={showLit ? TEAL : '#9CA3AF'} fontSize={8} fontWeight={500}
+            fill={showLit ? TEAL : '#475569'} fontSize={8} fontWeight={500}
             fontFamily="JetBrains Mono, monospace"
           >
-            {isConnected ? '已連接' : isPreviewing ? '點擊解鎖' : '點擊連接'}
+            {isConnected ? '● connected' : isPreviewing ? '○ preview' : '○ connect'}
           </text>
-          {/* 健康燈號：已連接且有使用紀錄才顯示 */}
+          {/* 健康燈號 */}
           {isConnected && (() => {
             const h = healthData.get(node.id);
             if (!h || h.totalCalls === 0) return null;
-            const color = h.status === 'green' ? '#22C55E' : h.status === 'yellow' ? '#EAB308' : '#EF4444';
+            const color = h.status === 'green' ? '#34D399' : h.status === 'yellow' ? '#FBBF24' : '#F87171';
             return (
               <g>
-                <circle cx={node.x + size - 6} cy={node.y - size + 6} r={5}
-                  fill={color} stroke="#FFFFFF" strokeWidth={1.5} />
-                {/* hover App 時在燈號旁顯示成功率 */}
+                <circle cx={node.x + size - 6} cy={node.y - size + 6} r={4}
+                  fill={color} opacity={0.9} />
+                {/* glow 效果 */}
+                <circle cx={node.x + size - 6} cy={node.y - size + 6} r={6}
+                  fill={color} opacity={0.2} style={{ filter: 'blur(3px)' }} />
                 {isHovered && (
                   <text x={node.x + size + 6} y={node.y - size + 10}
                     fontSize={8} fill={color} fontFamily="JetBrains Mono, monospace"
@@ -410,19 +427,18 @@ export function SkillTreeCanvas() {
       );
     }
 
-    /* ── 組合技（內圈）── */
+    /* ── 組合技（內圈）— 暗底發光節點 ── */
     if (node.type === 'combo') {
       const size = 28;
       const isActive = isConnected;
       const isDisc = !!node.discovered;
-      const opacity = dimmedBySearch ? 0.15 : dimmedByHover ? 0.2 : 1;
+      const opacity = dimmedBySearch ? 0.15 : dimmedByHover ? 0.15 : 1;
 
-      /* 自動發現的用圓形 + 紫色，策展的用菱形 + 金色 */
-      const accentColor = isDisc ? '#8B5CF6' : GOLD;
-      const fillActive = isDisc ? '#F5F3FF' : '#FFFDF5';
+      const accentColor = isDisc ? PURPLE : GOLD;
+      const fillActive = isDisc ? '#1A1033' : '#1F1A05';
 
       if (isDisc) {
-        /* 自動發現：虛線圓形 */
+        /* 自動發現：虛線圓形 + 發光 */
         return (
           <g key={node.id} opacity={opacity} style={{ cursor: 'pointer', transition: 'opacity 300ms' }}
             onClick={(e) => handleNodeClick(e, node)}
@@ -430,41 +446,41 @@ export function SkillTreeCanvas() {
             onMouseLeave={() => setHoveredNode(null)}
           >
             {isActive && (
-              <circle cx={node.x} cy={node.y} r={size + 3}
-                fill="none" stroke={accentColor} strokeWidth={1} opacity={0.3}
-                style={{ filter: 'blur(3px)' }}
+              <circle cx={node.x} cy={node.y} r={size + 6}
+                fill="none" stroke={accentColor} strokeWidth={1} opacity={0.2}
+                style={{ filter: 'blur(6px)' }}
               />
             )}
             <circle cx={node.x} cy={node.y} r={size}
-              fill={isActive ? fillActive : '#FAFAFA'}
+              fill={isActive ? fillActive : BG_CARD}
               stroke={isActive ? accentColor : GRAY}
-              strokeWidth={isHovered || isSelected ? 2.5 : 1.5}
+              strokeWidth={isHovered || isSelected ? 2 : 1}
               strokeDasharray="5 3"
+              opacity={isActive ? 1 : 0.6}
             />
-            {/* 頻率徽章 */}
             <text x={node.x} y={node.y - 2} textAnchor="middle" dominantBaseline="middle"
-              fill={isActive ? accentColor : '#9CA3AF'} fontSize={10} fontWeight={600}
+              fill={isActive ? accentColor : '#64748B'} fontSize={10} fontWeight={600}
               fontFamily="JetBrains Mono, monospace"
             >
               {node.frequency ?? '?'}×
             </text>
             <text x={node.x} y={node.y + size + 16} textAnchor="middle" dominantBaseline="middle"
-              fill={isActive ? accentColor : '#9CA3AF'} fontSize={8} fontWeight={500}
+              fill={isActive ? accentColor : '#64748B'} fontSize={8} fontWeight={500}
               fontFamily="JetBrains Mono, monospace"
             >
               {node.label}
             </text>
             <text x={node.x} y={node.y + size + 28} textAnchor="middle" dominantBaseline="middle"
-              fill="#9CA3AF" fontSize={7}
+              fill="#475569" fontSize={7}
               fontFamily="JetBrains Mono, monospace"
             >
-              自動發現
+              auto-discovered
             </text>
           </g>
         );
       }
 
-      /* 策展組合技：菱形 */
+      /* 策展組合技：菱形 + 暗底發光 */
       const pts = `${node.x},${node.y - size} ${node.x + size},${node.y} ${node.x},${node.y + size} ${node.x - size},${node.y}`;
       return (
         <g key={node.id} opacity={opacity} style={{ cursor: 'pointer', transition: 'opacity 300ms' }}
@@ -474,19 +490,20 @@ export function SkillTreeCanvas() {
         >
           {isActive && (
             <polygon
-              points={`${node.x},${node.y - size - 3} ${node.x + size + 3},${node.y} ${node.x},${node.y + size + 3} ${node.x - size - 3},${node.y}`}
-              fill="none" stroke={accentColor} strokeWidth={1} opacity={0.3}
-              style={{ filter: 'blur(3px)' }}
+              points={`${node.x},${node.y - size - 5} ${node.x + size + 5},${node.y} ${node.x},${node.y + size + 5} ${node.x - size - 5},${node.y}`}
+              fill="none" stroke={accentColor} strokeWidth={1} opacity={0.2}
+              style={{ filter: 'blur(6px)' }}
             />
           )}
           <polygon points={pts}
-            fill={isActive ? fillActive : '#FAFAFA'}
+            fill={isActive ? fillActive : BG_CARD}
             stroke={isActive ? accentColor : GRAY}
-            strokeWidth={isHovered || isSelected ? 2.5 : 1.5}
+            strokeWidth={isHovered || isSelected ? 2 : 1}
             strokeDasharray="5 3"
+            opacity={isActive ? 1 : 0.6}
           />
           <text x={node.x} y={node.y + size + 16} textAnchor="middle" dominantBaseline="middle"
-            fill={isActive ? accentColor : '#9CA3AF'} fontSize={9} fontWeight={500}
+            fill={isActive ? accentColor : '#64748B'} fontSize={9} fontWeight={500}
             fontFamily="JetBrains Mono, monospace"
           >
             {node.label}
@@ -495,23 +512,18 @@ export function SkillTreeCanvas() {
       );
     }
 
-    /* ── Action（中圈）── 小圓點 */
-    // U17: 區分已使用（實心深色）和未使用（淡色）的 action
-    // U20: 連線顏色跟節點狀態同步
-    const dotR = isHovered ? 10 : 8;
+    /* ── Action（中圈）— 暗底上的發光光點 ── */
+    const dotR = isHovered ? 6 : 4;
     const clusterConnected = node.app ? connectedApps.has(node.app) : false;
     const clusterPreviewing = node.app ? previewApp === node.app : false;
-    const showActionLit = clusterConnected || clusterPreviewing; // 連接或預覽中
-    const actionUsed = node.used === true; // U17: 是否曾使用過
-    // U17: 已使用 = 實心深色，未使用 = 淡色（同 App 已連接時）
+    const showActionLit = clusterConnected || clusterPreviewing;
+    const actionUsed = node.used === true;
+    // 暗底上：已用亮綠光點，未用暗綠光點，未連接暗灰光點
     const actionColor = showActionLit
-      ? (actionUsed ? TEAL : '#A7D8C8') // 已用:深綠, 未用:淡綠
-      : GRAY;
-    const actionOpacity = showActionLit
-      ? (actionUsed ? 0.9 : (clusterPreviewing ? 0.4 : 0.5))
-      : 0.5;
-    const baseOpacity = showActionLit ? 1 : 0.3;
-    const finalOpacity = dimmedBySearch ? 0.08 : dimmedByHover ? 0.1 : baseOpacity;
+      ? (actionUsed ? TEAL : TEAL_DIM)
+      : '#334155';
+    const baseOpacity = showActionLit ? (actionUsed ? 1 : 0.5) : 0.2;
+    const finalOpacity = dimmedBySearch ? 0.05 : dimmedByHover ? 0.08 : baseOpacity;
 
     return (
       <g key={node.id} opacity={finalOpacity} style={{ cursor: 'pointer', transition: 'opacity 300ms' }}
@@ -519,15 +531,24 @@ export function SkillTreeCanvas() {
         onMouseEnter={() => setHoveredNode(node.id)}
         onMouseLeave={() => setHoveredNode(null)}
       >
+        {/* glow 底層 */}
+        {showActionLit && actionUsed && (
+          <circle cx={node.x} cy={node.y} r={dotR + 4}
+            fill={actionColor} opacity={0.15}
+            style={{ filter: 'blur(4px)' }}
+          />
+        )}
+        {/* 光點本體 */}
         <circle cx={node.x} cy={node.y} r={dotR}
           fill={actionColor}
-          opacity={actionOpacity}
-          style={{ transition: 'r 150ms, fill 300ms, opacity 300ms' }}
+          style={{ transition: 'r 150ms, fill 300ms' }}
         />
+        {/* hover 光環 */}
         {isHovered && (
-          <circle cx={node.x} cy={node.y} r={dotR + 4}
+          <circle cx={node.x} cy={node.y} r={dotR + 6}
             fill="none" stroke={actionColor}
-            strokeWidth={1.5} opacity={0.5}
+            strokeWidth={1} opacity={0.4}
+            style={{ filter: 'blur(2px)' }}
           />
         )}
       </g>
@@ -540,10 +561,10 @@ export function SkillTreeCanvas() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center w-full h-screen bg-white">
+      <div className="flex items-center justify-center w-full h-screen" style={{ background: BG_DARK }}>
         <div className="text-center space-y-4">
-          <div className="w-12 h-12 border-4 border-gray-200 border-t-[#1D9E75] rounded-full animate-spin mx-auto" />
-          <p className="text-gray-400 font-mono text-sm">載入技能樹…</p>
+          <div className="w-12 h-12 border-2 border-slate-700 border-t-emerald-400 rounded-full animate-spin mx-auto" />
+          <p className="text-slate-500 font-mono text-sm">Loading skill map…</p>
         </div>
       </div>
     );
@@ -551,19 +572,19 @@ export function SkillTreeCanvas() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center w-full h-screen bg-white">
+      <div className="flex items-center justify-center w-full h-screen" style={{ background: BG_DARK }}>
         <div className="text-center space-y-3 max-w-md px-4">
-          <p className="text-red-500 font-semibold">載入失敗</p>
-          <p className="text-gray-400 text-sm">{error}</p>
+          <p className="text-red-400 font-semibold">載入失敗</p>
+          <p className="text-slate-500 text-sm">{error}</p>
           <button onClick={() => { setError(null); setLoading(true); window.location.reload(); }}
-            className="px-4 py-2 bg-black text-white text-sm rounded-md hover:bg-gray-800">重試</button>
+            className="px-4 py-2 bg-slate-800 text-slate-200 text-sm rounded-md hover:bg-slate-700 border border-slate-600">重試</button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-white select-none">
+    <div className="relative w-full h-screen overflow-hidden select-none" style={{ background: BG_DARK }}>
       <div
         ref={containerRef} className="w-full h-full"
         onWheel={handleWheel}
@@ -577,11 +598,21 @@ export function SkillTreeCanvas() {
       >
         <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
           <defs>
-            <pattern id="dotGrid" width="24" height="24" patternUnits="userSpaceOnUse">
-              <circle cx="12" cy="12" r="1" fill="#E5E7EB" />
+            {/* 暗底星塵點陣 */}
+            <pattern id="dotGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <circle cx="20" cy="20" r="0.5" fill="#1E293B" opacity="0.8" />
             </pattern>
+            {/* 發光效果用 filter */}
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
           </defs>
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+            <rect x="-5000" y="-5000" width="10000" height="10000" fill={BG_DARK} />
             <rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#dotGrid)" />
             {edges.map((e, i) => renderEdge(e, i))}
             {nodes.filter(n => n.type === 'skill').map(renderNode)}
@@ -593,20 +624,24 @@ export function SkillTreeCanvas() {
 
       {/* Tooltip — hover action 或 combo 時顯示 */}
       {hoveredNodeData && (hoveredNodeData.type === 'skill' || hoveredNodeData.type === 'combo') && tooltipPos && (
-        <div className="fixed z-50 pointer-events-none px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg max-w-xs"
-          style={{ left: tooltipPos.x + 16, top: tooltipPos.y - 8 }}
+        <div className="fixed z-50 pointer-events-none px-3 py-2.5 text-xs rounded-lg max-w-xs border border-slate-700/50"
+          style={{
+            left: tooltipPos.x + 16, top: tooltipPos.y - 8,
+            background: 'rgba(15, 23, 42, 0.95)',
+            backdropFilter: 'blur(12px)',
+            boxShadow: '0 0 20px rgba(0,0,0,0.5)',
+          }}
         >
-          <div className="font-semibold font-mono mb-0.5">{hoveredNodeData.label}</div>
-          <div className="text-gray-300 leading-snug">{hoveredNodeData.description}</div>
+          <div className="font-semibold font-mono mb-0.5 text-slate-200">{hoveredNodeData.label}</div>
+          <div className="text-slate-400 leading-snug">{hoveredNodeData.description}</div>
           {hoveredNodeData.descriptionEn && (
-            <div className="text-gray-500 leading-snug mt-0.5 text-[10px]">{hoveredNodeData.descriptionEn}</div>
+            <div className="text-slate-600 leading-snug mt-0.5 text-[10px]">{hoveredNodeData.descriptionEn}</div>
           )}
           {hoveredNodeData.app && (
-            <div className="text-gray-500 text-[10px] mt-1 font-mono">{hoveredNodeData.app}</div>
+            <div className="text-slate-600 text-[10px] mt-1 font-mono">{hoveredNodeData.app}</div>
           )}
-          {/* combo hover 顯示前置條件摘要 */}
           {hoveredIsCombo && hoveredNodeData.prerequisites && (
-            <div className="text-gray-400 text-[10px] mt-1 border-t border-gray-700 pt-1">
+            <div className="text-slate-500 text-[10px] mt-1 border-t border-slate-700/50 pt-1">
               需要：{hoveredNodeData.prerequisites.map(p => p.label).join('、')}
             </div>
           )}
