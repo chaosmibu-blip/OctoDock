@@ -463,6 +463,12 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
           <div className="flex gap-2 items-center flex-wrap">
             <LanguageSwitcher />
             <Link
+              href="/operations"
+              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {t("nav.operations")}
+            </Link>
+            <Link
               href="/bots"
               className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
             >

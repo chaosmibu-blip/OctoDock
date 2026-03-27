@@ -83,6 +83,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.bots": "Bot 設定",
     "nav.skill_tree": "技能樹",
     "nav.memory": "記憶",
+    "nav.operations": "操作記錄",
+    "nav.blog": "Blog",
 
     // Apps
     "app.notion.desc": "搜尋、建立、更新頁面和資料庫",
@@ -673,6 +675,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.bots": "Bots",
     "nav.skill_tree": "Skill Tree",
     "nav.memory": "Memory",
+    "nav.operations": "Operations",
+    "nav.blog": "Blog",
 
     // Apps
     "app.notion.desc": "Search, create, and update pages and databases",
