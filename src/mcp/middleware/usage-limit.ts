@@ -15,7 +15,7 @@ const FREE_MONTHLY_LIMIT = 1000;
 /** 取得當前月份字串（yyyy-mm，台灣時間 UTC+8） */
 function getCurrentMonth(): string {
   const now = new Date();
-  // 轉台灣時間
+  // UTC+8（台灣無日光節約，固定偏移即可）
   const tw = new Date(now.getTime() + 8 * 60 * 60 * 1000);
   const year = tw.getUTCFullYear();
   const month = String(tw.getUTCMonth() + 1).padStart(2, "0");

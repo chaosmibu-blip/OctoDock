@@ -21,7 +21,11 @@ interface LLMMessage {
   content: string;
 }
 
-// Main entry: generate and send auto-reply
+/**
+ * Bot 自動回覆主流程
+ * 接收用戶訊息 → 載入對話歷史和記憶 → 呼叫 LLM 生成回覆 → 送回平台
+ * 整個流程：存訊息 → 查歷史 → 查記憶 → 組 prompt → 呼叫 LLM → 存回覆 → 送出 → 記 log
+ */
 export async function handleAutoReply(ctx: AutoReplyContext): Promise<void> {
   // 1. Store incoming message in conversation history
   await db.insert(conversations).values({
@@ -91,6 +95,10 @@ export async function handleAutoReply(ctx: AutoReplyContext): Promise<void> {
     .catch((err) => console.error("Failed to log auto-reply:", err));
 }
 
+/**
+ * 組合 LLM 訊息陣列：system prompt（含記憶上下文）+ 對話歷史
+ * 記憶以 Markdown 列表附加在 system prompt 尾部
+ */
 function buildMessages(
   systemPrompt: string | null,
   memories: Array<{ key: string; value: string }>,
@@ -121,6 +129,7 @@ function buildMessages(
   return messages;
 }
 
+/** 根據 provider 路由到對應的 LLM API（openai/gpt → OpenAI，其餘 → Claude） */
 async function callLLM(
   provider: string,
   apiKey: string,
@@ -133,11 +142,12 @@ async function callLLM(
   return callClaude(apiKey, messages);
 }
 
+/** 呼叫 Anthropic Messages API，system message 獨立傳入（Claude 格式要求） */
 async function callClaude(
   apiKey: string,
   messages: LLMMessage[],
 ): Promise<string> {
-  // Extract system message
+  // system message 從陣列中分離（Claude API 要求 system 和 messages 分開傳）
   const systemMsg = messages.find((m) => m.role === "system");
   const chatMessages = messages
     .filter((m) => m.role !== "system")
@@ -148,7 +158,7 @@ async function callClaude(
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      "anthropic-version": "2023-06-01", // Anthropic Messages API 穩定版，向前相容新模型
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",

@@ -3,11 +3,17 @@ import { operations } from "@/db/schema";
 import { eq, desc, sql, and, gte } from "drizzle-orm";
 import { storeMemory } from "./memory-engine";
 
-// Auto-preference inference: analyze operations to discover user patterns
-// Runs periodically or after a batch of operations
+// ============================================================
+// 偏好推斷服務
+// 分析 operations 表的歷史數據，自動發現用戶的使用模式
+// 由 memory-maintenance.ts 在每次操作後非同步觸發（每用戶每小時最多一次）
+// ============================================================
 
-
-
+/**
+ * 從操作歷史推斷用戶偏好，存入 memory
+ * 三種分析：1. 常用工具（≥3 次的標記為 frequent）2. App 使用排名 3. 近 7 天活動摘要
+ * @returns 本次儲存的記憶數量
+ */
 export async function inferPreferences(userId: string): Promise<number> {
   let memoriesStored = 0;
 
@@ -103,8 +109,7 @@ export async function inferPreferences(userId: string): Promise<number> {
     memoriesStored++;
   }
 
-  // 4. Cross-app patterns — 已移除（原本依賴 task_id 欄位，但該欄位從未寫入過資料）
-  // 未來若需要跨 App 關聯分析，可改用時間視窗分組（同一 session 內的操作）
+
 
   return memoriesStored;
 }

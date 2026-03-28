@@ -10,6 +10,12 @@ const refreshLocks = new Map<string, Promise<string>>();
 /** refresh lock 逾時時間（毫秒），超時自動釋放避免死鎖 */
 const REFRESH_LOCK_TIMEOUT_MS = 10_000;
 
+/**
+ * 取得用戶某 App 的有效 access token
+ * 自動處理：過期前 5 分鐘提前 refresh、並發 refresh 用 lock 去重、refresh 失敗標記 expired
+ * @returns 解密後的 access token
+ * @throws 未連結/已過期/refresh 失敗時拋出帶錯誤碼的 Error
+ */
 export async function getValidToken(
   userId: string,
   appName: string,
@@ -74,6 +80,11 @@ export async function getValidToken(
   return decrypt(app.accessToken);
 }
 
+/**
+ * 用 refresh token 換新的 access token，並更新 DB
+ * 呼叫 adapter 的 refreshToken() 方法，成功後加密存回 connected_apps
+ * 失敗時將 status 標記為 expired，要求用戶重新連結
+ */
 async function refreshAndUpdateToken(
   userId: string,
   appName: string,

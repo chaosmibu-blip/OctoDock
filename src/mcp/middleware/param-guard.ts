@@ -627,8 +627,8 @@ export function checkParams(
       return val === undefined || val === null || val === "";
     });
     if (missing.length > 0) {
-      // 反查 action 名稱（從 toolName 推回）
-      const actionName = toolName.replace(/^[^_]+_/, ""); // 簡易推導
+      // 從 toolName 推導 action 名稱：去掉 app 前綴（如 "notion_search" → "search"）
+      const actionName = toolName.replace(/^[^_]+_/, "");
       return {
         blocked: true,
         error: `${app}.${actionName} 缺少必填參數：${missing.join(", ")}。Use octodock_help(app:"${app}", action:"${actionName}") to see required params.`,

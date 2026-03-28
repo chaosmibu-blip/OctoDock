@@ -119,8 +119,8 @@ export async function getErrorPattern(
     if (rows.length === 0) return null;
 
     const data = JSON.parse(rows[0].value);
-    // 只在有意義的錯誤次數時才回傳提示（避免偶發錯誤污染）
-    if ((data.count ?? 0) < 2) return null;
+    // 發生過 1 次就提示，讓 AI 第一時間知道歷史錯誤
+    if ((data.count ?? 0) < 1) return null;
 
     return `⚠️ This action has failed ${data.count} times recently. Last error: "${data.lastError}"`;
   } catch {

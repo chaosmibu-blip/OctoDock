@@ -13,8 +13,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 // - 新用戶保護：operations 資料不足 7 天不發 warning
 // ============================================================
 
-/** 基線異常倍數閾值（超過日均 N 倍才發 warning） */
-/** 基線異常倍數閾值提高到 3 倍，搭配 >10 次門檻，減少低頻操作的雜訊 warning */
+/** 基線異常倍數閾值：今日次數 > 日均 × 此倍數 AND 今日次數 > 10 時才發 warning（兩個條件都要滿足） */
 const ANOMALY_MULTIPLIER = parseFloat(process.env.POST_CHECK_ANOMALY_MULTIPLIER ?? "3");
 
 /** 修正 pattern 偵測的時間窗口（毫秒） */

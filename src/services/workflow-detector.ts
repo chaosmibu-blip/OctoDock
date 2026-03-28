@@ -1,12 +1,11 @@
 import { db } from "@/db";
 import { operations } from "@/db/schema";
-import { eq, and, gte } from "drizzle-orm";
+import { eq, and, gte, desc } from "drizzle-orm";
 
 // ============================================================
 // 工作流自動辨識引擎
-// 從用戶的操作記錄中自動偵測重複的多步驟操作流程
-// 偵測到重複 pattern → 靜默自動存成工作流
-// 下次 AI 做類似事時自然會從工作流裡找到
+// 從用戶的操作記錄中偵測多步驟操作序列，自動存成工作流
+// 不依賴 session 概念 — OctoDock 是無狀態的，只看操作序列
 // ============================================================
 
 /** 工作流候選建議 */
@@ -17,21 +16,24 @@ export interface WorkflowSuggestion {
   frequency: number;
 }
 
-/** 觸發偵測的最低重複次數 */
-const MIN_REPEAT_COUNT = 3;
-
 /** 分析的時間窗口（最近 14 天） */
 const ANALYSIS_WINDOW_DAYS = 14;
 
-/** 單次 session 的最大時間間隔（分鐘）— 超過這個間隔視為新 session */
-const SESSION_GAP_MINUTES = 30;
+/** 候選序列的最小步數 */
+const MIN_STEPS = 2;
+
+/** 候選序列的最大步數 */
+const MAX_STEPS = 5;
 
 /**
- * 檢查用戶是否有重複的操作模式，回傳 workflow 候選建議
- * 在每次 octodock_do 完成後呼叫，如果偵測到候選 workflow 就附在回傳裡
+ * 偵測用戶最近的操作是否構成多步驟工作流
+ * 每次 octodock_do 完成後呼叫
+ *
+ * 邏輯：取最近的操作序列，從中提取 2-5 步的連續子序列
+ * 找到最長的子序列，如果還沒存過就存成 workflow
  *
  * @param userId 用戶 ID
- * @returns workflow 候選建議，或 null
+ * @returns null（靜默存，不推建議給 AI）
  */
 export async function detectWorkflowCandidate(
   userId: string,
@@ -40,7 +42,7 @@ export async function detectWorkflowCandidate(
     const since = new Date();
     since.setDate(since.getDate() - ANALYSIS_WINDOW_DAYS);
 
-    // 取得最近的操作記錄（含 params，用於統計常用參數）
+    // 取最近的操作記錄（按時間倒序，取最新的一批）
     const recentOps = await db
       .select({
         appName: operations.appName,
@@ -56,29 +58,32 @@ export async function detectWorkflowCandidate(
           gte(operations.createdAt, since),
         ),
       )
-      .orderBy(operations.createdAt)
-      .limit(200);
+      .orderBy(desc(operations.createdAt))
+      .limit(50);
 
-    if (recentOps.length < MIN_REPEAT_COUNT * 2) return null;
+    if (recentOps.length < MIN_STEPS) return null;
 
-    // 按 session 分組（30 分鐘間隔 = 新 session）
-    const sessions = groupIntoSessions(recentOps);
-    if (sessions.length < MIN_REPEAT_COUNT) return null;
+    // 反轉為時間正序（舊→新），方便提取連續序列
+    recentOps.reverse();
 
-    // 提取每個 session 的 app.action 序列
-    const sequences = sessions.map((session) =>
-      session.map((op) => `${op.appName}.${op.action}`),
-    );
+    // 轉成 app.action 序列
+    const sequence = recentOps.map((op) => `${op.appName}.${op.action}`);
 
-    // 找出重複出現的子序列
-    const candidate = findRepeatingPattern(sequences);
+    // 從序列尾端（最新的操作）開始，取最長的 2-5 步子序列
+    // 跳過全部操作都相同的序列（如連續 5 次 search），因為那不是有意義的工作流
+    let candidate: { pattern: string[]; count: number } | null = null;
+
+    for (let len = Math.min(MAX_STEPS, sequence.length); len >= MIN_STEPS; len--) {
+      const sub = sequence.slice(sequence.length - len);
+      // 跳過全是同一個操作的序列（例如連續 5 次 search 不是有意義的工作流）
+      if (new Set(sub).size === 1) continue;
+      candidate = { pattern: sub, count: 1 };
+      break;
+    }
+
     if (!candidate) return null;
 
-    // 過濾太短的模式（至少 2 步）
-    if (candidate.pattern.length < 2) return null;
-
-    // workflow 命名：用完整流程的首尾步驟，讓名稱看得出整個流程在做什麼
-    // 例如 "notion.search → google_docs.insert_text" → "notion 搜尋 → google_docs 寫入"
+    // ── 命名 ──
     const VERB_MAP: Record<string, string> = {
       create_page: "建立頁面", append_content: "追加內容", replace_content: "替換內容",
       send: "寄信", create_event: "建立事件", create_task: "建立任務",
@@ -97,17 +102,15 @@ export async function detectWorkflowCandidate(
       ? `${firstApp}: ${firstVerb} → ${lastVerb}`
       : `${firstApp} ${firstVerb} → ${lastApp} ${lastVerb}`;
 
-    // I8/J4 最終修正：靜默自動存成 workflow，不問不提示
-    // U15: 存 workflow 前比對現有 workflow 的 action 序列，避免重複
+    // ── 存 workflow（去重 + 防重名） ──
     const patternKey = candidate.pattern.join(" → ");
     try {
       const { storeMemory, queryMemory, listMemory: lm } = await import("@/services/memory-engine");
 
-      // U15: 去重 — 比對現有 workflow 的 action 序列
+      // 去重：比對現有 workflow 的 action 序列
       const existingWorkflows = await lm(userId, "workflow");
       const candidateSequence = candidate.pattern.join(" → ");
       const isDuplicate = existingWorkflows.some((wf) => {
-        // 從 workflow 內容提取步驟序列
         const stepMatches = wf.value.match(/`octodock_do\(app:"([^"]+)", action:"([^"]+)"\)`/g);
         if (!stepMatches) return false;
         const existingSequence = stepMatches.map((m) => {
@@ -118,35 +121,29 @@ export async function detectWorkflowCandidate(
         return existingSequence === candidateSequence;
       });
 
-      if (isDuplicate) {
-        // 已有相同序列的 workflow，跳過
-        return null;
-      }
+      if (isDuplicate) return null;
 
-      // V8: 檢查是否已存過同名的 workflow，有重名就加數字後綴
+      // 防重名：有重名就加數字後綴
       let finalWorkflowName = workflowName;
       const existing = await queryMemory(userId, workflowName, "workflow");
       if (existing.find((r) => r.key === workflowName)) {
-        // 找到可用的數字後綴（例如 "notion: 追加內容 2"）
         let suffix = 2;
         while (existing.find((r) => r.key === `${workflowName} ${suffix}`)) {
           suffix++;
         }
         finalWorkflowName = `${workflowName} ${suffix}`;
       }
-      if (!existing.find((r) => r.key === finalWorkflowName)) {
-        // 統計每一步最常用的參數，區分固定值和動態值
-        const stepParams = analyzeStepParams(recentOps, candidate.pattern);
 
-        // 用最終 action 推斷流程描述
+      if (!existing.find((r) => r.key === finalWorkflowName)) {
+        // 統計每一步最常用的參數
+        const stepParams = analyzeStepParams(recentOps, candidate.pattern);
         const workflowDescription = inferWorkflowDescription(candidate.pattern);
 
-        // 自動產生 workflow 內容（Markdown 格式，含參數建議）
         const workflowContent = [
           `# ${finalWorkflowName}`,
           ``,
           workflowDescription,
-          `自動偵測的操作流程（出現 ${candidate.count} 次）`,
+          `自動偵測的操作流程`,
           `序列：${patternKey}`,
           ``,
           `## 步驟`,
@@ -171,7 +168,6 @@ export async function detectWorkflowCandidate(
       console.error("Auto workflow creation failed:", err);
     }
 
-    // 回傳 null — 不再產生 suggestion 推給 AI
     return null;
   } catch {
     return null;
@@ -189,86 +185,12 @@ interface OpRecord {
   createdAt: Date | null;
 }
 
-/** 按時間間隔將操作分組為 sessions */
-function groupIntoSessions(ops: OpRecord[]): OpRecord[][] {
-  const sessions: OpRecord[][] = [];
-  let currentSession: OpRecord[] = [];
-
-  for (let i = 0; i < ops.length; i++) {
-    if (i === 0) {
-      currentSession.push(ops[i]);
-      continue;
-    }
-
-    const prevTime = ops[i - 1].createdAt?.getTime() ?? 0;
-    const currTime = ops[i].createdAt?.getTime() ?? 0;
-    const gapMinutes = (currTime - prevTime) / (1000 * 60);
-
-    if (gapMinutes > SESSION_GAP_MINUTES) {
-      // 超過間隔，開啟新 session
-      if (currentSession.length >= 2) {
-        sessions.push(currentSession);
-      }
-      currentSession = [ops[i]];
-    } else {
-      currentSession.push(ops[i]);
-    }
-  }
-
-  // 最後一個 session
-  if (currentSession.length >= 2) {
-    sessions.push(currentSession);
-  }
-
-  return sessions;
-}
-
-/** 找出在多個 session 中重複出現的操作子序列 */
-function findRepeatingPattern(
-  sequences: string[][],
-): { pattern: string[]; count: number } | null {
-  // 提取所有長度 >= 2 的子序列，計算出現次數
-  const patternCounts = new Map<string, number>();
-
-  for (const seq of sequences) {
-    // 提取長度 2-5 的連續子序列
-    const seen = new Set<string>(); // 同一個 session 不重複計數
-    for (let len = 2; len <= Math.min(5, seq.length); len++) {
-      for (let start = 0; start <= seq.length - len; start++) {
-        const sub = seq.slice(start, start + len);
-        const key = sub.join(" → ");
-        if (!seen.has(key)) {
-          seen.add(key);
-          patternCounts.set(key, (patternCounts.get(key) ?? 0) + 1);
-        }
-      }
-    }
-  }
-
-  // 找出出現次數 >= MIN_REPEAT_COUNT 的最長模式
-  let best: { pattern: string[]; count: number } | null = null;
-
-  for (const [key, count] of patternCounts.entries()) {
-    if (count < MIN_REPEAT_COUNT) continue;
-    const pattern = key.split(" → ");
-    if (!best || pattern.length > best.pattern.length || (pattern.length === best.pattern.length && count > best.count)) {
-      best = { pattern, count };
-    }
-  }
-
-  return best;
-}
-
-// ============================================================
-// 參數分析 — 從操作歷史統計每一步的常用參數
-// ============================================================
-
 /** 參數提示：固定值 or 動態值 */
 interface ParamHint {
-  key: string; // 參數名稱
-  value: string; // 最常見的值（固定值）或空字串（動態值）
+  key: string;       // 參數名稱
+  value: string;     // 最常見的值（固定值）或空字串（動態值）
   isDynamic: boolean; // true = 每次不同（如 title），false = 固定值（如 repo）
-  description: string; // 動態值的描述（如「每次不同的標題」）
+  description: string; // 動態值的描述（如「每次不同」）
 }
 
 /** 不該出現在 workflow 參數提示裡的大型內容欄位 */
@@ -289,7 +211,6 @@ function analyzeStepParams(
 ): ParamHint[][] {
   return pattern.map((step) => {
     const [app, action] = step.split(".");
-    // 找出所有匹配這一步的操作
     const matchingOps = allOps.filter(
       (op) => op.appName === app && op.action === action && op.params,
     );
@@ -301,12 +222,9 @@ function analyzeStepParams(
       const params = op.params as Record<string, unknown> | null;
       if (!params) continue;
       for (const [key, val] of Object.entries(params)) {
-        // 跳過大型內容欄位
-        if (CONTENT_FIELDS.has(key)) continue;
-        // 跳過值太長的（超過 100 字元視為內容）
+        if (CONTENT_FIELDS.has(key)) continue; // 跳過大型內容欄位
         const strVal = typeof val === "string" ? val : JSON.stringify(val);
-        if (strVal.length > 100) continue;
-
+        if (strVal.length > 100) continue; // 跳過值太長的（超過 100 字元視為內容）
         if (!paramValues.has(key)) paramValues.set(key, new Map());
         const counts = paramValues.get(key)!;
         counts.set(strVal, (counts.get(strVal) ?? 0) + 1);
@@ -317,16 +235,11 @@ function analyzeStepParams(
     const hints: ParamHint[] = [];
     for (const [key, counts] of paramValues.entries()) {
       const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
-      // 找出最常見的值
       let topValue = "";
       let topCount = 0;
       for (const [val, cnt] of counts.entries()) {
-        if (cnt > topCount) {
-          topValue = val;
-          topCount = cnt;
-        }
+        if (cnt > topCount) { topValue = val; topCount = cnt; }
       }
-
       const ratio = topCount / total;
       if (ratio >= 0.7) {
         // 固定值：> 70% 的操作用同一個值
@@ -367,5 +280,5 @@ function inferWorkflowDescription(pattern: string[]): string {
   const apps = new Set(pattern.map((p) => p.split(".")[0]));
   const crossApp = apps.size > 1 ? `（跨 ${[...apps].join("+")}）` : "";
 
-  return `${firstDesc}後${lastDesc}的標準流程${crossApp}`;
+  return `${firstDesc}後${lastDesc}的操作流程${crossApp}`;
 }

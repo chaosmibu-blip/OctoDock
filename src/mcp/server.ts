@@ -260,9 +260,6 @@ function buildSummary(text: string, headLines: number, tailLines: number): strin
   return `[Metadata] ${metadata}\n\n` + head + `\n\n... (${omitted} lines omitted) ...\n\n` + tail;
 }
 
-/**
- * 清理過期的暫存回傳結果
- */
 /** 清理過期或無期限的暫存結果，防止 DB 膨脹 */
 async function cleanExpiredResults(): Promise<void> {
   await db.delete(storedResults).where(

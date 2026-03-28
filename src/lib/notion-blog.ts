@@ -153,37 +153,75 @@ export async function fetchPostBySlug(slug: string): Promise<BlogPost | null> {
   return extractPost(results[0]);
 }
 
-/**
- * 取得頁面內容（Notion blocks → Markdown）
- * 遞迴分頁拉取所有 blocks
- */
-export async function fetchPostContent(pageId: string): Promise<string> {
-  const blocks: Array<Record<string, unknown>> = [];
-  let cursor: string | undefined;
-  const MAX_BLOCKS = 500; // 防止無限迴圈
+// ============================================================
+// Block 拉取 — 遞迴拉取所有 block（含子 block）
+// ============================================================
 
-  // 分頁拉取所有 blocks
+interface NotionBlock {
+  id: string;
+  type: string;
+  has_children: boolean;
+  children?: NotionBlock[]; // 遞迴拉取後填入
+  [key: string]: unknown;
+}
+
+/** 拉取一個 block 的所有直接子 block（分頁） */
+async function fetchChildren(blockId: string): Promise<NotionBlock[]> {
+  const blocks: NotionBlock[] = [];
+  let cursor: string | undefined;
+  const MAX_BLOCKS = 500;
+
   while (blocks.length < MAX_BLOCKS) {
-    const url = `/blocks/${pageId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`;
+    const url = `/blocks/${blockId}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`;
     const data = await notionFetch(url);
     if (!data) break;
 
     const page = data as {
-      results: Array<Record<string, unknown>>;
+      results: NotionBlock[];
       has_more: boolean;
       next_cursor: string | null;
     };
 
     blocks.push(...page.results);
-
     if (!page.has_more || !page.next_cursor) break;
     cursor = page.next_cursor;
   }
 
-  return blocksToMarkdown(blocks);
+  return blocks;
 }
 
-// ── Notion blocks → Markdown 轉換（複用 notion.ts 的邏輯）──
+/** 遞迴拉取所有 block，包含子 block（最多 3 層深度） */
+async function fetchBlocksRecursive(blockId: string, depth = 0): Promise<NotionBlock[]> {
+  const blocks = await fetchChildren(blockId);
+  if (depth >= 3) return blocks; // 防止無限遞迴
+
+  // 並行拉取所有有子 block 的 block
+  const withChildren = blocks.filter((b) => b.has_children);
+  if (withChildren.length > 0) {
+    const childResults = await Promise.all(
+      withChildren.map((b) => fetchBlocksRecursive(b.id, depth + 1)),
+    );
+    for (let i = 0; i < withChildren.length; i++) {
+      withChildren[i].children = childResults[i];
+    }
+  }
+
+  return blocks;
+}
+
+/**
+ * 取得頁面內容（Notion blocks → Markdown）
+ * 遞迴拉取所有 blocks（含子 block），再轉 Markdown
+ */
+export async function fetchPostContent(pageId: string): Promise<string> {
+  const blocks = await fetchBlocksRecursive(pageId);
+  return blocksToMarkdown(blocks, 0);
+}
+
+// ============================================================
+// Notion blocks → Markdown 轉換
+// 支援巢狀結構、column layout、toggle 內容、embed 等
+// ============================================================
 
 /** 從 Notion rich_text 陣列提取純文字 */
 function richTextToPlain(richText: Array<{ plain_text: string }> | undefined): string {
@@ -199,6 +237,8 @@ function richTextToMarkdown(richText: Array<{
     italic?: boolean;
     strikethrough?: boolean;
     code?: boolean;
+    underline?: boolean;
+    color?: string;
   };
   href?: string | null;
 }> | undefined): string {
@@ -206,7 +246,7 @@ function richTextToMarkdown(richText: Array<{
   return richText.map((t) => {
     let text = t.plain_text;
     const a = t.annotations;
-    // 套用格式
+    // 套用格式（code 最內層，避免跟其他格式衝突）
     if (a?.code) text = `\`${text}\``;
     if (a?.bold) text = `**${text}**`;
     if (a?.italic) text = `*${text}*`;
@@ -217,118 +257,255 @@ function richTextToMarkdown(richText: Array<{
   }).join("");
 }
 
+/** 產生縮排前綴 */
+function indent(depth: number): string {
+  return "  ".repeat(depth);
+}
+
 /**
  * 將 Notion API blocks 轉換為 Markdown
- * 支援標題、段落、列表、程式碼、圖片、表格、引用、分隔線等
+ * 支援巢狀結構（透過 depth 參數控制縮排）
  */
-function blocksToMarkdown(blocks: Array<Record<string, unknown>>): string {
+function blocksToMarkdown(blocks: NotionBlock[], depth: number): string {
   const lines: string[] = [];
-  let inTable = false; // 追蹤是否在表格內
-  let tableRowIndex = 0;
+  let numberedIndex = 0; // 追蹤有序列表的序號
 
-  for (const block of blocks) {
-    const type = block.type as string;
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const type = block.type;
     const data = block[type] as Record<string, unknown> | undefined;
     if (!data) continue;
 
-    // 表格結束偵測
-    if (type !== "table_row" && inTable) {
-      inTable = false;
-      tableRowIndex = 0;
-    }
+    // 重置有序列表序號（當 block 類型不再是 numbered_list_item）
+    if (type !== "numbered_list_item") numberedIndex = 0;
 
-    // 用帶格式的 Markdown（粗體、斜體、連結等）
+    // 取得帶格式文字
     const text = richTextToMarkdown(data.rich_text as Array<{
       plain_text: string;
-      annotations?: { bold?: boolean; italic?: boolean; strikethrough?: boolean; code?: boolean };
+      annotations?: { bold?: boolean; italic?: boolean; strikethrough?: boolean; code?: boolean; underline?: boolean; color?: string };
       href?: string | null;
     }>);
 
+    const prefix = indent(depth);
+
     switch (type) {
+      // ── 標題 ──
       case "heading_1":
-        lines.push(`# ${text}`);
+        lines.push(`${prefix}# ${text}`);
         break;
       case "heading_2":
-        lines.push(`## ${text}`);
+        lines.push(`${prefix}## ${text}`);
         break;
       case "heading_3":
-        lines.push(`### ${text}`);
+        lines.push(`${prefix}### ${text}`);
         break;
+
+      // ── 文字 ──
       case "paragraph":
-        lines.push(text || "");
+        lines.push(`${prefix}${text || ""}`);
         break;
-      case "bulleted_list_item":
-        lines.push(`- ${text}`);
+
+      // ── 列表 ──
+      case "bulleted_list_item": {
+        lines.push(`${prefix}- ${text}`);
+        // 遞迴渲染子 block（巢狀列表）
+        if (block.children?.length) {
+          lines.push(blocksToMarkdown(block.children, depth + 1));
+        }
         break;
-      case "numbered_list_item":
-        lines.push(`1. ${text}`);
+      }
+      case "numbered_list_item": {
+        numberedIndex++;
+        lines.push(`${prefix}${numberedIndex}. ${text}`);
+        if (block.children?.length) {
+          lines.push(blocksToMarkdown(block.children, depth + 1));
+        }
         break;
+      }
       case "to_do": {
         const checked = data.checked ? "x" : " ";
-        lines.push(`- [${checked}] ${text}`);
+        lines.push(`${prefix}- [${checked}] ${text}`);
+        if (block.children?.length) {
+          lines.push(blocksToMarkdown(block.children, depth + 1));
+        }
         break;
       }
-      case "quote":
-        lines.push(`> ${text}`);
+
+      // ── 引用 / Callout ──
+      case "quote": {
+        // 每行都加 > 前綴
+        lines.push(`${prefix}> ${text}`);
+        if (block.children?.length) {
+          const childMd = blocksToMarkdown(block.children, 0);
+          // 子內容每行都加 > 前綴
+          for (const childLine of childMd.split("\n")) {
+            lines.push(`${prefix}> ${childLine}`);
+          }
+        }
         break;
+      }
       case "callout": {
         const icon = data.icon as { emoji?: string } | undefined;
-        const prefix = icon?.emoji ? `${icon.emoji} ` : "";
-        lines.push(`> ${prefix}${text}`);
+        const emoji = icon?.emoji ? `${icon.emoji} ` : "";
+        // callout 渲染為帶 emoji 的 blockquote
+        lines.push(`${prefix}> ${emoji}**${text}**`);
+        if (block.children?.length) {
+          const childMd = blocksToMarkdown(block.children, 0);
+          for (const childLine of childMd.split("\n")) {
+            lines.push(`${prefix}> ${childLine}`);
+          }
+        }
         break;
       }
+
+      // ── 程式碼 ──
       case "code": {
         const lang = (data.language as string) || "";
         const codeText = richTextToPlain(data.rich_text as Array<{ plain_text: string }>);
-        lines.push(`\`\`\`${lang}\n${codeText}\n\`\`\``);
+        lines.push(`${prefix}\`\`\`${lang}\n${codeText}\n\`\`\``);
         break;
       }
+
+      // ── Toggle（摺疊） ──
+      case "toggle": {
+        // 用 HTML details/summary 保留摺疊功能
+        lines.push(`${prefix}<details><summary>${text}</summary>`);
+        lines.push("");
+        if (block.children?.length) {
+          lines.push(blocksToMarkdown(block.children, depth));
+        }
+        lines.push(`${prefix}</details>`);
+        lines.push("");
+        break;
+      }
+
+      // ── 分隔線 ──
       case "divider":
-        lines.push("---");
+        lines.push(`${prefix}---`);
         break;
-      case "toggle":
-        lines.push(`<details><summary>${text}</summary></details>`);
-        break;
+
+      // ── 圖片 ──
       case "image": {
         const imgData = data as { type?: string; file?: { url: string }; external?: { url: string } };
         const url = imgData.file?.url || imgData.external?.url || "";
         const caption = richTextToPlain(data.caption as Array<{ plain_text: string }>);
-        lines.push(`![${caption}](${url})`);
-        break;
-      }
-      case "bookmark": {
-        const bmUrl = (data as { url?: string }).url || "";
-        const caption = richTextToPlain(data.caption as Array<{ plain_text: string }>);
-        lines.push(`[${caption || bmUrl}](${bmUrl})`);
-        break;
-      }
-      case "table": {
-        // table block 本身不含內容，子 blocks 是 table_row
-        // 標記進入表格狀態
-        inTable = true;
-        tableRowIndex = 0;
-        break;
-      }
-      case "table_row": {
-        const cells = data.cells as Array<Array<{ plain_text: string }>> | undefined;
-        if (cells) {
-          const row = cells.map((cell) => richTextToPlain(cell)).join(" | ");
-          lines.push(`| ${row} |`);
-          // 第一行後加分隔線
-          if (tableRowIndex === 0) {
-            lines.push(`| ${cells.map(() => "---").join(" | ")} |`);
-          }
-          tableRowIndex++;
+        if (url) {
+          lines.push(`${prefix}![${caption}](${url})`);
         }
         break;
       }
-      case "child_page": {
-        const title = (data as { title?: string }).title || "";
-        lines.push(`📄 ${title}`);
+
+      // ── 影片 ──
+      case "video": {
+        const vidData = data as { type?: string; file?: { url: string }; external?: { url: string } };
+        const url = vidData.external?.url || vidData.file?.url || "";
+        if (url) {
+          // YouTube / Vimeo 等外部影片用連結呈現
+          lines.push(`${prefix}[▶ 影片](${url})`);
+        }
         break;
       }
+
+      // ── 嵌入 ──
+      case "embed": {
+        const embedUrl = (data as { url?: string }).url || "";
+        if (embedUrl) {
+          lines.push(`${prefix}[🔗 嵌入內容](${embedUrl})`);
+        }
+        break;
+      }
+
+      // ── 書籤 ──
+      case "bookmark": {
+        const bmUrl = (data as { url?: string }).url || "";
+        const caption = richTextToPlain(data.caption as Array<{ plain_text: string }>);
+        lines.push(`${prefix}[${caption || bmUrl}](${bmUrl})`);
+        break;
+      }
+
+      // ── 檔案 ──
+      case "file": {
+        const fileData = data as { type?: string; file?: { url: string }; external?: { url: string }; name?: string };
+        const url = fileData.file?.url || fileData.external?.url || "";
+        const caption = richTextToPlain(data.caption as Array<{ plain_text: string }>);
+        if (url) {
+          lines.push(`${prefix}[📎 ${caption || fileData.name || "下載檔案"}](${url})`);
+        }
+        break;
+      }
+
+      // ── 表格 ──
+      case "table": {
+        // table 的子 block 是 table_row，已在遞迴時拉取
+        if (block.children?.length) {
+          for (let rowIdx = 0; rowIdx < block.children.length; rowIdx++) {
+            const row = block.children[rowIdx];
+            const rowData = row.table_row as { cells?: Array<Array<{ plain_text: string }>> } | undefined;
+            if (!rowData?.cells) continue;
+            const cells = rowData.cells.map((cell) => richTextToPlain(cell));
+            lines.push(`${prefix}| ${cells.join(" | ")} |`);
+            // 第一行後加分隔線
+            if (rowIdx === 0) {
+              lines.push(`${prefix}| ${cells.map(() => "---").join(" | ")} |`);
+            }
+          }
+          lines.push(""); // 表格後空行
+        }
+        break;
+      }
+
+      // ── Column Layout（多欄排版） ──
+      case "column_list": {
+        // 多欄在 Markdown 中無法完美呈現，改為依序渲染每一欄
+        if (block.children?.length) {
+          for (const column of block.children) {
+            if (column.children?.length) {
+              lines.push(blocksToMarkdown(column.children, depth));
+            }
+          }
+        }
+        break;
+      }
+      case "column": {
+        // column 單獨出現時直接渲染子內容
+        if (block.children?.length) {
+          lines.push(blocksToMarkdown(block.children, depth));
+        }
+        break;
+      }
+
+      // ── Synced Block ──
+      case "synced_block": {
+        // synced_block 的內容在子 block 中
+        if (block.children?.length) {
+          lines.push(blocksToMarkdown(block.children, depth));
+        }
+        break;
+      }
+
+      // ── 子頁面 ──
+      case "child_page": {
+        const title = (data as { title?: string }).title || "";
+        lines.push(`${prefix}📄 ${title}`);
+        break;
+      }
+
+      case "child_database": {
+        const title = (data as { title?: string }).title || "";
+        lines.push(`${prefix}📊 ${title}`);
+        break;
+      }
+
+      // ── 方程式 ──
+      case "equation": {
+        const expression = (data as { expression?: string }).expression || "";
+        lines.push(`${prefix}$$${expression}$$`);
+        break;
+      }
+
+      // ── 未知類型 ──
       default:
-        if (text) lines.push(text);
+        if (text) lines.push(`${prefix}${text}`);
         break;
     }
   }
