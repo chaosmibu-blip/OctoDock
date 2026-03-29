@@ -126,7 +126,8 @@ export async function POST(req: NextRequest) {
 
   // ── 自建安裝（spec + apiKey → 測試 → 儲存） ──
   const rawSpec = body.spec;
-  const apiKey = body.apiKey as string | undefined;
+  // 去除 API Key 中的換行、空格（用戶從終端複製常帶斷行）
+  const apiKey = (body.apiKey as string | undefined)?.replace(/\s+/g, "");
 
   if (!rawSpec) {
     return NextResponse.json({ error: "spec required" }, { status: 400 });

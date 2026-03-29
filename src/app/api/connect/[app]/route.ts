@@ -393,7 +393,8 @@ export async function POST(
   }
 
   // ── API key / Bot token ──
-  const token = body.token as string;
+  // 去除換行和多餘空白（用戶從終端複製常帶斷行）
+  const token = (body.token as string)?.replace(/\s+/g, "");
 
   if (!token) {
     return NextResponse.json(
