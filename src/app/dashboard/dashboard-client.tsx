@@ -529,7 +529,7 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
   const [customPromptCopied, setCustomPromptCopied] = useState(false);
   const copyCustomPrompt = useCallback(() => {
     // 簡化版 prompt — 直接在 Dashboard 用
-    const prompt = `Generate an OctoDock adapter spec JSON for an API. The spec must include: appName, displayName, baseUrl (HTTPS), actionMap, actions (with name, action, description, method, endpoint, params, responseFormat), skillOverview, errorHints, and auth (type + instructions for API key). Output ONLY valid JSON.`;
+    const prompt = `Generate an OctoDock adapter spec JSON for an API. The spec must include: appName, displayName, baseUrl (HTTPS), actionMap, actions (with name, action, description, method, endpoint, params, responseFormat), skillOverview, errorHints, and auth. The auth object must specify how the API authenticates: { type: "api_key", headerName: "the header name e.g. Authorization or X-API-Key", headerFormat: "the format e.g. Bearer {key} or just {key}", instructions: "where to get the key" }. If the API uses query string auth instead, use { type: "api_key", keyLocation: "query", queryParam: "the param name" }. Check the real API docs to get the correct auth method. Output ONLY valid JSON.`;
     navigator.clipboard.writeText(prompt);
     setCustomPromptCopied(true);
     setTimeout(() => setCustomPromptCopied(false), 2000);

@@ -32,6 +32,10 @@ Generate a JSON spec with this structure:
     "authorizeUrl": "(OAuth only) https://example.com/oauth/authorize",
     "tokenUrl": "(OAuth only) https://example.com/oauth/token",
     "scopes": ["(OAuth only) scope1", "scope2"],
+    "headerName": "(API Key only) Header name, e.g. Authorization, X-API-Key, Api-Token",
+    "headerFormat": "(API Key only) Value format, e.g. Bearer {key} or just {key}",
+    "keyLocation": "(API Key only) header (default) or query",
+    "queryParam": "(API Key only, if keyLocation=query) Query param name, e.g. api_key",
     "instructions": "(API Key only) Where to get the API key"
   },
   "actionMap": {
