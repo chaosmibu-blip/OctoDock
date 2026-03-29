@@ -45,13 +45,21 @@ async function anthropicRequest(
   token: string,
   body: unknown,
 ): Promise<unknown> {
+  // OAuth token（sk-ant-oat01-）用 Bearer header；API key（sk-ant-api03-）用 x-api-key header
+  const isOAuthToken = token.startsWith("sk-ant-oat01-");
+  const headers: Record<string, string> = {
+    "anthropic-version": "2023-06-01",
+    "Content-Type": "application/json",
+  };
+  if (isOAuthToken) {
+    headers["Authorization"] = `Bearer ${token}`;
+  } else {
+    headers["x-api-key"] = token;
+  }
+
   const res = await fetch(`${ANTHROPIC_API}${path}`, {
     method: "POST",
-    headers: {
-      "x-api-key": token,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(body),
   });
 

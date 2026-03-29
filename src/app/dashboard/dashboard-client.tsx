@@ -67,10 +67,10 @@ const APP_KEYS: Array<{ name: string; displayName: string; descKey: string; auth
   { name: "canva", displayName: "Canva", descKey: "app.canva.desc" },
   // 簡報
   { name: "gamma", displayName: "Gamma", descKey: "app.gamma.desc" },
-  // AI 語言模型
-  { name: "openai", displayName: "OpenAI", descKey: "app.openai.desc" },
-  { name: "anthropic", displayName: "Anthropic", descKey: "app.anthropic.desc", authType: "api_key" },
-  { name: "google_gemini", displayName: "Google Gemini", descKey: "app.google_gemini.desc" },
+  // AI 語言模型（OAuth 串接未完成，暫時隱藏）
+  // { name: "openai", displayName: "OpenAI", descKey: "app.openai.desc" },
+  // { name: "anthropic", displayName: "Anthropic", descKey: "app.anthropic.desc", authType: "api_key" },
+  // { name: "google_gemini", displayName: "Google Gemini", descKey: "app.google_gemini.desc" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin, usage }: DashboardProps) {
@@ -897,21 +897,21 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
                     <h3 className="text-sm text-gray-400 mb-1">{app.displayName}</h3>
                     <p className="text-[11px] text-gray-300 leading-snug mb-3">{t(app.descKey)}</p>
                     {isAiDualAuth ? (
-                      /* AI 雙重認證：OAuth 登入 + API Key / Setup Token */
+                      /* AI 雙重認證：訂閱帳號 + API Key */
                       <div className="space-y-2">
-                        {/* 模式切換 */}
+                        {/* 模式切換 tab */}
                         <div className="flex gap-1 mb-2">
                           <button
                             onClick={() => setAiAuthMode(prev => ({ ...prev, [app.name]: "oauth" }))}
                             className={`flex-1 px-2 py-1 text-[10px] rounded-md transition-colors ${currentAiMode === "oauth" ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
                           >
-                            {app.name === "anthropic" ? t("ai_auth.setup_token") : t("ai_auth.subscription")}
+                            {t("ai_auth.tab_subscription")}
                           </button>
                           <button
                             onClick={() => setAiAuthMode(prev => ({ ...prev, [app.name]: "apikey" }))}
                             className={`flex-1 px-2 py-1 text-[10px] rounded-md transition-colors ${currentAiMode === "apikey" ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
                           >
-                            API Key
+                            {t("ai_auth.tab_apikey")}
                           </button>
                         </div>
                         {currentAiMode === "oauth" && app.name !== "anthropic" ? (
@@ -921,10 +921,87 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
                             disabled={isConnecting}
                             className="w-full px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
-                            {isConnecting ? t("common.loading") : t("ai_auth.login_btn")}
+                            {isConnecting ? t("common.loading") : t(`ai_auth.login_btn.${app.name}`)}
                           </button>
+                        ) : currentAiMode === "oauth" && app.name === "anthropic" ? (
+                          /* Anthropic setup-token 分步引導（含複製按鈕 + token 格式驗證） */
+                          (() => {
+                            const tokenVal = tokenInputs[app.name] ?? "";
+                            const tokenHint = !tokenVal ? null
+                              : tokenVal.startsWith("sk-ant-oat01-") ? "valid"
+                              : tokenVal.startsWith("sk-ant-api") ? "apikey"
+                              : "invalid";
+                            return (
+                              <div className="space-y-2.5">
+                                {/* 步驟 ① 安裝 */}
+                                <div className="text-[10px]">
+                                  <p className="text-gray-500 font-medium mb-1">{t("ai_auth.anthropic_step1_title")}</p>
+                                  <p className="text-gray-400 mb-1">{t("ai_auth.anthropic_step1_desc")}</p>
+                                  <div className="flex items-center gap-1">
+                                    <code className="flex-1 bg-gray-50 text-gray-600 px-2 py-1 rounded font-mono text-[10px] select-all">npm install -g @anthropic-ai/claude-code</code>
+                                    <button
+                                      onClick={() => { navigator.clipboard.writeText("npm install -g @anthropic-ai/claude-code"); }}
+                                      className="px-1.5 py-1 text-[9px] text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100 rounded transition-colors shrink-0"
+                                      title={t("common.copy")}
+                                    >
+                                      {t("common.copy")}
+                                    </button>
+                                  </div>
+                                </div>
+                                {/* 步驟 ② 產生 token */}
+                                <div className="text-[10px]">
+                                  <p className="text-gray-500 font-medium mb-1">{t("ai_auth.anthropic_step2_title")}</p>
+                                  <p className="text-gray-400 mb-1">{t("ai_auth.anthropic_step2_desc")}</p>
+                                  <div className="flex items-center gap-1">
+                                    <code className="flex-1 bg-gray-50 text-gray-600 px-2 py-1 rounded font-mono text-[10px] select-all">claude setup-token</code>
+                                    <button
+                                      onClick={() => { navigator.clipboard.writeText("claude setup-token"); }}
+                                      className="px-1.5 py-1 text-[9px] text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100 rounded transition-colors shrink-0"
+                                      title={t("common.copy")}
+                                    >
+                                      {t("common.copy")}
+                                    </button>
+                                  </div>
+                                </div>
+                                {/* 步驟 ③ 貼上 */}
+                                <div className="text-[10px]">
+                                  <p className="text-gray-500 font-medium mb-1">{t("ai_auth.anthropic_step3_title")}</p>
+                                  <p className="text-gray-400 mb-1">{t("ai_auth.anthropic_step3_desc")}</p>
+                                </div>
+                                <div className="flex gap-1.5">
+                                  <input
+                                    type="password"
+                                    value={tokenVal}
+                                    onChange={(e) => setTokenInputs(prev => ({ ...prev, [app.name]: e.target.value }))}
+                                    onKeyDown={(e) => { if (e.key === "Enter" && tokenVal.trim()) submitToken(app.name); }}
+                                    placeholder="sk-ant-oat01-..."
+                                    className={`flex-1 min-w-0 px-2 py-1.5 text-[11px] border rounded-lg focus:outline-none focus:ring-1 font-mono ${
+                                      tokenHint === "valid" ? "border-green-300 focus:ring-green-400" :
+                                      tokenHint === "apikey" || tokenHint === "invalid" ? "border-amber-300 focus:ring-amber-400" :
+                                      "border-gray-300 focus:ring-[#0F6E56]"
+                                    }`}
+                                  />
+                                  <button
+                                    onClick={() => submitToken(app.name)}
+                                    disabled={!tokenVal.trim() || isSubmitting}
+                                    className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                                  >
+                                    {isSubmitting ? t("common.loading") : t("token_modal.submit")}
+                                  </button>
+                                </div>
+                                {/* token 格式即時回饋 */}
+                                {tokenHint === "valid" && <p className="text-[10px] text-green-600">{t("ai_auth.anthropic_token_valid")}</p>}
+                                {tokenHint === "apikey" && <p className="text-[10px] text-amber-600">{t("ai_auth.anthropic_token_apikey")}</p>}
+                                {tokenHint === "invalid" && <p className="text-[10px] text-amber-600">{t("ai_auth.anthropic_token_invalid")}</p>}
+                                {tokenError && tokenSubmitting === null && (
+                                  <p className="text-[10px] text-red-500">{tokenError}</p>
+                                )}
+                                <p className="text-[10px] text-gray-300">{t("ai_auth.anthropic_note")}</p>
+                              </div>
+                            );
+                          })()
                         ) : (
-                          /* API Key / Setup Token 貼上 */
+                          /* API Key 貼上 */
                           <div className="space-y-1.5">
                             <div className="flex gap-1.5">
                               <input
@@ -932,7 +1009,7 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
                                 value={tokenInputs[app.name] ?? ""}
                                 onChange={(e) => setTokenInputs(prev => ({ ...prev, [app.name]: e.target.value }))}
                                 onKeyDown={(e) => { if (e.key === "Enter" && tokenInputs[app.name]?.trim()) submitToken(app.name); }}
-                                placeholder={currentAiMode === "oauth" ? "sk-ant-oat01-..." : "sk-..."}
+                                placeholder="sk-..."
                                 className="flex-1 min-w-0 px-2 py-1.5 text-[11px] border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0F6E56] font-mono"
                               />
                               <button
@@ -946,11 +1023,7 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
                             {tokenError && tokenSubmitting === null && (
                               <p className="text-[10px] text-red-500">{tokenError}</p>
                             )}
-                            <p className="text-[10px] text-gray-300 whitespace-pre-line">
-                              {currentAiMode === "oauth" && app.name === "anthropic"
-                                ? t("ai_auth.anthropic_setup_hint")
-                                : t(`ai_auth.apikey_hint.${app.name}`)}
-                            </p>
+                            <p className="text-[10px] text-gray-300">{t(`ai_auth.apikey_hint.${app.name}`)}</p>
                           </div>
                         )}
                       </div>

@@ -54,6 +54,11 @@ export default async function BlogPage({
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-12">
+      {/* 返回首頁 */}
+      <Link href="/" className="text-sm text-gray-400 hover:text-gray-600 mb-8 inline-block">
+        ← 返回 OctoDock
+      </Link>
+
       {/* 頁面標題 */}
       <h1 className="text-3xl font-bold mb-2">OctoDock Blog</h1>
       <p className="text-gray-500 mb-8">
@@ -166,12 +171,6 @@ export default async function BlogPage({
         </div>
       )}
 
-      {/* 返回首頁 */}
-      <div className="mt-12 pt-8 border-t border-gray-100">
-        <Link href="/" className="text-sm text-gray-400 hover:text-gray-600">
-          ← 返回 OctoDock
-        </Link>
-      </div>
     </main>
   );
 }
