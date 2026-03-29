@@ -7,8 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { appSubmissions } from "@/db/schema";
 
-/* 通知 email（從環境變數讀取，不硬編碼） */
-const NOTIFY_EMAIL = process.env.FEEDBACK_EMAIL || "";
+/* 通知 email */
+const NOTIFY_EMAIL = process.env.FEEDBACK_EMAIL || "s8869420@gmail.com";
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     if (!appName?.trim()) {
       return NextResponse.json({ error: "App name required" }, { status: 400 });
     }
-    if (type === "request" && (!email?.trim() || !email.includes("@"))) {
+    if (!email?.trim() || !email.includes("@")) {
       return NextResponse.json({ error: "Valid email required" }, { status: 400 });
     }
 

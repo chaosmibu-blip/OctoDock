@@ -157,6 +157,7 @@ export function DevelopersClient() {
 
   /* Submit 表單 */
   const [subAppName, setSubAppName] = useState("");
+  const [subEmail, setSubEmail] = useState("");
   const [subSpec, setSubSpec] = useState("");
 
   /* 送出 request */
@@ -185,10 +186,11 @@ export function DevelopersClient() {
       const res = await fetch("/api/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "submit", appName: subAppName, email: "", adapterSpec: subSpec }),
+        body: JSON.stringify({ type: "submit", appName: subAppName, email: subEmail, adapterSpec: subSpec }),
       });
       if (res.ok) {
         setResult({ type: "success", message: t("dev.submit.review_submitted") });
+        setSubAppName(""); setSubEmail(""); setSubSpec("");
       } else { setResult({ type: "error" }); }
     } catch { setResult({ type: "error" }); }
     finally { setSubmitting(false); }
@@ -295,12 +297,20 @@ export function DevelopersClient() {
               <p className="text-sm text-gray-500 mt-1">{t("dev.submit.desc")}</p>
             </div>
 
-            {/* 步驟 ① App 名稱 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.app_name")}</label>
-              <input type="text" value={subAppName} onChange={(e) => setSubAppName(e.target.value)}
-                placeholder="Trello"
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]" />
+            {/* 步驟 ① App 名稱 + Email */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.app_name")}</label>
+                <input type="text" value={subAppName} onChange={(e) => setSubAppName(e.target.value)}
+                  placeholder="Trello"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.email")}</label>
+                <input type="email" value={subEmail} onChange={(e) => setSubEmail(e.target.value)}
+                  placeholder="dev@example.com"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]" />
+              </div>
             </div>
 
             {/* 步驟 ② 複製 Prompt */}
@@ -333,7 +343,7 @@ export function DevelopersClient() {
 
             {/* 提交審核 */}
             <button onClick={handleSubmitReview}
-              disabled={submitting || !specValid || !subAppName.trim()}
+              disabled={submitting || !specValid || !subAppName.trim() || !subEmail.includes("@")}
               className="w-full py-2.5 bg-[#1D9E75] text-white rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {submitting ? t("dev.common.submitting") : t("dev.submit.submit_review")}
             </button>
