@@ -30,47 +30,34 @@ interface DashboardProps {
   usage: UsageSummary;
 }
 
-/* App 定義清單 — 已上線的 */
+/* App 定義清單 — 已上線的（依 displayName 字母排序，中文用注音排序） */
 /* authType: 區分 OAuth（一鍵跳轉）和 token 類（卡片內嵌輸入框） */
 const APP_KEYS: Array<{ name: string; displayName: string; descKey: string; authType?: "bot_token" | "api_key" | "phone_auth" }> = [
-  // 筆記 / 文件
-  { name: "notion", displayName: "Notion", descKey: "app.notion.desc" },
-  { name: "google_docs", displayName: "Google Docs", descKey: "app.google_docs.desc" },
-  // 信箱
-  { name: "gmail", displayName: "Gmail", descKey: "app.gmail.desc" },
-  // 行事曆 / 待辦
-  { name: "google_calendar", displayName: "Google Calendar", descKey: "app.google_calendar.desc" },
-  { name: "google_tasks", displayName: "Google Tasks", descKey: "app.google_tasks.desc" },
-  // 雲端 / 試算表
-  { name: "google_drive", displayName: "Google Drive", descKey: "app.google_drive.desc" },
-  { name: "google_sheets", displayName: "Google Sheets", descKey: "app.google_sheets.desc" },
-  // 社群
-  { name: "youtube", displayName: "YouTube", descKey: "app.youtube.desc" },
-  // 開發
+  { name: "canva", displayName: "Canva", descKey: "app.canva.desc" },
+  { name: "anthropic", displayName: "Claude", descKey: "app.anthropic.desc", authType: "api_key" },
+  { name: "discord", displayName: "Discord", descKey: "app.discord.desc", authType: "bot_token" },
+  { name: "microsoft_excel", displayName: "Excel", descKey: "app.microsoft_excel.desc" },
+  { name: "gamma", displayName: "Gamma", descKey: "app.gamma.desc" },
   { name: "github", displayName: "GitHub", descKey: "app.github.desc" },
-  // 通訊
+  { name: "gmail", displayName: "Gmail", descKey: "app.gmail.desc" },
+  { name: "google_calendar", displayName: "Google Calendar", descKey: "app.google_calendar.desc" },
+  { name: "google_docs", displayName: "Google Docs", descKey: "app.google_docs.desc" },
+  { name: "google_drive", displayName: "Google Drive", descKey: "app.google_drive.desc" },
+  { name: "google_gemini", displayName: "Google Gemini", descKey: "app.google_gemini.desc" },
+  { name: "google_sheets", displayName: "Google Sheets", descKey: "app.google_sheets.desc" },
+  { name: "google_tasks", displayName: "Google Tasks", descKey: "app.google_tasks.desc" },
+  { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
   { name: "line", displayName: "LINE", descKey: "app.line.desc", authType: "api_key" },
+  { name: "notion", displayName: "Notion", descKey: "app.notion.desc" },
+  { name: "openai", displayName: "OpenAI", descKey: "app.openai.desc" },
+  { name: "microsoft_powerpoint", displayName: "PowerPoint", descKey: "app.microsoft_powerpoint.desc" },
+  { name: "slack", displayName: "Slack", descKey: "app.slack.desc" },
   { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc", authType: "bot_token" },
   { name: "telegram_user", displayName: "Telegram (User)", descKey: "app.telegram_user.desc", authType: "phone_auth" },
-  { name: "discord", displayName: "Discord", descKey: "app.discord.desc", authType: "bot_token" },
-  { name: "slack", displayName: "Slack", descKey: "app.slack.desc" },
-  // 社群
   { name: "threads", displayName: "Threads", descKey: "app.threads.desc" },
-  { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
-  // 待辦
   { name: "todoist", displayName: "Todoist", descKey: "app.todoist.desc" },
-  // Microsoft Office
-  { name: "microsoft_excel", displayName: "Excel", descKey: "app.microsoft_excel.desc" },
   { name: "microsoft_word", displayName: "Word", descKey: "app.microsoft_word.desc" },
-  { name: "microsoft_powerpoint", displayName: "PowerPoint", descKey: "app.microsoft_powerpoint.desc" },
-  // 設計
-  { name: "canva", displayName: "Canva", descKey: "app.canva.desc" },
-  // 簡報
-  { name: "gamma", displayName: "Gamma", descKey: "app.gamma.desc" },
-  // AI 語言模型（OAuth 串接未完成，暫時隱藏）
-  // { name: "openai", displayName: "OpenAI", descKey: "app.openai.desc" },
-  // { name: "anthropic", displayName: "Anthropic", descKey: "app.anthropic.desc", authType: "api_key" },
-  // { name: "google_gemini", displayName: "Google Gemini", descKey: "app.google_gemini.desc" },
+  { name: "youtube", displayName: "YouTube", descKey: "app.youtube.desc" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin, usage }: DashboardProps) {
