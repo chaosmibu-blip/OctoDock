@@ -69,6 +69,9 @@ export const APP_RATE_LIMITS: Record<string, { rps: number; description: string 
   microsoft_word: { rps: 4, description: "Microsoft Graph: ~4 requests/second per app+user" },
   microsoft_powerpoint: { rps: 4, description: "Microsoft Graph: ~4 requests/second per app+user" },
   gamma: { rps: 2, description: "Gamma API: estimated ~2 requests/second" },
+  openai: { rps: 3, description: "OpenAI API: ~3 requests/second (varies by tier)" },
+  anthropic: { rps: 2, description: "Anthropic API: ~2 requests/second (varies by tier)" },
+  google_gemini: { rps: 5, description: "Gemini API: ~5 requests/second (free tier)" },
 };
 
 // ── AI 設定 ──

@@ -106,6 +106,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.slack.desc": "發送訊息、管理頻道、使用者和釘選",
     "app.canva.desc": "管理設計、匯出 PDF/PNG、素材和資料夾",
     "app.gamma.desc": "AI 生成簡報、文件，支援匯出 PDF/PPTX/PNG",
+    "app.openai.desc": "發送訊息給 OpenAI，取得 AI 回覆或啟動 AI 對話",
+    "app.anthropic.desc": "發送訊息給 Anthropic Claude，取得 AI 回覆或啟動 AI 對話",
+    "app.google_gemini.desc": "發送訊息給 Google Gemini，取得 AI 回覆或啟動 AI 對話",
     "app.microsoft_excel.desc": "讀寫儲存格、建立表格和圖表、管理工作表",
     "app.microsoft_word.desc": "建立和讀取 Word 文件、匯出 PDF",
     "app.microsoft_powerpoint.desc": "建立簡報、讀取投影片內容、匯出 PDF",
@@ -528,6 +531,15 @@ const translations: Record<Locale, Record<string, string>> = {
     "token_modal.hint.discord": "從 Discord Developer Portal 取得 Bot Token",
     "token_modal.hint.line": "從 LINE Developers Console 取得 Channel Access Token",
 
+    // AI 雙重認證
+    "ai_auth.subscription": "訂閱帳號登入",
+    "ai_auth.setup_token": "訂閱 Token",
+    "ai_auth.login_btn": "使用訂閱帳號登入",
+    "ai_auth.anthropic_setup_hint": "執行 claude setup-token 取得 token（sk-ant-oat01-... 開頭），使用 Claude Pro/Max 訂閱額度",
+    "ai_auth.apikey_hint.openai": "從 platform.openai.com/api-keys 取得，按用量計費",
+    "ai_auth.apikey_hint.anthropic": "從 console.anthropic.com/settings/keys 取得，按用量計費",
+    "ai_auth.apikey_hint.google_gemini": "從 aistudio.google.com/apikey 取得，免費額度或按用量計費",
+
     // Phone auth 多步驟驗證
     "phone_auth.phone_placeholder": "+886912345678",
     "phone_auth.send_code": "發送驗證碼",
@@ -698,6 +710,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "app.slack.desc": "Send messages, manage channels, users, and pins",
     "app.canva.desc": "Manage designs, export PDF/PNG, assets, and folders",
     "app.gamma.desc": "AI-generated presentations and documents, export PDF/PPTX/PNG",
+    "app.openai.desc": "Send messages to OpenAI, get AI responses or start AI conversations",
+    "app.anthropic.desc": "Send messages to Anthropic Claude, get AI responses or start AI conversations",
+    "app.google_gemini.desc": "Send messages to Google Gemini, get AI responses or start AI conversations",
     "app.microsoft_excel.desc": "Read/write cells, create tables and charts, manage worksheets",
     "app.microsoft_word.desc": "Create and read Word documents, export PDF",
     "app.microsoft_powerpoint.desc": "Create presentations, read slide content, export PDF",
@@ -1119,6 +1134,15 @@ const translations: Record<Locale, Record<string, string>> = {
     "token_modal.hint.telegram": "Get Bot Token from @BotFather",
     "token_modal.hint.discord": "Get Bot Token from Discord Developer Portal",
     "token_modal.hint.line": "Get Channel Access Token from LINE Developers Console",
+
+    // AI dual auth
+    "ai_auth.subscription": "Subscription Login",
+    "ai_auth.setup_token": "Subscription Token",
+    "ai_auth.login_btn": "Sign in with subscription",
+    "ai_auth.anthropic_setup_hint": "Run claude setup-token to get a token (starts with sk-ant-oat01-...), uses your Claude Pro/Max subscription quota",
+    "ai_auth.apikey_hint.openai": "Get from platform.openai.com/api-keys, pay-per-use",
+    "ai_auth.apikey_hint.anthropic": "Get from console.anthropic.com/settings/keys, pay-per-use",
+    "ai_auth.apikey_hint.google_gemini": "Get from aistudio.google.com/apikey, free tier or pay-per-use",
 
     // Phone auth multi-step verification
     "phone_auth.phone_placeholder": "+886912345678",

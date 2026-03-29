@@ -29,6 +29,7 @@ import {
   getUserSummary,
 } from "@/services/memory-maintenance";
 import { cleanExpiredData } from "@/services/db-cleanup";
+import { resolveSession, buildSessionGuide } from "@/mcp/session";
 import type { DoResult } from "@/adapters/types";
 
 // ============================================================
@@ -287,7 +288,7 @@ const usedAppsThisSession = new Map<string, Set<string>>();
  * 將 DoResult 序列化為 JSON，控制欄位順序讓 AI 優先看到問題
  * 替代所有 JSON.stringify(result)，確保偏差資訊排在最前面
  */
-function serializeDoResult(result: DoResult): string {
+function serializeDoResult(result: DoResult, sessionSeq?: number | null): string {
   const ordered: Record<string, unknown> = {};
 
   // ── 第一層（AI 最先看到）：偏差和問題 ──
@@ -311,6 +312,11 @@ function serializeDoResult(result: DoResult): string {
   // ── 第三層（AI 最後看到）：OctoDock 元資訊 ──
   if (result.context) ordered.context = result.context;
   if (result.nextSuggestion) ordered.nextSuggestion = result.nextSuggestion;
+
+  // ── Session 引導 ──
+  if (sessionSeq) {
+    ordered.session = buildSessionGuide(sessionSeq);
+  }
 
   return JSON.stringify(ordered);
 }
@@ -366,6 +372,11 @@ function registerDoTool(
       let result: DoResult;
       const startTime = Date.now();
 
+      // ── 通用 Session 機制 ──
+      // 解析 intent 尾部的 +N，找到或建立 session
+      const sessionInfo = intent ? await resolveSession(userId, intent).catch(() => null) : null;
+      const cleanIntent = sessionInfo?.cleanIntent ?? intent;
+
       // ── 事件圖譜：因果偵測 ──
       // 因果的本質：「這筆操作用了前面某筆操作的結果」
       // 判斷方式：當前 params 裡有沒有引用前面操作 result 中的 ID
@@ -414,15 +425,17 @@ function registerDoTool(
             toolName: opts?.toolName ?? "unknown",
             action,
             params,
-            intent,
+            intent: cleanIntent,
             result: { ok: r.ok, error: r.error, summary: r.summary, code: r.errorCode },
             success: r.ok,
             durationMs: Date.now() - startTime,
             parentOperationId: _parentOperationId,
+            sessionSeq: sessionInfo?.sessionSeq ?? undefined,
+            sessionId: sessionInfo?.sessionId ?? undefined,
           });
         }
         return {
-          content: [{ type: "text" as const, text: serializeDoResult(r) }],
+          content: [{ type: "text" as const, text: serializeDoResult(r, sessionInfo?.sessionSeq ?? null) }],
         };
       }
 
@@ -579,9 +592,9 @@ function registerDoTool(
       // ── 工作流 intent 匹配 ──
       // 用 intent 語意搜尋匹配的工作流，讓 AI 知道以前做過類似的多步驟流程
       let matchedWorkflow: string | null = null;
-      if (intent) {
+      if (cleanIntent) {
         try {
-          const wfMemories = await queryMemory(userId, intent, "workflow", undefined, 1);
+          const wfMemories = await queryMemory(userId, cleanIntent, "workflow", undefined, 1);
           if (wfMemories.length > 0) {
             matchedWorkflow = wfMemories[0].value;
           }
@@ -706,6 +719,15 @@ function registerDoTool(
         }
       }
 
+      // ── AI 對話注入：converse action 需要跨 App 的 userId 和 token 取得函式 ──
+      if (resolvedAction === "converse" && /^(openai|anthropic|google_gemini)$/.test(app)) {
+        translatedParams._userId = userId;
+        translatedParams._getToken = async (targetApp: string) => {
+          const { getValidToken } = await import("@/services/token-manager");
+          return getValidToken(userId, targetApp);
+        };
+      }
+
       // 透過 middleware 執行（取 token → 呼叫 API → 記錄日誌）
       const toolResult = await executeWithMiddleware(
         userId,
@@ -713,7 +735,7 @@ function registerDoTool(
         toolName,
         translatedParams,
         (p, t) => adapter.execute(toolName, p, t),
-        { prefetchedToken: token, intent },
+        { prefetchedToken: token, intent: cleanIntent, sessionSeq: sessionInfo?.sessionSeq, sessionId: sessionInfo?.sessionId },
       );
       // executeWithMiddleware 內部已記錄，標記避免出口函式重複記錄
       _alreadyLogged = true;
@@ -818,7 +840,7 @@ function registerDoTool(
       if (result.ok) {
         try {
           // intent 優先作為記憶查詢關鍵字（更精準），fallback 到 title/action
-          const keyword = intent || result.title || (translatedParams.title as string) || (translatedParams.subject as string) || action;
+          const keyword = cleanIntent || result.title || (translatedParams.title as string) || (translatedParams.subject as string) || action;
           const relatedMemory = await queryMemory(userId, `${app} ${keyword}`, undefined, undefined, 2);
           const relevantMemories = relatedMemory.filter(
             (m) => m.category !== "context" || !m.key.startsWith("id:"),
@@ -846,8 +868,8 @@ function registerDoTool(
           result.error = `[OctoDock/API issue] ${result.error}\nThis is not a parameter error — OctoDock is handling it.`;
         } else {
           // AI 呼叫錯誤 → 附上 intent 幫助修正
-          if (intent) {
-            result.error = `${result.error}\n\n[Your intent] "${intent}" — check if your parameters match this intent.`;
+          if (cleanIntent) {
+            result.error = `${result.error}\n\n[Your intent] "${cleanIntent}" — check if your parameters match this intent.`;
           }
         }
       }
@@ -998,7 +1020,7 @@ function registerDoTool(
           const isReadAction = /^(get|read|search|download|list|query|fetch)/.test(action);
           if (isReadAction && dataStr.length > 1000) {
             // 檢查 intent 是否暗示要搬到其他 App
-            const intentLower = (intent ?? "").toLowerCase();
+            const intentLower = (cleanIntent ?? "").toLowerCase();
             const transferPatterns = /搬|移|複製|copy|transfer|寫入|寫進|貼到|放到|存到|匯入|import|paste|move|送到|傳到|轉到/;
             const otherAppMentioned = connectedAppNames.some(
               (name) => name !== app && intentLower.includes(name.replace(/_/g, " ")),
@@ -1086,8 +1108,8 @@ function registerDoTool(
 
       // ── 必經路徑：意圖偏差偵測 ──
       // 比對 intent 和實際結果，偵測 AI 可能遺漏的步驟
-      if (intent && result.ok) {
-        const intentLower = intent.toLowerCase();
+      if (cleanIntent && result.ok) {
+        const intentLower = cleanIntent.toLowerCase();
         // 偵測 intent 提到的關鍵概念是否有對應的參數
         // 例如 intent 提到 "project" 但 params 沒帶 project 相關參數
         const intentKeywords = [

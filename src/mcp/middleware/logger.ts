@@ -24,6 +24,8 @@ import {
 export interface MiddlewareOptions {
   prefetchedToken?: string | null; // 預取的 token，避免重複呼叫 getValidToken
   intent?: string | null; // AI 描述的操作目的（追蹤填寫率）
+  sessionSeq?: number | null; // 通用 Session：預分配的自動遞增編號
+  sessionId?: string | null; // 通用 Session：同 session 共用的 UUID
 }
 
 /**
@@ -85,6 +87,8 @@ export async function executeWithMiddleware(
       result: resultSummary,
       success: true,
       durationMs: Date.now() - startTime,
+      sessionSeq: options?.sessionSeq ?? undefined,
+      sessionId: options?.sessionId ?? undefined,
     });
 
     // B4: 操作成功，記錄 circuit breaker 成功
@@ -124,6 +128,8 @@ export async function executeWithMiddleware(
       },
       success: false,
       durationMs: Date.now() - startTime,
+      sessionSeq: options?.sessionSeq ?? undefined,
+      sessionId: options?.sessionId ?? undefined,
     });
 
     // 回傳 MCP 格式的錯誤結果（帶結構化錯誤資訊）

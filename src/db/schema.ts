@@ -102,6 +102,8 @@ export const operations = pgTable(
     success: boolean("success").default(true),
     durationMs: integer("duration_ms"),
     parentOperationId: uuid("parent_operation_id"), // 事件圖譜：這個操作是因為哪個操作觸發的
+    sessionSeq: integer("session_seq"), // 通用 Session：自動遞增編號，AI 透過 intent +N 引用
+    sessionId: uuid("session_id"), // 通用 Session：同 session 共用的 UUID
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
@@ -215,6 +217,31 @@ export const storedResults = pgTable(
   (table) => [
     index("idx_stored_results_user").on(table.userId),
     index("idx_stored_results_expires").on(table.expiresAt),
+  ],
+);
+
+// ============================================================
+// 4.8.1 ai_conversations（AI 對話紀錄）
+// 兩個 AI 服務之間的多輪對話紀錄
+// ============================================================
+export const aiConversations = pgTable(
+  "ai_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    initiatorApp: text("initiator_app").notNull(),
+    partnerApp: text("partner_app").notNull(),
+    round: integer("round").notNull(),
+    speaker: text("speaker").notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_ai_conversations_conv_id").on(table.conversationId),
+    index("idx_ai_conversations_user").on(table.userId, table.createdAt),
   ],
 );
 

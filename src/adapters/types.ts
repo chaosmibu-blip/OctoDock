@@ -119,8 +119,9 @@ export interface AppAdapter {
   displayName: Record<string, string>; // 多語系顯示名稱：{ zh: 'Notion', en: 'Notion' }
   icon: string; // 圖示識別碼
 
-  authType: "oauth2" | "api_key" | "bot_token" | "phone_auth"; // 使用的認證方式
-  authConfig: AuthConfig; // 認證設定細節
+  authType: "oauth2" | "api_key" | "bot_token" | "phone_auth"; // 主要認證方式
+  authConfig: AuthConfig; // 主要認證設定
+  altAuthConfig?: AuthConfig; // 備用認證設定（例如 OAuth 主要 + API Key 備用）
 
   tools: ToolDefinition[]; // 內部工具定義（用於 execute 的路由）
 

@@ -67,6 +67,10 @@ const APP_KEYS: Array<{ name: string; displayName: string; descKey: string; auth
   { name: "canva", displayName: "Canva", descKey: "app.canva.desc" },
   // 簡報
   { name: "gamma", displayName: "Gamma", descKey: "app.gamma.desc" },
+  // AI 語言模型
+  { name: "openai", displayName: "OpenAI", descKey: "app.openai.desc" },
+  { name: "anthropic", displayName: "Anthropic", descKey: "app.anthropic.desc", authType: "api_key" },
+  { name: "google_gemini", displayName: "Google Gemini", descKey: "app.google_gemini.desc" },
 ];
 
 export function DashboardClient({ user, connectedApps, origin, usage }: DashboardProps) {
@@ -107,6 +111,8 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
   /* Token 內嵌輸入狀態（bot_token / api_key 類 App 卡片用） */
   const [tokenInputs, setTokenInputs] = useState<Record<string, string>>({});
   const [tokenSubmitting, setTokenSubmitting] = useState<string | null>(null);
+  /* AI 雙重認證：切換 OAuth 登入 / API Key 貼上 */
+  const [aiAuthMode, setAiAuthMode] = useState<Record<string, "oauth" | "apikey">>({});
   const [tokenError, setTokenError] = useState<string | null>(null);
   /* Phone auth 多步驟狀態（telegram_user 等） */
   const [phoneAuth, setPhoneAuth] = useState<Record<string, {
@@ -479,6 +485,12 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
               className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
             >
               {t("nav.memory")}
+            </Link>
+            <Link
+              href="/blog"
+              className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {t("nav.blog")}
             </Link>
             <button
               onClick={() => { window.location.href = "/api/auth/signout"; }}
@@ -877,11 +889,72 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
                 const isPhoneAuth = app.authType === "phone_auth";
                 const isSubmitting = tokenSubmitting === app.name;
                 const pa = phoneAuth[app.name]; // phone auth state
+                // AI 雙重認證：有 OAuth + API Key 兩種連接方式的 App
+                const isAiDualAuth = ["openai", "anthropic", "google_gemini"].includes(app.name);
+                const currentAiMode = aiAuthMode[app.name] ?? (app.authType === "api_key" ? "apikey" : "oauth");
                 return (
                   <div key={app.name} className="rounded-lg border border-dashed border-gray-300 bg-white p-4">
                     <h3 className="text-sm text-gray-400 mb-1">{app.displayName}</h3>
                     <p className="text-[11px] text-gray-300 leading-snug mb-3">{t(app.descKey)}</p>
-                    {isPhoneAuth ? (
+                    {isAiDualAuth ? (
+                      /* AI 雙重認證：OAuth 登入 + API Key / Setup Token */
+                      <div className="space-y-2">
+                        {/* 模式切換 */}
+                        <div className="flex gap-1 mb-2">
+                          <button
+                            onClick={() => setAiAuthMode(prev => ({ ...prev, [app.name]: "oauth" }))}
+                            className={`flex-1 px-2 py-1 text-[10px] rounded-md transition-colors ${currentAiMode === "oauth" ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                          >
+                            {app.name === "anthropic" ? t("ai_auth.setup_token") : t("ai_auth.subscription")}
+                          </button>
+                          <button
+                            onClick={() => setAiAuthMode(prev => ({ ...prev, [app.name]: "apikey" }))}
+                            className={`flex-1 px-2 py-1 text-[10px] rounded-md transition-colors ${currentAiMode === "apikey" ? "bg-black text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                          >
+                            API Key
+                          </button>
+                        </div>
+                        {currentAiMode === "oauth" && app.name !== "anthropic" ? (
+                          /* OAuth 登入按鈕（OpenAI / Gemini） */
+                          <button
+                            onClick={() => connectApp(app.name)}
+                            disabled={isConnecting}
+                            className="w-full px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {isConnecting ? t("common.loading") : t("ai_auth.login_btn")}
+                          </button>
+                        ) : (
+                          /* API Key / Setup Token 貼上 */
+                          <div className="space-y-1.5">
+                            <div className="flex gap-1.5">
+                              <input
+                                type="password"
+                                value={tokenInputs[app.name] ?? ""}
+                                onChange={(e) => setTokenInputs(prev => ({ ...prev, [app.name]: e.target.value }))}
+                                onKeyDown={(e) => { if (e.key === "Enter" && tokenInputs[app.name]?.trim()) submitToken(app.name); }}
+                                placeholder={currentAiMode === "oauth" ? "sk-ant-oat01-..." : "sk-..."}
+                                className="flex-1 min-w-0 px-2 py-1.5 text-[11px] border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0F6E56] font-mono"
+                              />
+                              <button
+                                onClick={() => submitToken(app.name)}
+                                disabled={!tokenInputs[app.name]?.trim() || isSubmitting}
+                                className="px-3 py-1.5 text-[11px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                              >
+                                {isSubmitting ? t("common.loading") : t("token_modal.submit")}
+                              </button>
+                            </div>
+                            {tokenError && tokenSubmitting === null && (
+                              <p className="text-[10px] text-red-500">{tokenError}</p>
+                            )}
+                            <p className="text-[10px] text-gray-300 whitespace-pre-line">
+                              {currentAiMode === "oauth" && app.name === "anthropic"
+                                ? t("ai_auth.anthropic_setup_hint")
+                                : t(`ai_auth.apikey_hint.${app.name}`)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : isPhoneAuth ? (
                       /* phone_auth 類：多步驟手機驗證 */
                       !pa ? (
                         /* 尚未開始 → 顯示「連接」按鈕 */

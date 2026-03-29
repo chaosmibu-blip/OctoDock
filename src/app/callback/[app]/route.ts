@@ -98,13 +98,17 @@ async function exchangeCode(
   }
 
   // Google/Meta use form-urlencoded + POST body credentials
+  const clientId = getOAuthClientId(appName);
+  const clientSecret = getOAuthClientSecret(appName);
   const bodyParams: Record<string, string> = {
     grant_type: "authorization_code",
     code,
     redirect_uri: redirectUri,
-    client_id: getOAuthClientId(appName),
-    client_secret: getOAuthClientSecret(appName),
+    client_id: clientId,
   };
+  // 公開客戶端（PKCE only，無 client_secret）：OpenAI Codex 等
+  // 有 client_secret 才加入，沒有就只靠 PKCE code_verifier 驗證
+  if (clientSecret) bodyParams.client_secret = clientSecret;
   // U21: PKCE — 如果有 code_verifier 就加入
   if (codeVerifier) bodyParams.code_verifier = codeVerifier;
 
