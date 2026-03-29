@@ -190,11 +190,11 @@ export function DevelopersClient() {
       });
       if (res.ok) {
         setResult({ type: "success", message: t("dev.submit.review_submitted") });
-        setSubAppName(""); setSubEmail(""); setSubSpec("");
+        setSubAppName(""); setSubEmail(""); setSubSpec(""); setSpecError(null);
       } else { setResult({ type: "error" }); }
     } catch { setResult({ type: "error" }); }
     finally { setSubmitting(false); }
-  }, [subAppName, subSpec, t]);
+  }, [subAppName, subEmail, subSpec, t]);
 
   /* 複製 prompt */
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
