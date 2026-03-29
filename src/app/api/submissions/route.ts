@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     if (!appName?.trim()) {
       return NextResponse.json({ error: "App name required" }, { status: 400 });
     }
-    if (!email?.trim() || !email.includes("@")) {
+    if (type === "request" && (!email?.trim() || !email.includes("@"))) {
       return NextResponse.json({ error: "Valid email required" }, { status: 400 });
     }
 

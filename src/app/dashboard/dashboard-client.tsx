@@ -34,7 +34,6 @@ interface DashboardProps {
 /* authType: 區分 OAuth（一鍵跳轉）和 token 類（卡片內嵌輸入框） */
 const APP_KEYS: Array<{ name: string; displayName: string; descKey: string; authType?: "bot_token" | "api_key" | "phone_auth" }> = [
   { name: "canva", displayName: "Canva", descKey: "app.canva.desc" },
-  { name: "anthropic", displayName: "Claude", descKey: "app.anthropic.desc", authType: "api_key" },
   { name: "discord", displayName: "Discord", descKey: "app.discord.desc", authType: "bot_token" },
   { name: "microsoft_excel", displayName: "Excel", descKey: "app.microsoft_excel.desc" },
   { name: "gamma", displayName: "Gamma", descKey: "app.gamma.desc" },
@@ -43,13 +42,11 @@ const APP_KEYS: Array<{ name: string; displayName: string; descKey: string; auth
   { name: "google_calendar", displayName: "Google Calendar", descKey: "app.google_calendar.desc" },
   { name: "google_docs", displayName: "Google Docs", descKey: "app.google_docs.desc" },
   { name: "google_drive", displayName: "Google Drive", descKey: "app.google_drive.desc" },
-  { name: "google_gemini", displayName: "Google Gemini", descKey: "app.google_gemini.desc" },
   { name: "google_sheets", displayName: "Google Sheets", descKey: "app.google_sheets.desc" },
   { name: "google_tasks", displayName: "Google Tasks", descKey: "app.google_tasks.desc" },
   { name: "instagram", displayName: "Instagram", descKey: "app.instagram.desc" },
   { name: "line", displayName: "LINE", descKey: "app.line.desc", authType: "api_key" },
   { name: "notion", displayName: "Notion", descKey: "app.notion.desc" },
-  { name: "openai", displayName: "OpenAI", descKey: "app.openai.desc" },
   { name: "microsoft_powerpoint", displayName: "PowerPoint", descKey: "app.microsoft_powerpoint.desc" },
   { name: "slack", displayName: "Slack", descKey: "app.slack.desc" },
   { name: "telegram", displayName: "Telegram", descKey: "app.telegram.desc", authType: "bot_token" },

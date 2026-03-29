@@ -49,10 +49,10 @@ async function importAllAdapters(): Promise<void> {
     import("@/adapters/gamma"),
     // 任務管理
     import("@/adapters/todoist"),
-    // AI 語言模型
-    import("@/adapters/openai"),
-    import("@/adapters/anthropic"),
-    import("@/adapters/google-gemini"),
+    // AI 語言模型（已下架：各家封鎖第三方 OAuth，API Key 用戶太少）
+    // import("@/adapters/openai"),
+    // import("@/adapters/anthropic"),
+    // import("@/adapters/google-gemini"),
   ]);
 
   for (const result of modules) {
