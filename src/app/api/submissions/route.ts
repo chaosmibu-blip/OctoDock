@@ -31,11 +31,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Reason required for app request" }, { status: 400 });
     }
 
-    /* submit 類型需要 API 文件和 adapter 規格 */
+    /* submit 類型需要 adapter 規格 */
     if (type === "submit") {
-      if (!apiDocsUrl?.trim()) {
-        return NextResponse.json({ error: "API docs URL required" }, { status: 400 });
-      }
       if (!adapterSpec?.trim()) {
         return NextResponse.json({ error: "Adapter spec required" }, { status: 400 });
       }

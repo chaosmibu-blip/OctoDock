@@ -110,6 +110,14 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
     loading: boolean;
     error: string;
   }>>({});
+  /* 自訂 Adapter 狀態 */
+  const [customSpec, setCustomSpec] = useState("");
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [customInstalling, setCustomInstalling] = useState(false);
+  const [customResult, setCustomResult] = useState<{ type: "success" | "error" | "testing"; message?: string; testResult?: Record<string, unknown> } | null>(null);
+  const [customAdaptersList, setCustomAdaptersList] = useState<Array<{ id: string; appName: string; displayName: string; shareCode: string | null }>>([]);
+  const [showCustomSection, setShowCustomSection] = useState(false);
+
   const router = useRouter();
   const { t } = useI18n();
 
@@ -442,6 +450,93 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
       setDeleting(false);
     }
   }, [deleteInput, t]);
+
+  /* ── 自訂 Adapter 操作 ── */
+
+  /** 載入已安裝的 custom adapters */
+  const loadCustomAdapters = useCallback(async () => {
+    try {
+      const res = await fetch("/api/custom-adapters");
+      if (res.ok) {
+        const data = await res.json();
+        setCustomAdaptersList(data.map((d: Record<string, unknown>) => ({
+          id: d.id, appName: d.appName ?? d.app_name, displayName: d.displayName ?? d.display_name, shareCode: d.shareCode ?? d.share_code,
+        })));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // 首次載入
+  useEffect(() => { loadCustomAdapters(); }, [loadCustomAdapters]);
+
+  /** 驗證並安裝自訂 Adapter */
+  const handleCustomInstall = useCallback(async () => {
+    if (!customSpec.trim()) return;
+    setCustomInstalling(true);
+    setCustomResult({ type: "testing", message: t("custom.testing") });
+    try {
+      const res = await fetch("/api/custom-adapters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spec: customSpec, apiKey: customApiKey || undefined }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCustomResult({
+          type: "success",
+          message: t("custom.installed").replace("{app}", data.displayName || data.appName),
+          testResult: data.testResult,
+        });
+        setCustomSpec("");
+        setCustomApiKey("");
+        loadCustomAdapters();
+        router.refresh();
+      } else {
+        setCustomResult({
+          type: "error",
+          message: data.error || "Install failed",
+          testResult: data.testResult,
+        });
+      }
+    } catch {
+      setCustomResult({ type: "error", message: "Network error" });
+    } finally {
+      setCustomInstalling(false);
+    }
+  }, [customSpec, customApiKey, loadCustomAdapters, router, t]);
+
+  /** 移除自訂 Adapter */
+  const removeCustomAdapter = useCallback(async (id: string, appName: string) => {
+    try {
+      await fetch(`/api/custom-adapters/${id}`, { method: "DELETE" });
+      // 也斷開連接
+      await fetch(`/api/connect/${appName}`, { method: "DELETE" });
+      loadCustomAdapters();
+      router.refresh();
+    } catch { /* ignore */ }
+  }, [loadCustomAdapters, router]);
+
+  /** 切換分享 */
+  const toggleShare = useCallback(async (id: string, currentShareCode: string | null) => {
+    try {
+      const res = await fetch(`/api/custom-adapters/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: currentShareCode ? "unshare" : "share" }),
+      });
+      if (res.ok) loadCustomAdapters();
+    } catch { /* ignore */ }
+  }, [loadCustomAdapters]);
+
+  /** 複製自訂 Adapter 提示詞 */
+  const [customPromptCopied, setCustomPromptCopied] = useState(false);
+  const copyCustomPrompt = useCallback(() => {
+    // 簡化版 prompt — 直接在 Dashboard 用
+    const prompt = `Generate an OctoDock adapter spec JSON for an API. The spec must include: appName, displayName, baseUrl (HTTPS), actionMap, actions (with name, action, description, method, endpoint, params, responseFormat), skillOverview, errorHints, and auth (type + instructions for API key). Output ONLY valid JSON.`;
+    navigator.clipboard.writeText(prompt);
+    setCustomPromptCopied(true);
+    setTimeout(() => setCustomPromptCopied(false), 2000);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#faf9f6] py-6 px-4">
@@ -1147,6 +1242,129 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
             </Link>
           </div>
         )}
+
+        {/* ── 自訂 Adapter ── */}
+        <div className="mt-6">
+          <button
+            onClick={() => setShowCustomSection((v) => !v)}
+            className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <span>{showCustomSection ? "▾" : "▸"}</span>
+            <span>{t("custom.toggle")}</span>
+          </button>
+
+          {showCustomSection && (
+            <div className="mt-3 rounded-lg border border-gray-200 bg-white p-4 space-y-4">
+              {/* 已安裝的 custom adapters */}
+              {customAdaptersList.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-medium text-gray-500 mb-2">{t("custom.installed_title")}</h3>
+                  <div className="space-y-2">
+                    {customAdaptersList.map((ca) => (
+                      <div key={ca.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-gray-700">{ca.displayName}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded">{t("custom.badge")}</span>
+                          {isConnected(ca.appName) && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-600 rounded">{t("custom.connected")}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {ca.shareCode ? (
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(ca.shareCode!); }}
+                              className="text-[10px] text-blue-500 hover:text-blue-700"
+                              title={ca.shareCode}
+                            >
+                              {t("custom.copy_code")}
+                            </button>
+                          ) : null}
+                          <button
+                            onClick={() => toggleShare(ca.id, ca.shareCode)}
+                            className="text-[10px] text-gray-400 hover:text-gray-600"
+                          >
+                            {ca.shareCode ? t("custom.unshare") : t("custom.share")}
+                          </button>
+                          <button
+                            onClick={() => removeCustomAdapter(ca.id, ca.appName)}
+                            className="text-[10px] text-red-400 hover:text-red-600"
+                          >
+                            {t("custom.remove")}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 安裝新的 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-medium text-gray-500">{t("custom.install_title")}</h3>
+                  <button onClick={copyCustomPrompt} className="text-[10px] text-[#1D9E75] hover:text-[#0F6E56]">
+                    {customPromptCopied ? t("custom.prompt_copied") : t("custom.copy_prompt")}
+                  </button>
+                </div>
+
+                <textarea
+                  value={customSpec}
+                  onChange={(e) => setCustomSpec(e.target.value)}
+                  placeholder={t("custom.spec_placeholder")}
+                  rows={5}
+                  className="w-full px-3 py-2 text-xs font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1D9E75] resize-none"
+                />
+
+                <div className="mt-2">
+                  <label className="block text-[10px] text-gray-400 mb-1">
+                    {t("custom.apikey_label")}
+                  </label>
+                  <input
+                    type="password"
+                    value={customApiKey}
+                    onChange={(e) => setCustomApiKey(e.target.value)}
+                    placeholder={t("custom.apikey_placeholder")}
+                    className="w-full px-3 py-1.5 text-xs font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
+                  />
+                </div>
+
+                {/* 風險提示 */}
+                <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <p className="text-[10px] text-amber-800 font-medium">{t("custom.risk_title")}</p>
+                  <p className="text-[10px] text-amber-700 mt-0.5">{t("custom.risk_desc")}</p>
+                </div>
+
+                <button
+                  onClick={handleCustomInstall}
+                  disabled={customInstalling || !customSpec.trim()}
+                  className="mt-3 w-full py-2 text-xs bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {customInstalling ? t("custom.testing") : customApiKey.trim() ? t("custom.verify_install") : t("custom.install_only")}
+                </button>
+
+                {/* 結果 */}
+                {customResult && (
+                  <div className={`mt-2 px-3 py-2 rounded-lg text-[11px] ${
+                    customResult.type === "success" ? "bg-green-50 text-green-700" :
+                    customResult.type === "testing" ? "bg-blue-50 text-blue-600" :
+                    "bg-red-50 text-red-600"
+                  }`}>
+                    <p>{customResult.message}</p>
+                    {customResult.testResult && (() => {
+                      const tr = customResult.testResult as Record<string, unknown>;
+                      return (
+                        <p className="mt-1 text-[10px] opacity-75">
+                          {`${tr.status} | ${tr.latencyMs}ms`}
+                          {tr.preview ? <span className="block mt-0.5 font-mono truncate">{String(tr.preview).substring(0, 100)}</span> : null}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* ── U23: 危險區域 — 刪除帳號 ── #9: 統一 rounded-lg */}
         <div className="rounded-lg border border-red-200 bg-red-50/50 p-4 mt-6">

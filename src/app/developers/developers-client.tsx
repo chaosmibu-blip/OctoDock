@@ -4,36 +4,36 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useI18n, LanguageSwitcher } from "@/lib/i18n";
 
-/* ── AI Prompt 模板（開發者複製給 AI 用） ── */
-function buildPrompt(appName: string, apiDocsUrl: string, authType: string): string {
-  const authLabel =
-    authType === "oauth_own" ? "OAuth 2.0 (developer-provided)"
-    : authType === "api_key" ? "API Key / Bot Token"
-    : "OAuth 2.0 (OctoDock will create the OAuth App)";
-
+/* ── AI Prompt 模板 ── */
+function buildPrompt(appName: string): string {
   const name = appName || "[APP_NAME]";
 
   return `I need to write an adapter spec for integrating "${name}" with OctoDock, a unified MCP server that lets AI agents operate multiple apps through two tools: octodock_do(app, action, params) and octodock_help(app, action).
-
-API documentation: ${apiDocsUrl || "[PASTE_API_DOCS_URL_HERE]"}
 
 ## What OctoDock needs from each adapter
 
 Each adapter defines:
 1. **actionMap** — maps simple action names (e.g. "publish") to internal tool names (e.g. "threads_publish")
 2. **actions** — each action's API endpoint, HTTP method, parameters, and how to format the response for AI
-3. **skill descriptions** — short help text shown when AI calls octodock_help(app, action)
-4. **error hints** — common API errors mapped to user-friendly messages
+3. **auth** — how users authenticate (OAuth 2.0 URLs and scopes, or API Key instructions)
+4. **skill descriptions** — short help text shown when AI calls octodock_help(app, action)
+5. **error hints** — common API errors mapped to user-friendly messages
 
 ## Output format
 
 Generate a JSON spec with this structure:
 
 {
-  "appName": "${name}",
+  "appName": "${name.toLowerCase().replace(/[^a-z0-9]/g, "_")}",
   "displayName": "${name}",
-  "authType": "${authLabel}",
   "baseUrl": "https://api.example.com",
+  "auth": {
+    "type": "oauth2 or api_key",
+    "authorizeUrl": "(OAuth only) https://example.com/oauth/authorize",
+    "tokenUrl": "(OAuth only) https://example.com/oauth/token",
+    "scopes": ["(OAuth only) scope1", "scope2"],
+    "instructions": "(API Key only) Where to get the API key"
+  },
   "actionMap": {
     "simple_action_name": "internal_tool_name"
   },
@@ -67,8 +67,13 @@ Generate a JSON spec with this structure:
 {
   "appName": "threads",
   "displayName": "Threads",
-  "authType": "OAuth 2.0",
   "baseUrl": "https://graph.threads.net/v1.0",
+  "auth": {
+    "type": "oauth2",
+    "authorizeUrl": "https://threads.net/oauth/authorize",
+    "tokenUrl": "https://graph.threads.net/oauth/access_token",
+    "scopes": ["threads_basic", "threads_content_publish", "threads_read_replies", "threads_manage_replies", "threads_manage_insights"]
+  },
   "actionMap": {
     "publish": "threads_publish",
     "get_posts": "threads_get_posts",
@@ -129,17 +134,16 @@ Generate a JSON spec with this structure:
 - errorHints: include 3-5 common API error patterns with user-friendly messages
 - Include 10-30 actions covering the most useful operations
 - Group actions by resource type in the array
+- auth section must include real OAuth URLs/scopes or API key instructions for this specific app
 
 Output ONLY the JSON code block, no extra explanation.`;
 }
 
 export function DevelopersClient() {
   const { t } = useI18n();
-  /* 當前 tab */
   const [tab, setTab] = useState<"request" | "submit">("request");
-  /* 表單狀態 */
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<"success" | "error" | null>(null);
+  const [result, setResult] = useState<{ type: "success" | "error"; message?: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
   /* Request 表單 */
@@ -149,91 +153,73 @@ export function DevelopersClient() {
 
   /* Submit 表單 */
   const [subAppName, setSubAppName] = useState("");
-  const [subApiDocs, setSubApiDocs] = useState("");
-  const [subEmail, setSubEmail] = useState("");
-  const [subAuthType, setSubAuthType] = useState("oauth_octodock");
-  const [subAuthDetails, setSubAuthDetails] = useState("");
   const [subSpec, setSubSpec] = useState("");
 
-  /* 送出 */
-  const handleSubmit = useCallback(async () => {
+  /* 送出 request */
+  const handleRequest = useCallback(async () => {
     setSubmitting(true);
     setResult(null);
-
-    const body = tab === "request"
-      ? { type: "request", appName: reqAppName, email: reqEmail, reason: reqReason }
-      : { type: "submit", appName: subAppName, email: subEmail, apiDocsUrl: subApiDocs, authType: subAuthType, authDetails: subAuthDetails, adapterSpec: subSpec };
-
     try {
       const res = await fetch("/api/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ type: "request", appName: reqAppName, email: reqEmail, reason: reqReason }),
       });
       if (res.ok) {
-        setResult("success");
-        /* 清空表單 */
-        if (tab === "request") { setReqAppName(""); setReqReason(""); setReqEmail(""); }
-        else { setSubAppName(""); setSubApiDocs(""); setSubEmail(""); setSubAuthDetails(""); setSubSpec(""); }
-      } else {
-        setResult("error");
-      }
-    } catch {
-      setResult("error");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [tab, reqAppName, reqReason, reqEmail, subAppName, subApiDocs, subEmail, subAuthType, subAuthDetails, subSpec]);
+        setResult({ type: "success" });
+        setReqAppName(""); setReqReason(""); setReqEmail("");
+      } else { setResult({ type: "error" }); }
+    } catch { setResult({ type: "error" }); }
+    finally { setSubmitting(false); }
+  }, [reqAppName, reqReason, reqEmail]);
 
-  /* 複製 prompt（用 ref 追蹤 timer，避免 memory leak） */
+  /* 提交審核 */
+  const handleSubmitReview = useCallback(async () => {
+    setSubmitting(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "submit", appName: subAppName, email: "", adapterSpec: subSpec }),
+      });
+      if (res.ok) {
+        setResult({ type: "success", message: t("dev.submit.review_submitted") });
+      } else { setResult({ type: "error" }); }
+    } catch { setResult({ type: "error" }); }
+    finally { setSubmitting(false); }
+  }, [subAppName, subSpec, t]);
+
+  /* 複製 prompt */
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(copiedTimerRef.current), []);
-
   const copyPrompt = useCallback(() => {
-    navigator.clipboard.writeText(buildPrompt(subAppName, subApiDocs, subAuthType));
+    navigator.clipboard.writeText(buildPrompt(subAppName));
     setCopied(true);
     clearTimeout(copiedTimerRef.current);
     copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
-  }, [subAppName, subApiDocs, subAuthType]);
+  }, [subAppName]);
 
   /* spec JSON 驗證 */
   const [specError, setSpecError] = useState<string | null>(null);
-
-  /** 驗證 adapter spec 的格式和必要欄位 */
   const validateSpec = useCallback((raw: string): string | null => {
-    if (!raw.trim()) return null; // 還沒填，不顯示錯誤
-
-    // 自動去除 markdown code fence（AI 常包一層 ```json ... ```）
+    if (!raw.trim()) return null;
     const cleaned = raw.trim().replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/, "");
-
     let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch {
-      return t("dev.submit.spec_error_json");
-    }
-
+    try { parsed = JSON.parse(cleaned); } catch { return t("dev.submit.spec_error_json"); }
     if (!parsed.appName && !parsed.app_name) return t("dev.submit.spec_error_app_name");
-    const actions = parsed.actions;
-    if (!Array.isArray(actions) || actions.length === 0) return t("dev.submit.spec_error_actions");
-
-    // 檢查每個 action 的基本結構
-    for (let i = 0; i < actions.length; i++) {
-      const a = actions[i] as Record<string, unknown>;
+    if (!Array.isArray(parsed.actions) || parsed.actions.length === 0) return t("dev.submit.spec_error_actions");
+    for (let i = 0; i < parsed.actions.length; i++) {
+      const a = parsed.actions[i] as Record<string, unknown>;
       if (!a.name) return t("dev.submit.spec_error_action_name").replace("{i}", String(i + 1));
     }
-
-    return null; // 驗證通過
+    return null;
   }, [t]);
 
-  /* 前端表單驗證：必填欄位是否填了 + spec 格式正確 */
-  const isFormValid = tab === "request"
-    ? !!(reqAppName.trim() && reqReason.trim() && reqEmail.trim())
-    : !!(subAppName.trim() && subApiDocs.trim() && subEmail.trim() && subSpec.trim() && !specError);
+  const specValid = subSpec.trim() && !specError;
 
   return (
     <div className="min-h-screen bg-[#faf9f6]">
-      {/* Header */}
       <div className="max-w-2xl mx-auto px-4 pt-8 pb-4 flex items-center justify-between">
         <Link href="/" className="text-sm text-gray-500 hover:text-gray-700 no-underline">
           {t("dev.nav.back")}
@@ -241,35 +227,27 @@ export function DevelopersClient() {
         <LanguageSwitcher />
       </div>
 
-      {/* 標題 */}
       <div className="max-w-2xl mx-auto px-4 pb-6">
         <h1 className="text-2xl font-bold text-gray-900">{t("dev.page_title")}</h1>
         <p className="text-gray-500 mt-1 text-sm">{t("dev.page_desc")}</p>
       </div>
 
-      {/* Tab 切換 */}
       <div className="max-w-2xl mx-auto px-4">
+        {/* Tab 切換 */}
         <div className="flex border-b border-gray-200 mb-6">
-          <button
-            onClick={() => { setTab("request"); setResult(null); }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === "request"
-                ? "border-[#1D9E75] text-[#1D9E75]"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {t("dev.tab_request")}
-          </button>
-          <button
-            onClick={() => { setTab("submit"); setResult(null); }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === "submit"
-                ? "border-[#1D9E75] text-[#1D9E75]"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {t("dev.tab_submit")}
-          </button>
+          {(["request", "submit"] as const).map((key) => (
+            <button
+              key={key}
+              onClick={() => { setTab(key); setResult(null); }}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                tab === key
+                  ? "border-[#1D9E75] text-[#1D9E75]"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {t(`dev.tab_${key}`)}
+            </button>
+          ))}
         </div>
 
         {/* ═══════════════ Tab A: 許願 App ═══════════════ */}
@@ -279,43 +257,33 @@ export function DevelopersClient() {
               <h2 className="text-lg font-semibold text-gray-900">{t("dev.request.title")}</h2>
               <p className="text-sm text-gray-500 mt-1">{t("dev.request.desc")}</p>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.request.app_name")}</label>
-              <input
-                type="text"
-                value={reqAppName}
-                onChange={(e) => setReqAppName(e.target.value)}
+              <input type="text" value={reqAppName} onChange={(e) => setReqAppName(e.target.value)}
                 placeholder={t("dev.request.app_name_placeholder")}
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]"
-              />
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]" />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.request.reason")}</label>
-              <textarea
-                value={reqReason}
-                onChange={(e) => setReqReason(e.target.value)}
-                placeholder={t("dev.request.reason_placeholder")}
-                rows={3}
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75] resize-none"
-              />
+              <textarea value={reqReason} onChange={(e) => setReqReason(e.target.value)}
+                placeholder={t("dev.request.reason_placeholder")} rows={3}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75] resize-none" />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.request.email")}</label>
-              <input
-                type="email"
-                value={reqEmail}
-                onChange={(e) => setReqEmail(e.target.value)}
+              <input type="email" value={reqEmail} onChange={(e) => setReqEmail(e.target.value)}
                 placeholder={t("dev.request.email_placeholder")}
-                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]"
-              />
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]" />
             </div>
+            <button onClick={handleRequest}
+              disabled={submitting || !reqAppName.trim() || !reqReason.trim() || !reqEmail.trim()}
+              className="w-full py-2.5 bg-[#1D9E75] text-white rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              {submitting ? t("dev.common.submitting") : t("dev.common.submit")}
+            </button>
           </div>
         )}
 
-        {/* ═══════════════ Tab B: 提交 Adapter ═══════════════ */}
+        {/* ═══════════════ Tab B: 建立 Adapter ═══════════════ */}
         {tab === "submit" && (
           <div className="space-y-5">
             <div>
@@ -323,137 +291,60 @@ export function DevelopersClient() {
               <p className="text-sm text-gray-500 mt-1">{t("dev.submit.desc")}</p>
             </div>
 
-            {/* 基本資訊 */}
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.app_name")}</label>
-                <input
-                  type="text"
-                  value={subAppName}
-                  onChange={(e) => setSubAppName(e.target.value)}
-                  placeholder="Trello"
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.api_docs")}</label>
-                <input
-                  type="url"
-                  value={subApiDocs}
-                  onChange={(e) => setSubApiDocs(e.target.value)}
-                  placeholder={t("dev.submit.api_docs_placeholder")}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.email")}</label>
-                <input
-                  type="email"
-                  value={subEmail}
-                  onChange={(e) => setSubEmail(e.target.value)}
-                  placeholder="dev@example.com"
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]"
-                />
-              </div>
-            </div>
-
-            {/* 認證方式 */}
+            {/* 步驟 ① App 名稱 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t("dev.submit.auth_type")}</label>
-              <div className="space-y-2">
-                {[
-                  { value: "oauth_own", label: t("dev.submit.auth_oauth") },
-                  { value: "api_key", label: t("dev.submit.auth_apikey") },
-                  { value: "oauth_octodock", label: t("dev.submit.auth_octodock") },
-                ].map((opt) => (
-                  <label key={opt.value} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="radio"
-                      name="authType"
-                      value={opt.value}
-                      checked={subAuthType === opt.value}
-                      onChange={(e) => setSubAuthType(e.target.value)}
-                      className="accent-[#1D9E75]"
-                    />
-                    {opt.label}
-                  </label>
-                ))}
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.app_name")}</label>
+              <input type="text" value={subAppName} onChange={(e) => setSubAppName(e.target.value)}
+                placeholder="Trello"
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75]" />
             </div>
 
-            {/* OAuth 細節（僅 oauth_own 時顯示） */}
-            {subAuthType === "oauth_own" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.auth_details")}</label>
-                <textarea
-                  value={subAuthDetails}
-                  onChange={(e) => setSubAuthDetails(e.target.value)}
-                  placeholder={t("dev.submit.auth_details_placeholder")}
-                  rows={3}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D9E75] resize-none"
-                />
-              </div>
-            )}
-
-            {/* 第一步：複製 Prompt */}
+            {/* 步驟 ② 複製 Prompt */}
             <div className="bg-white border rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-1">{t("dev.submit.prompt_title")}</h3>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold text-gray-900">{t("dev.submit.prompt_title")}</h3>
+                <button onClick={copyPrompt}
+                  className="px-3 py-1.5 text-xs bg-[#1D9E75] text-white rounded-lg hover:bg-[#0F6E56] transition-colors">
+                  {copied ? t("dev.submit.copied") : t("dev.submit.copy_prompt")}
+                </button>
+              </div>
               <p className="text-xs text-gray-500 mb-3">{t("dev.submit.prompt_desc")}</p>
               <pre className="bg-gray-50 border rounded p-3 text-xs text-gray-700 overflow-x-auto max-h-48 whitespace-pre-wrap">
-                {buildPrompt(subAppName, subApiDocs, subAuthType)}
+                {buildPrompt(subAppName)}
               </pre>
-              <button
-                onClick={copyPrompt}
-                className="mt-2 px-3 py-1.5 text-xs bg-[#1D9E75] text-white rounded-lg hover:bg-[#0F6E56] transition-colors"
-              >
-                {copied ? t("dev.submit.copied") : t("dev.submit.copy_prompt")}
-              </button>
             </div>
 
-            {/* 第二步：貼上 AI 生成的規格 */}
+            {/* 步驟 ③ 貼上結果 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t("dev.submit.spec_title")}</label>
-              <textarea
-                value={subSpec}
-                onChange={(e) => {
-                  setSubSpec(e.target.value);
-                  setSpecError(validateSpec(e.target.value));
-                }}
-                placeholder={t("dev.submit.spec_placeholder")}
-                rows={10}
+              <textarea value={subSpec}
+                onChange={(e) => { setSubSpec(e.target.value); setSpecError(validateSpec(e.target.value)); }}
+                placeholder={t("dev.submit.spec_placeholder")} rows={10}
                 className={`w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 resize-none ${
                   specError ? "border-red-400 focus:ring-red-300" : "focus:ring-[#1D9E75]"
-                }`}
-              />
-              {specError && (
-                <p className="mt-1 text-xs text-red-500">{specError}</p>
-              )}
-              {subSpec.trim() && !specError && (
-                <p className="mt-1 text-xs text-green-600">{t("dev.submit.spec_valid")}</p>
-              )}
+                }`} />
+              {specError && <p className="mt-1 text-xs text-red-500">{specError}</p>}
+              {specValid && <p className="mt-1 text-xs text-green-600">{t("dev.submit.spec_valid")}</p>}
             </div>
+
+            {/* 提交審核 */}
+            <button onClick={handleSubmitReview}
+              disabled={submitting || !specValid || !subAppName.trim()}
+              className="w-full py-2.5 bg-[#1D9E75] text-white rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              {submitting ? t("dev.common.submitting") : t("dev.submit.submit_review")}
+            </button>
+          </div>
+        )}
+        {/* 結果訊息 */}
+        {result && (
+          <div className={`mt-4 p-3 rounded-lg text-sm text-center ${
+            result.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+          }`}>
+            {result.message || (result.type === "success" ? t("dev.common.success") : t("dev.common.error"))}
           </div>
         )}
 
-        {/* ═══════════════ 送出按鈕 + 結果 ═══════════════ */}
-        <div className="mt-6 pb-16">
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !isFormValid}
-            className="w-full py-2.5 bg-[#1D9E75] text-white rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? t("dev.common.submitting") : t("dev.common.submit")}
-          </button>
-
-          {result === "success" && (
-            <p className="mt-3 text-sm text-green-600 text-center">{t("dev.common.success")}</p>
-          )}
-          {result === "error" && (
-            <p className="mt-3 text-sm text-red-500 text-center">{t("dev.common.error")}</p>
-          )}
-        </div>
+        <div className="pb-16" />
       </div>
     </div>
   );

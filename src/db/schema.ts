@@ -369,3 +369,28 @@ export const appSubmissions = pgTable(
     index("idx_app_submissions_status").on(table.status),
   ],
 );
+
+// ============================================================
+// 4.9 custom_adapters（自訂 Adapter：開發者自行安裝 / 分享）
+// 存放 JSON spec，由 generic adapter engine 在 runtime 執行
+// ============================================================
+export const customAdapters = pgTable(
+  "custom_adapters",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    appName: text("app_name").notNull(), // 自訂 App 識別名稱（e.g. "trello"）
+    displayName: text("display_name").notNull(), // 顯示名稱
+    spec: jsonb("spec").notNull(), // 完整 adapter spec JSON
+    shareCode: text("share_code").unique(), // 分享碼（null = 私人、有值 = 可分享）
+    installedFrom: text("installed_from"), // 安裝來源：null = 自建、share_code = 從別人安裝
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_custom_adapters_user_app").on(table.userId, table.appName),
+    index("idx_custom_adapters_share_code").on(table.shareCode),
+  ],
+);

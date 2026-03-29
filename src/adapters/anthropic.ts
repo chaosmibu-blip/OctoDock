@@ -65,6 +65,9 @@ async function anthropicRequest(
 
   if (!res.ok) {
     const errText = await res.text().catch(() => res.statusText);
+    const tokenPrefix = token.substring(0, 16) + "...";
+    const authMethod = isOAuthToken ? "Bearer" : "x-api-key";
+    console.error(`[anthropic] ${res.status} ${path} | auth=${authMethod} token=${tokenPrefix} | ${errText}`);
     throw new Error(`Anthropic API error: ${res.status} ${errText} (ANTHROPIC_API_ERROR)`);
   }
   return res.json();

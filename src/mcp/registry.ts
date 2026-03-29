@@ -1,6 +1,7 @@
 import { readdirSync, existsSync } from "fs";
 import { join } from "path";
 import { type AppAdapter, isAppAdapter } from "@/adapters/types";
+import { buildCustomAdapter, type CustomAdapterSpec } from "./custom-adapter-engine";
 
 // ============================================================
 // Adapter Registry（自動掃描 + 明確註冊）
@@ -151,4 +152,64 @@ export function getAdapter(appName: string): AppAdapter | undefined {
 /** 取得所有已載入的 Adapter（用於 octodock_help 列出可用 App） */
 export function getAllAdapters(): AppAdapter[] {
   return [...adapters.values()];
+}
+
+// ============================================================
+// Custom Adapters（per-user，從 DB 的 JSON spec 動態建立）
+// ============================================================
+
+/** Per-user custom adapter 快取，key: userId */
+const userCustomAdapters = new Map<string, Map<string, AppAdapter>>();
+
+/**
+ * 載入指定用戶的 custom adapters（從 DB 讀取 spec → 轉為 AppAdapter）
+ * 每次 MCP session 建立時呼叫，確保最新
+ */
+export async function loadCustomAdapters(userId: string): Promise<void> {
+  const { db } = await import("@/db");
+  const { customAdapters } = await import("@/db/schema");
+  const { eq } = await import("drizzle-orm");
+
+  const rows = await db
+    .select()
+    .from(customAdapters)
+    .where(eq(customAdapters.userId, userId));
+
+  const userMap = new Map<string, AppAdapter>();
+  for (const row of rows) {
+    try {
+      const spec = row.spec as CustomAdapterSpec;
+      const adapter = buildCustomAdapter(spec);
+      userMap.set(spec.appName, adapter);
+    } catch (err) {
+      console.error(`[custom-adapter] Failed to build ${row.appName}:`, err);
+    }
+  }
+
+  userCustomAdapters.set(userId, userMap);
+}
+
+/** 根據 App 名稱取得 Adapter（優先官方，再查 custom） */
+export function getAdapterForUser(appName: string, userId: string): AppAdapter | undefined {
+  // 官方 adapter 優先（防止 custom 覆蓋官方的）
+  const official = adapters.get(appName);
+  if (official) return official;
+
+  // 查詢該用戶的 custom adapter
+  return userCustomAdapters.get(userId)?.get(appName);
+}
+
+/** 取得用戶的所有可用 Adapter（官方 + custom） */
+export function getAllAdaptersForUser(userId: string): AppAdapter[] {
+  const all = [...adapters.values()];
+  const custom = userCustomAdapters.get(userId);
+  if (custom) {
+    for (const [name, adapter] of custom) {
+      // 不覆蓋官方 adapter
+      if (!adapters.has(name)) {
+        all.push(adapter);
+      }
+    }
+  }
+  return all;
 }

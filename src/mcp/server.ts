@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { connectedApps, storedResults, operations as opsTable } from "@/db/schema";
 import { eq, lt, or, isNull, and, gte, desc, ne, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { getAdapter, getAllAdapters } from "./registry";
+import { getAdapter, getAllAdapters, getAdapterForUser, getAllAdaptersForUser, loadCustomAdapters } from "./registry";
 import { executeWithMiddleware, logOperation } from "./middleware/logger";
 // checkMcpRateLimit 已移除 — OctoDock 是執行者不是守衛
 import { getPreContext } from "./middleware/pre-context";
@@ -143,6 +143,9 @@ export async function createServerForUser(user: User, requestHeaders?: Headers):
       "If unsure about which app or action to use, call octodock_help first for guidance.",
     ].join("\n"),
   } as ConstructorParameters<typeof McpServer>[0]);
+
+  // 載入用戶的 custom adapters（從 DB JSON spec 動態建立）
+  await loadCustomAdapters(user.id);
 
   // 查詢用戶已連結且有效的 App 列表
   const apps = await db
@@ -472,8 +475,8 @@ function registerDoTool(
         return exitDo(result);
       }
 
-      // 取得 Adapter
-      const adapter = getAdapter(app);
+      // 取得 Adapter（優先官方，再查 custom）
+      const adapter = getAdapterForUser(app, userId);
       if (!adapter) {
         result = {
           ok: false,
@@ -1243,7 +1246,7 @@ function registerHelpTool(
 
         // 列出已連結的 App，用自然語言描述
         for (const appName of connectedAppNames) {
-          const adapter = getAdapter(appName);
+          const adapter = getAdapterForUser(appName, userId);
           if (adapter) {
             const desc = APP_DESCRIPTIONS[appName] || `${Object.keys(adapter.actionMap || {}).length} actions`;
             appList.push(`- **${appName}** — ${desc}`);
@@ -1254,7 +1257,7 @@ function registerHelpTool(
         appList.push(`- **system** — Memory, PDF tools, QR code, image processing, charts, file conversion, batch operations`);
 
         // 列出未連結但可用的 App
-        const allAdapters = getAllAdapters();
+        const allAdapters = getAllAdaptersForUser(userId);
         const disconnected = allAdapters
           .filter((a) => !connectedAppNames.includes(a.name))
           .map((a) => a.name);
@@ -1415,7 +1418,7 @@ function registerHelpTool(
 
       // ── 帶 app + action：回傳特定 action 的詳細參數和範例（B2 help 分層）──
       if (app && action) {
-        const adapterForAction = getAdapter(app);
+        const adapterForAction = getAdapterForUser(app, userId);
         if (!adapterForAction) {
           return exitHelp(`App "${app}" not found.`, { success: false });
         }
@@ -1524,7 +1527,7 @@ function registerHelpTool(
       }
 
       // 一般 App
-      const adapter = getAdapter(app);
+      const adapter = getAdapterForUser(app, userId);
       if (!adapter) {
         return exitHelp(`App "${app}" not found. Available apps: ${connectedAppNames.join(", ")}, system`, { success: false });
       }
@@ -1848,7 +1851,7 @@ async function searchForId(
 ): Promise<string | null> {
   if (appName !== "notion") return null;
 
-  const adapter = getAdapter(appName);
+  const adapter = getAdapterForUser(appName, userId);
   if (!adapter) return null;
 
   try {
@@ -2135,7 +2138,7 @@ async function learnFromResult(
   // ── 架構層統一學習：透過 adapter 的 extractEntities 提取可學習的實體 ──
   // 每個 adapter 自行定義「從哪些 action 的回傳中提取什麼實體」
   // 架構層只負責呼叫 learnIdentifier，不需要知道各 App 的資料結構
-  const adapter = (await import("@/mcp/registry")).getAdapter(appName);
+  const adapter = (await import("@/mcp/registry")).getAdapterForUser(appName, userId);
   if (adapter?.extractEntities) {
     const entities = adapter.extractEntities(action, result.data);
     for (const entity of entities) {
