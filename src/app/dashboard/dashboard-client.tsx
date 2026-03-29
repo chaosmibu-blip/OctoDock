@@ -1257,40 +1257,65 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
                 <div>
                   <h3 className="text-xs font-medium text-gray-500 mb-2">{t("custom.installed_title")}</h3>
                   <div className="space-y-2">
-                    {customAdaptersList.map((ca) => (
-                      <div key={ca.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-gray-700">{ca.displayName}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded">{t("custom.badge")}</span>
-                          {isConnected(ca.appName) && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-600 rounded">{t("custom.connected")}</span>
+                    {customAdaptersList.map((ca) => {
+                      const connected = isConnected(ca.appName);
+                      return (
+                        <div key={ca.id} className="bg-gray-50 rounded-lg px-3 py-2 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-gray-700">{ca.displayName}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded">{t("custom.badge")}</span>
+                              {connected && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-600 rounded">{t("custom.connected")}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {ca.shareCode ? (
+                                <button
+                                  onClick={() => { navigator.clipboard.writeText(ca.shareCode!); }}
+                                  className="text-[10px] text-blue-500 hover:text-blue-700"
+                                  title={ca.shareCode}
+                                >
+                                  {t("custom.copy_code")}
+                                </button>
+                              ) : null}
+                              <button
+                                onClick={() => toggleShare(ca.id, ca.shareCode)}
+                                className="text-[10px] text-gray-400 hover:text-gray-600"
+                              >
+                                {ca.shareCode ? t("custom.unshare") : t("custom.share")}
+                              </button>
+                              <button
+                                onClick={() => removeCustomAdapter(ca.id, ca.appName)}
+                                className="text-[10px] text-red-400 hover:text-red-600"
+                              >
+                                {t("custom.remove")}
+                              </button>
+                            </div>
+                          </div>
+                          {/* 未連接 → 顯示 API Key 輸入框 */}
+                          {!connected && (
+                            <div className="flex gap-1.5">
+                              <input
+                                type="password"
+                                value={tokenInputs[ca.appName] ?? ""}
+                                onChange={(e) => setTokenInputs(prev => ({ ...prev, [ca.appName]: e.target.value }))}
+                                onKeyDown={(e) => { if (e.key === "Enter" && tokenInputs[ca.appName]?.trim()) submitToken(ca.appName); }}
+                                placeholder={t("custom.apikey_placeholder")}
+                                className="flex-1 min-w-0 px-2 py-1 text-[11px] font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1D9E75]"
+                              />
+                              <button
+                                onClick={() => submitToken(ca.appName)}
+                                disabled={!tokenInputs[ca.appName]?.trim() || tokenSubmitting === ca.appName}
+                                className="px-2.5 py-1 text-[10px] bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                              >
+                                {tokenSubmitting === ca.appName ? t("common.loading") : t("custom.connect_btn")}
+                              </button>
+                            </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          {ca.shareCode ? (
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(ca.shareCode!); }}
-                              className="text-[10px] text-blue-500 hover:text-blue-700"
-                              title={ca.shareCode}
-                            >
-                              {t("custom.copy_code")}
-                            </button>
-                          ) : null}
-                          <button
-                            onClick={() => toggleShare(ca.id, ca.shareCode)}
-                            className="text-[10px] text-gray-400 hover:text-gray-600"
-                          >
-                            {ca.shareCode ? t("custom.unshare") : t("custom.share")}
-                          </button>
-                          <button
-                            onClick={() => removeCustomAdapter(ca.id, ca.appName)}
-                            className="text-[10px] text-red-400 hover:text-red-600"
-                          >
-                            {t("custom.remove")}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

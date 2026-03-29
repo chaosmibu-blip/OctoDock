@@ -649,6 +649,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "custom.install_only": "安裝（稍後連接）",
     "custom.testing": "驗證中...",
     "custom.installed": "✓ 已安裝 {app}",
+    "custom.connect_btn": "連接",
 
   },
   en: {
@@ -1289,6 +1290,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "custom.install_only": "Install (connect later)",
     "custom.testing": "Verifying...",
     "custom.installed": "✓ Installed {app}",
+    "custom.connect_btn": "Connect",
 
   },
 };
