@@ -506,8 +506,8 @@ export function DashboardClient({ user, connectedApps, origin, usage }: Dashboar
   const removeCustomAdapter = useCallback(async (id: string, appName: string) => {
     try {
       await fetch(`/api/custom-adapters/${id}`, { method: "DELETE" });
-      // 也斷開連接
       await fetch(`/api/connect/${appName}`, { method: "DELETE" });
+      setCustomResult(null);
       loadCustomAdapters();
       router.refresh();
     } catch { /* ignore */ }
