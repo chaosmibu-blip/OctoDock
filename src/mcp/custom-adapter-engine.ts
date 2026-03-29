@@ -26,6 +26,14 @@ interface AuthSpec {
   tokenUrl?: string;
   scopes?: string[];
   instructions?: string;
+  /** API Key 放在哪裡：header（預設）、query */
+  keyLocation?: "header" | "query";
+  /** Header 名稱（預設 Authorization），例如 "X-API-Key"、"Api-Token" */
+  headerName?: string;
+  /** Header 值格式（預設 "Bearer {key}"），例如 "{key}"、"Token {key}" */
+  headerFormat?: string;
+  /** Query 參數名稱（keyLocation=query 時使用），例如 "api_key"、"token" */
+  queryParam?: string;
 }
 
 interface ErrorHint {
@@ -110,6 +118,26 @@ async function assertResolvedIpSafe(url: string): Promise<void> {
       throw new Error(`Blocked: ${hostname} resolves to internal IP`);
     }
   }
+}
+
+// ── Auth helper ──
+
+/** 根據 spec.auth 設定，產生 headers 和 query string 附加的 auth 參數 */
+function buildAuth(auth: AuthSpec | undefined, token: string): { headers: Record<string, string>; query: Record<string, string> } {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const query: Record<string, string> = {};
+
+  if (auth?.keyLocation === "query") {
+    // API Key 放在 query string（例如 ?api_key=xxx）
+    query[auth.queryParam || "api_key"] = token;
+  } else {
+    // API Key 放在 header（預設）
+    const headerName = auth?.headerName || "Authorization";
+    const format = auth?.headerFormat || "Bearer {key}";
+    headers[headerName] = format.replace("{key}", token);
+  }
+
+  return { headers, query };
 }
 
 // ── 從 spec 建立 AppAdapter ──
@@ -221,6 +249,12 @@ export function buildCustomAdapter(spec: CustomAdapterSpec): AppAdapter {
         }
       }
 
+      // Auth：根據 spec 設定產生 headers 和 query 參數
+      const authResult = buildAuth(spec.auth, token);
+      for (const [k, v] of Object.entries(authResult.query)) {
+        queryParams.set(k, v);
+      }
+
       const qs = queryParams.toString();
       const fullUrl = `${spec.baseUrl}${endpoint}${qs ? `?${qs}` : ""}`;
 
@@ -249,10 +283,7 @@ export function buildCustomAdapter(spec: CustomAdapterSpec): AppAdapter {
         const hasBody = ["POST", "PUT", "PATCH"].includes(actionSpec.method);
         const res = await fetch(fullUrl, {
           method: actionSpec.method,
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: authResult.headers,
           body: hasBody ? JSON.stringify(bodyParams) : undefined,
           signal: controller.signal,
         });
@@ -345,7 +376,10 @@ export async function testAdapter(
     if (!testEndpoint) testEndpoint = "/";
   }
 
-  const fullUrl = `${spec.baseUrl}${testEndpoint}`;
+  // Auth：根據 spec 設定產生 headers 和 query
+  const authResult = buildAuth(spec.auth, apiKey);
+  const authQuery = new URLSearchParams(authResult.query).toString();
+  const fullUrl = `${spec.baseUrl}${testEndpoint}${authQuery ? `?${authQuery}` : ""}`;
 
   // Safety checks
   if (!isSafeUrl(fullUrl)) {
@@ -364,10 +398,7 @@ export async function testAdapter(
 
     const res = await fetch(fullUrl, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: authResult.headers,
       signal: controller.signal,
     });
     clearTimeout(timeout);
